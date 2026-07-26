@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   PIPELINE_STEPS,
   type Application,
@@ -11,7 +12,7 @@ import {
   type ResumeSummary,
 } from "@offeros/core";
 import type { LineDiff } from "@/lib/diff";
-import { api } from "@/lib/api-client";
+import { api, isLlmNotConfigured } from "@/lib/api-client";
 import { LabeledSelect } from "@/components/profile/fields";
 import { JobCard } from "./job-card";
 import { StepTimeline } from "./step-timeline";
@@ -107,6 +108,8 @@ export function WorkspaceClient({
   const [tweaking, setTweaking] = useState<ArtifactKind | null>(null);
   const [tweakDiff, setTweakDiff] = useState<{ kind: ArtifactKind; diff: LineDiff } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showConnectBanner, setShowConnectBanner] = useState(false);
+  const [fitLlmError, setFitLlmError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ticketCreated, setTicketCreated] = useState(false);
   const [resumes, setResumes] = useState<ResumeSummary[]>([]);
@@ -168,11 +171,16 @@ export function WorkspaceClient({
     busyRef.current = true;
     setBusy(true);
     setError(null);
+    setShowConnectBanner(false);
     if (optimistic) setTask((t) => (t ? { ...t, status: "running" } : t));
     try {
       await action(id);
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err) {
+      if (isLlmNotConfigured(err)) {
+        setShowConnectBanner(true);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     } finally {
       try {
         await syncFull(id);
@@ -251,10 +259,15 @@ export function WorkspaceClient({
     if (fitBusy) return;
     setFitBusy(true);
     setError(null);
+    setFitLlmError(false);
     try {
       setFit(await api.fit.recompute(application.id));
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err) {
+      if (isLlmNotConfigured(err)) {
+        setFitLlmError(true);
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
     } finally {
       setFitBusy(false);
     }
@@ -314,6 +327,18 @@ export function WorkspaceClient({
   return (
     <main className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col px-6 py-6">
       <AgentStatusBar state={statusBarState} jobCount={1} onAction={statusBarAction} />
+
+      {showConnectBanner && (
+        <div className="mt-3 rounded-xl bg-warn-bg p-3 text-caption text-foreground">
+          Connect your AI provider to start —{" "}
+          <Link
+            href="/settings/ai"
+            className="font-semibold underline underline-offset-2 hover:no-underline"
+          >
+            Settings → AI
+          </Link>
+        </div>
+      )}
 
       <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[380px_1fr]">
         <div className="min-h-0 space-y-4 overflow-y-auto pb-2 pr-1">
@@ -404,6 +429,9 @@ export function WorkspaceClient({
               kind={tweaking}
               onResult={(result) => handleTweakResult(tweaking, result)}
               onCancel={() => setTweaking(null)}
+              onError={(err) => {
+                if (isLlmNotConfigured(err)) setShowConnectBanner(true);
+              }}
             />
           )}
 
@@ -411,7 +439,14 @@ export function WorkspaceClient({
         </div>
 
         <div className="min-h-0 space-y-4 overflow-y-auto pb-2 pl-1">
-          {fit && <FitCard fit={fit} onRecompute={handleFitRecompute} busy={fitBusy} />}
+          {fit && (
+            <FitCard
+              fit={fit}
+              onRecompute={handleFitRecompute}
+              busy={fitBusy}
+              llmError={fitLlmError}
+            />
+          )}
 
           {jdAnalysis && <GapsCard analysis={jdAnalysis} />}
 

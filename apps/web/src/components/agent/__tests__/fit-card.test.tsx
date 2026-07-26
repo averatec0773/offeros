@@ -60,4 +60,17 @@ describe("FitCard", () => {
     expect(button).toBeTruthy();
     expect(button.hasAttribute("disabled")).toBe(true);
   });
+
+  it("shows connect-provider copy with a Settings → AI link when llmError is set", () => {
+    render(<FitCard fit={fit} llmError />);
+
+    expect(screen.getByText(/Connect your AI provider to start/i)).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Settings → AI" });
+    expect(link.getAttribute("href")).toBe("/settings/ai");
+  });
+
+  it("omits the connect-provider copy when llmError is not set", () => {
+    render(<FitCard fit={fit} />);
+    expect(screen.queryByText(/Connect your AI provider to start/i)).toBeNull();
+  });
 });

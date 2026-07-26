@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { FitAnalysis } from "@offeros/core";
 import { MatchScoreRing } from "./match-score-ring";
 
@@ -22,10 +23,13 @@ export function FitCard({
   fit,
   onRecompute,
   busy = false,
+  llmError = false,
 }: {
   fit: FitAnalysis;
   onRecompute?: () => void;
   busy?: boolean;
+  /** True when the last recompute failed because no AI provider is configured. */
+  llmError?: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
@@ -44,6 +48,18 @@ export function FitCard({
           {busy ? "Recomputing…" : "Recompute"}
         </button>
       </div>
+
+      {llmError && (
+        <div className="mt-3 rounded-xl bg-warn-bg p-3 text-caption text-foreground">
+          Connect your AI provider to start —{" "}
+          <Link
+            href="/settings/ai"
+            className="font-semibold underline underline-offset-2 hover:no-underline"
+          >
+            Settings → AI
+          </Link>
+        </div>
+      )}
 
       <div className="mt-4 space-y-3">
         <SubScoreBar label="Experience" value={fit.subScores.experience} />

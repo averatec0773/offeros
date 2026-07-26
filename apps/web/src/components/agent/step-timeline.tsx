@@ -94,7 +94,7 @@ export function StepTimeline({
                   )}
                   {step.state === "current" && !showActionCard && (
                     <span className="shrink-0 text-micro font-semibold text-muted-foreground">
-                      In progress
+                      {task.status === "queued" ? "Queued" : "In progress"}
                     </span>
                   )}
                   {showActionCard && (

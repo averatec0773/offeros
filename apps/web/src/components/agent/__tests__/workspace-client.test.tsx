@@ -9,33 +9,39 @@ import {
   type ResumeSummary,
 } from "@offeros/core";
 import { WorkspaceClient, deriveGate, shouldPoll, effectiveResumeId } from "../workspace-client";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 
-vi.mock("@/lib/api-client", () => ({
-  api: {
-    agentTasks: {
-      get: vi.fn(),
-      create: vi.fn(),
-      start: vi.fn(),
-      pause: vi.fn(),
-      advance: vi.fn(),
-      choice: vi.fn(),
-      tweak: vi.fn(),
-      fillHandoff: vi.fn(),
-      fillResolve: vi.fn(),
+// Preserve the real ApiError class and isLlmNotConfigured so 42000 detection
+// works against genuine ApiError instances constructed in these tests.
+vi.mock("@/lib/api-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api-client")>();
+  return {
+    ...actual,
+    api: {
+      agentTasks: {
+        get: vi.fn(),
+        create: vi.fn(),
+        start: vi.fn(),
+        pause: vi.fn(),
+        advance: vi.fn(),
+        choice: vi.fn(),
+        tweak: vi.fn(),
+        fillHandoff: vi.fn(),
+        fillResolve: vi.fn(),
+      },
+      applications: {
+        update: vi.fn(),
+      },
+      resumes: {
+        list: vi.fn(),
+      },
+      fit: {
+        get: vi.fn(),
+        recompute: vi.fn(),
+      },
     },
-    applications: {
-      update: vi.fn(),
-    },
-    resumes: {
-      list: vi.fn(),
-    },
-    fit: {
-      get: vi.fn(),
-      recompute: vi.fn(),
-    },
-  },
-}));
+  };
+});
 
 afterEach(cleanup);
 
@@ -302,6 +308,65 @@ describe("WorkspaceClient — fit card", () => {
       />,
     );
     expect(screen.queryByText(/Recompute/i)).toBeNull();
+  });
+});
+
+describe("WorkspaceClient — provider not configured", () => {
+  it("shows the connect-provider banner under the status bar when start fails with 42000", async () => {
+    vi.mocked(api.agentTasks.create).mockResolvedValue(baseTask({ status: "queued", step: 0 }));
+    vi.mocked(api.agentTasks.start).mockRejectedValue(new ApiError("no key", 42000));
+    vi.mocked(api.agentTasks.get).mockResolvedValue({
+      task: baseTask({ status: "queued", step: 0 }),
+      jdAnalysis: null,
+      artifacts: [],
+    });
+
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={null}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Start/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Connect your AI provider to start/i)).toBeTruthy(),
+    );
+    const link = screen.getByRole("link", { name: "Settings → AI" });
+    expect(link.getAttribute("href")).toBe("/settings/ai");
+    // The generic fallback error must not also show for this specific failure.
+    expect(screen.queryByText("Something went wrong. Please try again.")).toBeNull();
+  });
+
+  it("keeps the generic error message for a non-42000 start failure", async () => {
+    vi.mocked(api.agentTasks.create).mockResolvedValue(baseTask({ status: "queued", step: 0 }));
+    vi.mocked(api.agentTasks.start).mockRejectedValue(new Error("boom"));
+    vi.mocked(api.agentTasks.get).mockResolvedValue({
+      task: baseTask({ status: "queued", step: 0 }),
+      jdAnalysis: null,
+      artifacts: [],
+    });
+
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={null}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Start/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Something went wrong. Please try again.")).toBeTruthy(),
+    );
+    expect(screen.queryByText(/Connect your AI provider to start/i)).toBeNull();
   });
 });
 

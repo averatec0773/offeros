@@ -55,6 +55,47 @@ describe("StepTimeline", () => {
     }
   });
 
+  it('shows "Queued" instead of "In progress" for the current step while the task is queued', () => {
+    const task: AgentTask = {
+      id: "t1",
+      applicationId: "app-1",
+      status: "queued",
+      coverLetterRequirement: "unknown",
+      skippedCoverLetter: false,
+      step: 0,
+      fieldReports: [],
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    render(<StepTimeline task={task} />);
+
+    const currentLabel = screen.getByText(PIPELINE_STEPS[0]!.label);
+    const row = currentLabel.closest("li");
+    expect(row?.textContent).toContain("Queued");
+    expect(row?.textContent).not.toContain("In progress");
+    expect(screen.queryByText("In progress")).toBeNull();
+  });
+
+  it('still shows "In progress" for the current step while the task is running (regression)', () => {
+    const task: AgentTask = {
+      id: "t1",
+      applicationId: "app-1",
+      status: "running",
+      coverLetterRequirement: "unknown",
+      skippedCoverLetter: false,
+      step: 0,
+      fieldReports: [],
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    render(<StepTimeline task={task} />);
+
+    const currentLabel = screen.getByText(PIPELINE_STEPS[0]!.label);
+    const row = currentLabel.closest("li");
+    expect(row?.textContent).toContain("In progress");
+    expect(screen.queryByText("Queued")).toBeNull();
+  });
+
   it("renders the ActionRequiredCard when applicationInfo.status is 2 at the fill-form step", () => {
     const task: AgentTask = {
       id: "t1",

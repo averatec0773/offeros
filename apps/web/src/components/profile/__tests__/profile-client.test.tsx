@@ -9,13 +9,20 @@ import { extractPdfText } from "@offeros/pdf";
 vi.mock("@/lib/pdf-worker", () => ({ ensurePdfWorker: vi.fn() }));
 vi.mock("@offeros/pdf", () => ({ extractPdfText: vi.fn() }));
 
-vi.mock("@/lib/api-client", () => ({
-  api: {
-    profile: { get: vi.fn(), save: vi.fn(), parseResume: vi.fn() },
-    answers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
-    resumes: { list: vi.fn(), upload: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
-  },
-}));
+// Preserve the real ApiError class and isLlmNotConfigured — onboarding-flow
+// (rendered here via the empty-state path) imports isLlmNotConfigured directly.
+vi.mock("@/lib/api-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api-client")>();
+  return {
+    ...actual,
+    api: {
+      profile: { get: vi.fn(), save: vi.fn(), parseResume: vi.fn() },
+      answers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+      resumes: { list: vi.fn(), upload: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
+      settings: { get: vi.fn(), llmKeys: vi.fn() },
+    },
+  };
+});
 
 afterEach(cleanup);
 // Several describes below now exercise api.profile.save/api.resumes.upload
@@ -26,6 +33,18 @@ afterEach(() => vi.clearAllMocks());
 beforeEach(() => {
   vi.mocked(api.answers.list).mockResolvedValue([]);
   vi.mocked(api.resumes.list).mockResolvedValue([]);
+  // Onboarding's provider pre-check: a key is configured, so its card stays
+  // hidden — these tests aren't exercising that behavior.
+  vi.mocked(api.settings.get).mockResolvedValue({
+    agent: {
+      enableCustomizeResume: true,
+      enableCustomizeCoverLetter: true,
+      useOriginalResume: false,
+      autoConfirm: false,
+    },
+    llm: { provider: "anthropic", promptOverrides: {}, modelOverrides: {}, apiKeys: {} },
+  });
+  vi.mocked(api.settings.llmKeys).mockResolvedValue({ anthropic: "env" });
 });
 
 function filledProfile(): Profile {

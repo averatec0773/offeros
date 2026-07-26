@@ -10,11 +10,15 @@ export function TweakInput({
   kind,
   onResult,
   onCancel,
+  onError,
 }: {
   taskId: string;
   kind: "resume" | "cover-letter";
   onResult: (result: { version: ArtifactVersion; diff: LineDiff }) => void;
   onCancel?: () => void;
+  /** Fired alongside the local error message, so a caller can react to specific
+   *  failures (e.g. a missing AI provider) with its own banner. */
+  onError?: (err: unknown) => void;
 }) {
   const [instruction, setInstruction] = useState("");
   const [pending, setPending] = useState(false);
@@ -28,8 +32,9 @@ export function TweakInput({
       const result = await api.agentTasks.tweak(taskId, kind, instruction.trim());
       onResult(result);
       setInstruction("");
-    } catch {
+    } catch (err) {
       setError("Couldn't apply that tweak. Try again.");
+      onError?.(err);
     } finally {
       setPending(false);
     }

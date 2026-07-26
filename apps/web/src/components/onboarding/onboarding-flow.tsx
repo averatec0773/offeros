@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { FileText, Loader2, ShieldCheck, Upload } from "lucide-react";
 import type { Links, Profile } from "@offeros/core";
 import type { ParsedResume } from "@offeros/llm";
 import { extractPdfText } from "@offeros/pdf";
-import { api } from "@/lib/api-client";
+import { api, isLlmNotConfigured } from "@/lib/api-client";
 import { ensurePdfWorker } from "@/lib/pdf-worker";
 import { emptyProfile, normalizeProfile } from "@/components/profile/profile-client";
 import { ReviewSections } from "./review-sections";
@@ -69,9 +70,25 @@ export function OnboardingFlow({
   const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<Profile>(emptyProfile());
   const [resumeText, setResumeText] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReactNode>(null);
+  const [needsProvider, setNeedsProvider] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
+
+  // Fail open: if either call fails (e.g. offline), just skip the card —
+  // the actual parse attempt will still surface a clear error if a key is
+  // really missing.
+  useEffect(() => {
+    let active = true;
+    Promise.all([api.settings.get(), api.settings.llmKeys()])
+      .then(([settings, keys]) => {
+        if (active && keys[settings.llm.provider] === "none") setNeedsProvider(true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function runPipeline(f: File) {
     setError(null);
@@ -87,9 +104,22 @@ export function OnboardingFlow({
       const parsed = await api.profile.parseResume({ resumeText: text });
       setDraft(mapParsedToProfile(parsed));
       setPhase("review");
-    } catch {
+    } catch (err) {
       setError(
-        "We couldn't read that résumé. Try again, or fill your details in by hand — your file is still saved.",
+        isLlmNotConfigured(err) ? (
+          <>
+            Your AI provider isn&apos;t configured — add an API key in{" "}
+            <Link
+              href="/settings/ai"
+              className="font-semibold underline underline-offset-2 hover:no-underline"
+            >
+              Settings → AI
+            </Link>
+            , then retry.
+          </>
+        ) : (
+          "We couldn't read that résumé. Try again, or fill your details in by hand — your file is still saved."
+        ),
       );
       setPhase("error");
     }
@@ -194,6 +224,22 @@ export function OnboardingFlow({
           everything before anything is saved.
         </p>
       </header>
+
+      {needsProvider && (
+        <div className="mb-6 rounded-xl bg-warn-bg p-4">
+          <p className="text-body font-semibold text-foreground">Connect your AI provider</p>
+          <p className="mt-1 text-body text-muted-foreground">
+            OfferOS needs an API key to read your résumé and tailor applications. Add one in{" "}
+            <Link
+              href="/settings/ai"
+              className="font-semibold text-foreground underline underline-offset-2 hover:no-underline"
+            >
+              Settings → AI
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
         {busy ? (

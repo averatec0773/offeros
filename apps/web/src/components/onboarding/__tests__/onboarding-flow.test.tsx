@@ -1,25 +1,50 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { profileSchema, type Profile } from "@offeros/core";
+import { profileSchema, type Profile, type Settings } from "@offeros/core";
 import type { ParsedResume } from "@offeros/llm";
 import { OnboardingFlow, mapParsedToProfile } from "../onboarding-flow";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { extractPdfText } from "@offeros/pdf";
 
 vi.mock("@/lib/pdf-worker", () => ({ ensurePdfWorker: vi.fn() }));
 
 vi.mock("@offeros/pdf", () => ({ extractPdfText: vi.fn() }));
 
-vi.mock("@/lib/api-client", () => ({
-  api: {
-    profile: { parseResume: vi.fn(), save: vi.fn() },
-    resumes: { upload: vi.fn() },
-  },
-}));
+// Preserve the real ApiError class and isLlmNotConfigured so 42000 detection
+// works against genuine ApiError instances constructed in these tests.
+vi.mock("@/lib/api-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api-client")>();
+  return {
+    ...actual,
+    api: {
+      profile: { parseResume: vi.fn(), save: vi.fn() },
+      resumes: { upload: vi.fn() },
+      settings: { get: vi.fn(), llmKeys: vi.fn() },
+    },
+  };
+});
+
+function settings(provider: "anthropic" | "openai" = "anthropic"): Settings {
+  return {
+    agent: {
+      enableCustomizeResume: true,
+      enableCustomizeCoverLetter: true,
+      useOriginalResume: false,
+      autoConfirm: false,
+    },
+    llm: { provider, promptOverrides: {}, modelOverrides: {}, apiKeys: {} },
+  };
+}
 
 afterEach(cleanup);
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Default: a key is configured, so the pre-check card stays hidden unless a
+  // test explicitly overrides these to simulate "none".
+  vi.mocked(api.settings.get).mockResolvedValue(settings());
+  vi.mocked(api.settings.llmKeys).mockResolvedValue({ anthropic: "env" });
+});
 
 function parsed(overrides: Partial<ParsedResume> = {}): ParsedResume {
   return {
@@ -137,6 +162,28 @@ describe("OnboardingFlow — parse failure recovery", () => {
 
     await waitFor(() => expect(screen.getByText("Review your details")).toBeTruthy());
     expect(api.profile.parseResume).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows provider-connect copy with a Settings → AI link when the parse fails with 42000", async () => {
+    vi.mocked(api.profile.parseResume).mockRejectedValue(new ApiError("no key", 42000));
+
+    render(<OnboardingFlow onComplete={vi.fn()} />);
+    uploadPdf();
+
+    await waitFor(() => expect(screen.getByText(/AI provider isn't configured/i)).toBeTruthy());
+    expect(screen.queryByText(/couldn't read that résumé/i)).toBeNull();
+    const link = screen.getByRole("link", { name: "Settings → AI" });
+    expect(link.getAttribute("href")).toBe("/settings/ai");
+  });
+
+  it("keeps the file-specific copy for a non-42000 parse failure", async () => {
+    vi.mocked(api.profile.parseResume).mockRejectedValue(new ApiError("boom", 40000));
+
+    render(<OnboardingFlow onComplete={vi.fn()} />);
+    uploadPdf();
+
+    await waitFor(() => expect(screen.getByText(/couldn't read that résumé/i)).toBeTruthy());
+    expect(screen.queryByText(/AI provider isn't configured/i)).toBeNull();
   });
 
   it("offers a fill-in-manually escape that opens an empty review", async () => {
@@ -281,6 +328,54 @@ describe("OnboardingFlow — apply", () => {
 
     resolveSave!(normalizeSavedProfile());
     await waitFor(() => expect(api.resumes.upload).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("OnboardingFlow — provider pre-check", () => {
+  it("shows the connect-provider card when the active provider has no key", async () => {
+    vi.mocked(api.settings.get).mockResolvedValue(settings("anthropic"));
+    vi.mocked(api.settings.llmKeys).mockResolvedValue({ anthropic: "none" });
+
+    render(<OnboardingFlow onComplete={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText("Connect your AI provider")).toBeTruthy());
+    expect(
+      screen.getByText(/OfferOS needs an API key to read your résumé and tailor applications/i),
+    ).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Settings → AI" });
+    expect(link.getAttribute("href")).toBe("/settings/ai");
+    // Upload stays enabled regardless.
+    expect(screen.getByRole("button", { name: "Choose PDF" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("hides the card when the active provider already has a key", async () => {
+    vi.mocked(api.settings.get).mockResolvedValue(settings("anthropic"));
+    vi.mocked(api.settings.llmKeys).mockResolvedValue({ anthropic: "saved" });
+
+    render(<OnboardingFlow onComplete={vi.fn()} />);
+
+    await waitFor(() => expect(api.settings.get).toHaveBeenCalled());
+    expect(screen.queryByText("Connect your AI provider")).toBeNull();
+  });
+
+  it("checks the status of the active provider specifically, not just any provider", async () => {
+    vi.mocked(api.settings.get).mockResolvedValue(settings("openai"));
+    vi.mocked(api.settings.llmKeys).mockResolvedValue({ anthropic: "saved", openai: "none" });
+
+    render(<OnboardingFlow onComplete={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText("Connect your AI provider")).toBeTruthy());
+  });
+
+  it("fails open (no card, no crash) when the settings fetch fails", async () => {
+    vi.mocked(api.settings.get).mockRejectedValue(new Error("offline"));
+    vi.mocked(api.settings.llmKeys).mockRejectedValue(new Error("offline"));
+
+    render(<OnboardingFlow onComplete={vi.fn()} />);
+
+    await waitFor(() => expect(api.settings.get).toHaveBeenCalled());
+    expect(screen.queryByText("Connect your AI provider")).toBeNull();
+    expect(screen.getByText("Upload your résumé")).toBeTruthy();
   });
 });
 
