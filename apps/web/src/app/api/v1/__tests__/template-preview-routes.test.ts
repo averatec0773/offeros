@@ -5,6 +5,15 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { BODY_START, BODY_END } from "@offeros/core";
 import type { Renderer } from "@/server/export/renderers";
 
+// The render-failure test swaps RENDERERS.latex for a mock, but the service
+// short-circuits on hasPdflatex() before reaching the registry — so on a
+// machine without pdflatex (CI) the mock is never called. Pin the probe to
+// true; every latex render in this file goes through the mocked registry.
+vi.mock("@/server/export/latex-renderer", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/server/export/latex-renderer")>();
+  return { ...mod, hasPdflatex: () => true };
+});
+
 const dir = mkdtempSync(join(tmpdir(), "offeros-template-preview-route-"));
 process.env.OFFEROS_DB_PATH = join(dir, "preview-route.db");
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
