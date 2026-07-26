@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { structuredResumeSchema, serializeResume, type ResumeHeader } from "../resume";
+import {
+  structuredResumeSchema,
+  serializeResume,
+  buildResumeHeader,
+  type ResumeHeader,
+} from "../resume";
+import type { Profile } from "../profile";
 
 function validResume() {
   return {
@@ -137,5 +143,51 @@ describe("serializeResume", () => {
     const text = serializeResume(structuredResumeSchema.parse({}), { name: "Jordan Rivera" });
     expect(text.split("\n")[0]).toBe("Jordan Rivera");
     expect(text).not.toContain("undefined");
+  });
+});
+
+describe("buildResumeHeader", () => {
+  it("maps the profile's personal info to a header, joining location and filtering empty links", () => {
+    const profile: Profile = {
+      personal: {
+        name: "Jordan Rivera",
+        email: "jordan@example.com",
+        phone: "555-0100",
+        city: "Austin",
+        state: "TX",
+        country: "USA",
+        links: { linkedin: "https://linkedin.com/in/jordan", github: "", portfolio: undefined },
+      },
+      skills: [],
+      education: [],
+      experience: [],
+    };
+
+    const header = buildResumeHeader(profile);
+
+    expect(header).toEqual({
+      name: "Jordan Rivera",
+      email: "jordan@example.com",
+      phone: "555-0100",
+      location: "Austin, TX, USA",
+      links: ["https://linkedin.com/in/jordan"],
+    });
+  });
+
+  it("omits email/phone/location when blank, and links defaults to an empty array", () => {
+    const profile: Profile = {
+      personal: { name: "Sam", email: "", phone: "", links: {} },
+      skills: [],
+      education: [],
+      experience: [],
+    };
+
+    const header = buildResumeHeader(profile);
+
+    expect(header.name).toBe("Sam");
+    expect(header.email).toBeUndefined();
+    expect(header.phone).toBeUndefined();
+    expect(header.location).toBeUndefined();
+    expect(header.links).toEqual([]);
   });
 });

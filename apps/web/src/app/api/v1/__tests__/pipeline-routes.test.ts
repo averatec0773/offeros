@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serializeResume, type Profile } from "@offeros/core";
+import { buildResumeHeader, serializeResume, type Profile } from "@offeros/core";
 
 const dir = mkdtempSync(join(tmpdir(), "offeros-pipeline-api-"));
 process.env.OFFEROS_DB_PATH = join(dir, "pipeline.db");
@@ -17,7 +17,6 @@ const pauseRoute = await import("../agent/tasks/[id]/pause/route");
 const { getDb } = await import("@/server/db/client");
 const { saveProfile } = await import("@/server/repositories/profile-repo");
 const { __setTestPipelineOverride } = await import("@/server/pipeline/route-context");
-const { buildResumeHeader } = await import("@/server/pipeline/steps/grounding");
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 

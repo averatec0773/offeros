@@ -96,12 +96,21 @@ describe("buildResumeHtml", () => {
           bullets: ["<img src=x onerror=alert(1)>"],
         },
       ],
-      education: [],
+      education: [
+        {
+          school: "<img src=x onerror=alert(2)>",
+          degree: "B.S.",
+          field: "CS",
+          dates: "2016",
+          details: "",
+        },
+      ],
       skills: ["<script>bad</script>"],
     };
     const hostileHeader: ResumeHeader = {
       name: '<script>alert("name")</script>',
-      email: "a@b.com",
+      email: "<img src=x onerror=alert(3)>",
+      links: ["<script>alert(4)</script>"],
     };
     const html = buildResumeHtml({
       body: "",
@@ -113,10 +122,35 @@ describe("buildResumeHtml", () => {
     expect(html).not.toContain("<b>Evil Co</b>");
     expect(html).not.toContain("<i>Hacker</i>");
     expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("&lt;img src=x onerror=alert(2)&gt;");
+    expect(html).toContain("&lt;img src=x onerror=alert(3)&gt;");
+    expect(html).toContain("&lt;script&gt;alert(4)&lt;/script&gt;");
   });
 
   it("throws when input.resume is absent", () => {
     expect(() => buildResumeHtml({ body: "", meta: META })).toThrow();
+  });
+
+  it("skips an all-blank experience/education entry instead of rendering a bare row", () => {
+    const withBlanks: StructuredResume = {
+      summary: "",
+      experience: [{ company: "", title: "", dates: "", bullets: [] }, ...RESUME.experience],
+      education: [
+        { school: "", degree: "", field: "", dates: "", details: "" },
+        ...RESUME.education,
+      ],
+      skills: [],
+    };
+    const html = buildResumeHtml({
+      body: "",
+      meta: META,
+      resume: { data: withBlanks, header: HEADER },
+    });
+    // The real entries still render, and the bare "title — company" placeholder
+    // the blank entries would otherwise produce is absent.
+    expect(html).toContain("Staff Engineer");
+    expect(html).toContain("State University");
+    expect(html.match(/class="entry"/g)).toHaveLength(2);
   });
 });
 

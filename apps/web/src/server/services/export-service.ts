@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { Artifact, ArtifactKind, ArtifactVersion, Template } from "@offeros/core";
+import {
+  buildResumeHeader,
+  type Artifact,
+  type ArtifactKind,
+  type ArtifactVersion,
+  type Template,
+} from "@offeros/core";
 import type { Db } from "../db/client";
 import { getAgentTask } from "../repositories/agent-task-repo";
 import { getApplication } from "../repositories/application-repo";
@@ -8,7 +14,6 @@ import { getProfile } from "../repositories/profile-repo";
 import { getDefaultTemplate, getTemplate } from "../repositories/template-repo";
 import { hasPdflatex } from "../export/latex-renderer";
 import { RENDERERS, type RenderInput, type RenderResult } from "../export/renderers";
-import { buildResumeHeader } from "../pipeline/steps/grounding";
 
 /** An artifact's current version, or null when the artifact is absent. */
 function currentVersion(artifact: Artifact | null): ArtifactVersion | null {

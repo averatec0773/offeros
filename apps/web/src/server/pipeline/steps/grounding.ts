@@ -1,4 +1,4 @@
-import type { Application, Profile, ResumeHeader, ResumeSummary } from "@offeros/core";
+import type { Application, Profile, ResumeSummary } from "@offeros/core";
 
 /**
  * Plain-text facts about the applicant derived from their profile: contact
@@ -71,27 +71,4 @@ export function resolveResumeText(
     resumes.find((r) => r.id === application.resumeId) ?? resumes.find((r) => r.isPrimary);
   const text = selected?.text;
   return text && text.trim() ? text : buildProfileFacts(profile);
-}
-
-/**
- * Header/contact fields for `serializeResume`, derived from the profile's own
- * personal info — never from LLM output — so the tailored résumé's identity
- * block is always grounded.
- */
-export function buildResumeHeader(profile: Profile): ResumeHeader {
-  const location = [profile.personal.city, profile.personal.state, profile.personal.country]
-    .filter(Boolean)
-    .join(", ");
-  const links = [
-    profile.personal.links.linkedin,
-    profile.personal.links.github,
-    profile.personal.links.portfolio,
-  ].filter((link): link is string => Boolean(link));
-  return {
-    name: profile.personal.name,
-    email: profile.personal.email || undefined,
-    phone: profile.personal.phone || undefined,
-    location: location || undefined,
-    links,
-  };
 }

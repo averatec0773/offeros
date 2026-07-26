@@ -439,6 +439,40 @@ describe("WorkspaceClient — résumé picker", () => {
     )) as HTMLSelectElement;
     expect(select.value).toBe("r-backend");
   });
+
+  it("shows a hint when the effective résumé has no extracted text", async () => {
+    const noText: ResumeSummary = { ...primary, text: undefined };
+    vi.mocked(api.resumes.list).mockResolvedValue([noText, backend]);
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={baseTask({})}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    await screen.findByLabelText(/résumé for this application/i);
+    expect(screen.getByText(/No text extracted from this résumé/i)).toBeTruthy();
+  });
+
+  it("does not show the hint when the effective résumé has text", async () => {
+    const withText: ResumeSummary = { ...primary, text: "Jordan Rivera\nSenior Engineer" };
+    vi.mocked(api.resumes.list).mockResolvedValue([withText, backend]);
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={baseTask({})}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    await screen.findByLabelText(/résumé for this application/i);
+    expect(screen.queryByText(/No text extracted from this résumé/i)).toBeNull();
+  });
 });
 
 describe("shouldPoll", () => {

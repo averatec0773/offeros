@@ -142,4 +142,11 @@ describe("POST /templates/preview", () => {
     const res = await previewRoute.POST(post({ content: "hello", renderer: "builtin", id: "x" }));
     expect(res.status).toBe(400);
   });
+
+  it("400s on an inline renderer outside the template allowlist (e.g. the internal 'resume' renderer)", async () => {
+    const res = await previewRoute.POST(post({ content: "hello", renderer: "resume" }));
+    expect(res.status).toBe(400);
+    const b = await body(res);
+    expect(b.success).toBe(false);
+  });
 });

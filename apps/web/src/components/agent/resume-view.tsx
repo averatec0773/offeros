@@ -1,12 +1,38 @@
-import type { ArtifactVersion } from "@offeros/core";
+import type { ArtifactVersion, StructuredResume } from "@offeros/core";
 
 /** The serialized `content`'s header block: the lines before the first blank
  *  line. `resumeData` deliberately carries no header (name/contact info come
- *  from the profile, never the LLM), so the header is read off `content`. */
+ *  from the profile, never the LLM), so the header is read off `content`.
+ *  Deliberate asymmetry: this viewer shows the header frozen at generation
+ *  time (baked into `content`), while PDF export rebuilds the header from the
+ *  CURRENT profile via `buildResumeHeader` (`export-service.ts`) — both are
+ *  intended, so a later profile edit updates future PDFs without silently
+ *  rewriting an already-approved artifact's on-screen header. */
 function headerLines(content: string): string[] {
   const blankAt = content.indexOf("\n\n");
   const block = blankAt === -1 ? content : content.slice(0, blankAt);
   return block.split("\n");
+}
+
+/** True when every field of an experience entry (including bullets) is blank after trim. */
+function isBlankExperience(exp: StructuredResume["experience"][number]): boolean {
+  return (
+    !exp.company.trim() &&
+    !exp.title.trim() &&
+    !exp.dates.trim() &&
+    exp.bullets.every((b) => !b.trim())
+  );
+}
+
+/** True when every field of an education entry is blank after trim. */
+function isBlankEducation(edu: StructuredResume["education"][number]): boolean {
+  return (
+    !edu.school.trim() &&
+    !edu.degree.trim() &&
+    !edu.field.trim() &&
+    !edu.dates.trim() &&
+    !edu.details.trim()
+  );
 }
 
 /** Structured résumé view for a `resume` artifact version that has
@@ -16,6 +42,8 @@ function headerLines(content: string): string[] {
 export function ResumeView({ version }: { version: ArtifactVersion }) {
   const resumeData = version.resumeData!;
   const changedLines = new Set(version.changedLines ?? []);
+  const experience = resumeData.experience.filter((exp) => !isBlankExperience(exp));
+  const education = resumeData.education.filter((edu) => !isBlankEducation(edu));
 
   return (
     <div className="mt-3 space-y-4 rounded-xl bg-muted p-4">
@@ -41,11 +69,11 @@ export function ResumeView({ version }: { version: ArtifactVersion }) {
         </section>
       )}
 
-      {resumeData.experience.length > 0 && (
+      {experience.length > 0 && (
         <section>
           <h4 className="text-caption font-semibold text-muted-foreground">Experience</h4>
           <div className="mt-1.5 space-y-3">
-            {resumeData.experience.map((exp, i) => (
+            {experience.map((exp, i) => (
               <div key={i}>
                 <p className="text-body font-semibold text-foreground">
                   {exp.title} — {exp.company} ({exp.dates})
@@ -68,11 +96,11 @@ export function ResumeView({ version }: { version: ArtifactVersion }) {
         </section>
       )}
 
-      {resumeData.education.length > 0 && (
+      {education.length > 0 && (
         <section>
           <h4 className="text-caption font-semibold text-muted-foreground">Education</h4>
           <div className="mt-1.5 space-y-2">
-            {resumeData.education.map((edu, i) => (
+            {education.map((edu, i) => (
               <div key={i} className="text-caption text-foreground">
                 <p>
                   {edu.degree}, {edu.field} — {edu.school} ({edu.dates})

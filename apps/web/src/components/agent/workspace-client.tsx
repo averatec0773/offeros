@@ -330,6 +330,17 @@ export function WorkspaceClient({
                   label: r.note ? `${r.name} — ${r.note}` : r.name,
                 }))}
               />
+              {(() => {
+                const effective = resumes.find(
+                  (r) => r.id === effectiveResumeId(resumeId, resumes),
+                );
+                return effective && !effective.text?.trim() ? (
+                  <p className="mt-2 text-caption text-muted-foreground">
+                    No text extracted from this résumé — tailoring will use your profile facts.
+                    Re-upload it to enable real-résumé tailoring.
+                  </p>
+                ) : null;
+              })()}
             </div>
           )}
 

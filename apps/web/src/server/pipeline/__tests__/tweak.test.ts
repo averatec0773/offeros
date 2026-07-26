@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serializeResume, type AgentTask, type Profile } from "@offeros/core";
+import { buildResumeHeader, serializeResume, type AgentTask, type Profile } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, updateApplication } from "../../repositories/application-repo";
 import { createAgentTask } from "../../repositories/agent-task-repo";
@@ -11,7 +11,6 @@ import { uploadResume } from "../../services/resume-service";
 import { makePipelineContext } from "../context";
 import { tweakArtifact } from "../tweak";
 import { run as tailorResumeRun } from "../steps/tailor-resume";
-import { buildResumeHeader } from "../steps/grounding";
 
 let db: Db;
 let dir: string;

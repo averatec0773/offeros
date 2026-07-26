@@ -30,6 +30,27 @@ function buildContactLine(header: ResumeHeader): string {
   return parts.map(escapeHtml).join(" &middot; ");
 }
 
+/** True when every field of an experience entry (including bullets) is blank after trim. */
+function isBlankExperience(exp: StructuredResume["experience"][number]): boolean {
+  return (
+    !exp.company.trim() &&
+    !exp.title.trim() &&
+    !exp.dates.trim() &&
+    exp.bullets.every((b) => !b.trim())
+  );
+}
+
+/** True when every field of an education entry is blank after trim. */
+function isBlankEducation(edu: StructuredResume["education"][number]): boolean {
+  return (
+    !edu.school.trim() &&
+    !edu.degree.trim() &&
+    !edu.field.trim() &&
+    !edu.dates.trim() &&
+    !edu.details.trim()
+  );
+}
+
 /** One EXPERIENCE entry: title — company (dates), then a bullet list. */
 function buildExperienceEntry(exp: StructuredResume["experience"][number]): string {
   const bullets = exp.bullets
@@ -88,8 +109,20 @@ export function buildResumeHtml(input: RenderInput): string {
 
   const sections = [
     buildSection("Summary", data.summary.trim() ? `  <p>${escapeHtml(data.summary)}</p>` : ""),
-    buildSection("Experience", data.experience.map(buildExperienceEntry).join("\n")),
-    buildSection("Education", data.education.map(buildEducationEntry).join("\n")),
+    buildSection(
+      "Experience",
+      data.experience
+        .filter((exp) => !isBlankExperience(exp))
+        .map(buildExperienceEntry)
+        .join("\n"),
+    ),
+    buildSection(
+      "Education",
+      data.education
+        .filter((edu) => !isBlankEducation(edu))
+        .map(buildEducationEntry)
+        .join("\n"),
+    ),
     buildSection(
       "Skills",
       data.skills.length ? `  <p>${data.skills.map(escapeHtml).join(", ")}</p>` : "",

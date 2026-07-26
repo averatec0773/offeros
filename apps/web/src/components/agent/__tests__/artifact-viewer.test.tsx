@@ -110,9 +110,61 @@ describe("ArtifactViewer structured résumé view", () => {
   });
 
   it("falls back to the raw text render for a resume version without resumeData", () => {
-    render(<ArtifactViewer artifact={artifact} />);
+    const { container } = render(<ArtifactViewer artifact={artifact} />);
     expect(screen.getByText("Jordan Rivera")).toBeTruthy();
-    expect(screen.queryByText("SUMMARY")).toBeNull();
+    // No resumeData → the <pre> text fallback renders, not the structured view.
+    expect(container.querySelector("pre")).toBeTruthy();
+    expect(screen.queryByText("Summary")).toBeNull();
+  });
+});
+
+const structuredArtifactWithBlankEntries: Artifact = {
+  id: "a3",
+  taskId: "t1",
+  kind: "resume",
+  versions: [
+    {
+      id: "v1",
+      content: "Jordan Rivera\njordan@example.com",
+      rationale: "Initial tailored draft.",
+      resumeData: {
+        summary: "",
+        experience: [
+          { company: "", title: "", dates: "", bullets: [] },
+          {
+            company: "Acme",
+            title: "ML Engineer",
+            dates: "2021 – Present",
+            bullets: ["Shipped a service."],
+          },
+        ],
+        education: [
+          { school: "", degree: "", field: "", dates: "", details: "" },
+          {
+            school: "UT Austin",
+            degree: "BS",
+            field: "Computer Science",
+            dates: "2016 – 2020",
+            details: "",
+          },
+        ],
+        skills: [],
+      },
+      createdAt: 1,
+    },
+  ],
+  currentVersionId: "v1",
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+describe("ArtifactViewer structured résumé view — blank entries", () => {
+  it("skips an all-blank experience/education entry instead of rendering a bare row", () => {
+    render(<ArtifactViewer artifact={structuredArtifactWithBlankEntries} />);
+    expect(screen.getByText(/Acme/)).toBeTruthy();
+    expect(screen.getByText(/UT Austin/)).toBeTruthy();
+    // Only the real entries render — no bare "— ()" row for the blank ones.
+    expect(screen.queryByText(/^—\s*\(\)$/)).toBeNull();
   });
 });
 

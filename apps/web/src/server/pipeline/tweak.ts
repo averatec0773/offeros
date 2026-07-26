@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  buildResumeHeader,
   serializeResume,
   type Artifact,
   type ArtifactVersion,
@@ -13,7 +14,7 @@ import type {
 } from "@offeros/llm";
 import { diffLines, type LineDiff } from "@/lib/diff";
 import type { PipelineContext } from "./types";
-import { buildGroundingFacts, buildResumeHeader, resolveResumeText } from "./steps/grounding";
+import { buildGroundingFacts, resolveResumeText } from "./steps/grounding";
 
 export type TweakArtifactKind = "resume" | "cover-letter";
 

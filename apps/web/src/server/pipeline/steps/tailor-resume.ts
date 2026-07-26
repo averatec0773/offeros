@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { serializeResume, type AgentTask, type Artifact } from "@offeros/core";
+import { buildResumeHeader, serializeResume, type AgentTask, type Artifact } from "@offeros/core";
 import type { ResumeTailorInput, ResumeTailorOutput } from "@offeros/llm";
 import type { PipelineContext } from "../types";
-import { buildResumeHeader, resolveResumeText } from "./grounding";
+import { resolveResumeText } from "./grounding";
 
 /**
  * Tailors the applicant's résumé toward the job description and persists it

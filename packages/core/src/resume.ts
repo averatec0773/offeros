@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Profile } from "./profile";
 
 const structuredResumeShape = z.object({
   summary: z.string().catch(""),
@@ -96,4 +97,27 @@ export function serializeResume(r: StructuredResume, header: ResumeHeader): stri
   const headerBlock = headerLines.join("\n");
   const body = sections.join("\n\n");
   return body ? `${headerBlock}\n\n${body}` : headerBlock;
+}
+
+/**
+ * Header/contact fields for `serializeResume`, derived from the profile's own
+ * personal info — never from LLM output — so the tailored résumé's identity
+ * block is always grounded.
+ */
+export function buildResumeHeader(profile: Profile): ResumeHeader {
+  const location = [profile.personal.city, profile.personal.state, profile.personal.country]
+    .filter(Boolean)
+    .join(", ");
+  const links = [
+    profile.personal.links.linkedin,
+    profile.personal.links.github,
+    profile.personal.links.portfolio,
+  ].filter((link): link is string => Boolean(link));
+  return {
+    name: profile.personal.name,
+    email: profile.personal.email || undefined,
+    phone: profile.personal.phone || undefined,
+    location: location || undefined,
+    links,
+  };
 }

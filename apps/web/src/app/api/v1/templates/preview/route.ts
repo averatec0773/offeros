@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TEMPLATE_RENDERERS } from "@offeros/core";
 import { getDb } from "@/server/db/client";
 import { previewTemplate } from "@/server/services/export-service";
 import { badRequest, handle } from "@/server/http/envelope";
@@ -9,7 +10,9 @@ const previewSchema = z.union([
   z
     .object({
       content: z.string().min(1),
-      renderer: z.string().min(1),
+      // Only real template renderers (not the internal `resume` renderer,
+      // which the registry also carries but which templates never select).
+      renderer: z.enum(TEMPLATE_RENDERERS),
       scaffoldHints: z.string().optional(),
     })
     .strict(),

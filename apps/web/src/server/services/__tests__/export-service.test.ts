@@ -14,7 +14,8 @@ const { getDb } = await import("@/server/db/client");
 const { createApplication } = await import("@/server/repositories/application-repo");
 const { createAgentTask } = await import("@/server/repositories/agent-task-repo");
 const { upsertArtifact } = await import("@/server/repositories/artifact-repo");
-const { saveProfile } = await import("@/server/repositories/profile-repo");
+const profileRepo = await import("@/server/repositories/profile-repo");
+const { saveProfile } = profileRepo;
 const { saveTemplate, listTemplates, deleteTemplate } =
   await import("@/server/services/template-service");
 const { RENDERERS } = await import("@/server/export/renderers");
@@ -158,20 +159,30 @@ describe("exportArtifactPdf", () => {
     expect(result.ok).toBe(false);
   });
 
-  // Runs before any test in this file saves a profile — verifies the
-  // no-profile fallback while the singleton profile row is still absent.
+  // Mocks getProfile to return null regardless of run order, rather than
+  // relying on this test executing before any other test in the file saves
+  // a profile (the profile row is a DB-wide singleton).
   it("falls back to the builtin renderer when resumeData is present but there is no profile", async () => {
-    const db = getDb();
-    const app = createApplication(db, {
-      jobInfo: { jobId: `j-${Math.random()}`, jobTitle: "GenAI Engineer", companyName: "Evolver" },
-    });
-    const task = createAgentTask(db, { applicationId: app.id });
-    upsertArtifact(db, artifact(task.id, "resume", "Resume text body.", RESUME_DATA));
+    const getProfileSpy = vi.spyOn(profileRepo, "getProfile").mockReturnValue(null);
+    try {
+      const db = getDb();
+      const app = createApplication(db, {
+        jobInfo: {
+          jobId: `j-${Math.random()}`,
+          jobTitle: "GenAI Engineer",
+          companyName: "Evolver",
+        },
+      });
+      const task = createAgentTask(db, { applicationId: app.id });
+      upsertArtifact(db, artifact(task.id, "resume", "Resume text body.", RESUME_DATA));
 
-    const result = await exportArtifactPdf(db, task.id, "resume");
-    expect(result.ok).toBe(true);
-    expect(builtinSpy).toHaveBeenCalledTimes(1);
-    expect(resumeSpy).not.toHaveBeenCalled();
+      const result = await exportArtifactPdf(db, task.id, "resume");
+      expect(result.ok).toBe(true);
+      expect(builtinSpy).toHaveBeenCalledTimes(1);
+      expect(resumeSpy).not.toHaveBeenCalled();
+    } finally {
+      getProfileSpy.mockRestore();
+    }
   });
 
   it("routes resume to the résumé renderer with structured data + profile header when resumeData is present", async () => {
