@@ -34,6 +34,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Mirrors envelope.ts's `ERROR_CODES.NO_API_KEY` (42000) without importing server code into the client bundle. */
+const NO_API_KEY_CODE = 42000;
+
+/** True only for the "no provider key configured" envelope, never for test-llm's plain 400s. */
+export function isLlmNotConfigured(err: unknown): boolean {
+  return err instanceof ApiError && err.code === NO_API_KEY_CODE;
+}
+
 type Envelope<T> = {
   success: boolean;
   errorCode: number;
@@ -133,6 +141,14 @@ export const api = {
   settings: {
     get: () => request<Settings>("/settings"),
     save: (settings: Settings) => request<Settings>("/settings", json("PUT", settings)),
+    llmKeys: () => request<Record<string, "saved" | "env" | "none">>("/settings/llm-keys"),
+    setLlmKey: (provider: string, key: string) =>
+      request<Record<string, "saved" | "env" | "none">>(
+        "/settings/llm-keys",
+        json("PUT", { provider, key }),
+      ),
+    testLlm: (input: { provider: string; model?: string; key?: string }) =>
+      request<{ ok: true }>("/settings/test-llm", json("POST", input)),
   },
   resumes: {
     list: () => request<ResumeSummary[]>("/resumes"),

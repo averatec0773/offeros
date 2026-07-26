@@ -76,18 +76,27 @@ export function makeRepos(db: Db) {
 export type PipelineRepos = ReturnType<typeof makeRepos>;
 
 /**
- * Settings-first key resolution: a key saved in-app beats the environment
- * variable, which beats nothing. Provider-keyed record, not an if-chain, so
- * adding a provider only touches `ENV_KEYS`.
+ * Env-var fallback for a provider's key. Exported so the settings/llm-keys
+ * route can compute "env" status without duplicating this record — read
+ * fresh on every call (not hoisted) so tests can control it with
+ * `vi.stubEnv`.
  */
-function apiKeyFor(provider: LlmProvider, settings: Settings): string {
-  const saved = settings.llm.apiKeys[provider];
-  if (saved && saved.trim() !== "") return saved;
+export function envApiKeyFor(provider: LlmProvider): string {
   const ENV_KEYS: Record<LlmProvider, string | undefined> = {
     anthropic: process.env.ANTHROPIC_API_KEY,
     openai: process.env.OPENAI_API_KEY,
   };
   return ENV_KEYS[provider] ?? "";
+}
+
+/**
+ * Settings-first key resolution: a key saved in-app beats the environment
+ * variable, which beats nothing.
+ */
+function apiKeyFor(provider: LlmProvider, settings: Settings): string {
+  const saved = settings.llm.apiKeys[provider];
+  if (saved && saved.trim() !== "") return saved;
+  return envApiKeyFor(provider);
 }
 
 export interface PipelineContextOptions {
