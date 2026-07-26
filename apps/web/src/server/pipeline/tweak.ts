@@ -13,7 +13,7 @@ import type {
 } from "@offeros/llm";
 import { diffLines, type LineDiff } from "@/lib/diff";
 import type { PipelineContext } from "./types";
-import { buildGroundingFacts, buildProfileFacts, buildResumeHeader } from "./steps/grounding";
+import { buildGroundingFacts, buildResumeHeader, resolveResumeText } from "./steps/grounding";
 
 export type TweakArtifactKind = "resume" | "cover-letter";
 
@@ -63,8 +63,9 @@ export async function tweakArtifact(
     content = output.content;
     rationale = output.rationale;
   } else {
+    const resumes = ctx.repos.listResumes();
     const input: ResumeTailorInput = {
-      resumeText: buildProfileFacts(profile),
+      resumeText: resolveResumeText(application, resumes, profile),
       jobInfo: application.jobInfo,
       jdText: application.jdText ?? "",
       instruction,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { Profile } from "@offeros/core";
-import { buildGroundingFacts, buildProfileFacts } from "../steps/grounding";
+import type { Profile, ResumeSummary } from "@offeros/core";
+import { buildGroundingFacts, buildProfileFacts, resolveResumeText } from "../steps/grounding";
 
 const profile: Profile = {
   personal: {
@@ -72,5 +72,44 @@ describe("buildGroundingFacts", () => {
   it("omits the résumé section when resumeText is blank", () => {
     const facts = buildGroundingFacts(profile, "   ");
     expect(facts).not.toContain("Résumé text:");
+  });
+});
+
+function resume(overrides: Partial<ResumeSummary>): ResumeSummary {
+  return {
+    id: "r1",
+    name: "resume.pdf",
+    mimeType: "application/pdf",
+    isPrimary: false,
+    createdAt: 1,
+    ...overrides,
+  };
+}
+
+describe("resolveResumeText", () => {
+  it("uses the application's selected résumé's text", () => {
+    const resumes = [
+      resume({ id: "r1", isPrimary: true, text: "Primary résumé body." }),
+      resume({ id: "r2", text: "Selected résumé body." }),
+    ];
+    const text = resolveResumeText({ resumeId: "r2" }, resumes, profile);
+    expect(text).toBe("Selected résumé body.");
+  });
+
+  it("falls back to the primary résumé when the selection doesn't exist", () => {
+    const resumes = [resume({ id: "r1", isPrimary: true, text: "Primary résumé body." })];
+    const text = resolveResumeText({ resumeId: "gone" }, resumes, profile);
+    expect(text).toBe("Primary résumé body.");
+  });
+
+  it("falls back to profile facts when there is no résumé at all", () => {
+    const text = resolveResumeText({ resumeId: undefined }, [], profile);
+    expect(text).toBe(buildProfileFacts(profile));
+  });
+
+  it("falls back to profile facts when the resolved résumé's text is empty/whitespace", () => {
+    const resumes = [resume({ id: "r1", isPrimary: true, text: "   " })];
+    const text = resolveResumeText({ resumeId: undefined }, resumes, profile);
+    expect(text).toBe(buildProfileFacts(profile));
   });
 });

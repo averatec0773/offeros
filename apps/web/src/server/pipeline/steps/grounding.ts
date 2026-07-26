@@ -1,4 +1,4 @@
-import type { Profile, ResumeHeader } from "@offeros/core";
+import type { Application, Profile, ResumeHeader, ResumeSummary } from "@offeros/core";
 
 /**
  * Plain-text facts about the applicant derived from their profile: contact
@@ -52,6 +52,25 @@ export function buildGroundingFacts(profile: Profile, resumeText: string): strin
   const facts = buildProfileFacts(profile);
   const resume = resumeText.trim();
   return resume ? `${facts}\n\nRésumé text:\n${resume}` : facts;
+}
+
+/**
+ * Resolves which résumé's stored text should ground the tailor task: the
+ * application's explicit selection (`application.resumeId`) if it still
+ * exists, else the account's primary résumé — the same default-to-primary
+ * rule the workspace picker's `effectiveResumeId` applies. Falls back to
+ * `buildProfileFacts` when there's no selected/primary résumé, or its stored
+ * text is empty/whitespace-only.
+ */
+export function resolveResumeText(
+  application: Pick<Application, "resumeId">,
+  resumes: ResumeSummary[],
+  profile: Profile,
+): string {
+  const selected =
+    resumes.find((r) => r.id === application.resumeId) ?? resumes.find((r) => r.isPrimary);
+  const text = selected?.text;
+  return text && text.trim() ? text : buildProfileFacts(profile);
 }
 
 /**

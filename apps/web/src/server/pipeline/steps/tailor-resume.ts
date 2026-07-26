@@ -2,22 +2,23 @@ import { randomUUID } from "node:crypto";
 import { serializeResume, type AgentTask, type Artifact } from "@offeros/core";
 import type { ResumeTailorInput, ResumeTailorOutput } from "@offeros/llm";
 import type { PipelineContext } from "../types";
-import { buildProfileFacts, buildResumeHeader } from "./grounding";
+import { buildResumeHeader, resolveResumeText } from "./grounding";
 
 /**
  * Tailors the applicant's résumé toward the job description and persists it
  * as a new `resume` artifact version (v1, or appended if one already exists).
- * The pipeline does not yet consume a stored raw résumé text, so
- * `buildProfileFacts` stands in for "the résumé" fed to the LLM.
+ * Grounds the tailor on the application's selected résumé (falling back to
+ * the primary, then to profile facts) via `resolveResumeText`.
  */
 export async function run(ctx: PipelineContext, task: AgentTask): Promise<void> {
   const application = ctx.repos.getApplication(task.applicationId);
   if (!application) throw new Error(`application ${task.applicationId} not found`);
   const profile = ctx.repos.getProfile();
   if (!profile) throw new Error("profile not found");
+  const resumes = ctx.repos.listResumes();
 
   const input: ResumeTailorInput = {
-    resumeText: buildProfileFacts(profile),
+    resumeText: resolveResumeText(application, resumes, profile),
     jobInfo: application.jobInfo,
     jdText: application.jdText ?? "",
   };

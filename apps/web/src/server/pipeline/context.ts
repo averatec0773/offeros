@@ -25,6 +25,7 @@ import { getArtifact, listArtifacts, upsertArtifact } from "../repositories/arti
 import { getProfile, saveProfile } from "../repositories/profile-repo";
 import { getSettings, saveSettings } from "../repositories/settings-repo";
 import { getDefaultTemplate } from "../repositories/template-repo";
+import { listResumes } from "../services/resume-service";
 import { STEPS } from "./steps";
 import type { PipelineContext, PipelineStep } from "./types";
 
@@ -61,6 +62,8 @@ export function makeRepos(db: Db) {
 
     getProfile: () => getProfile(db),
     saveProfile: (profile: Parameters<typeof saveProfile>[1]) => saveProfile(db, profile),
+
+    listResumes: () => listResumes(db),
 
     getSettings: () => getSettings(db),
     saveSettings: (next: Parameters<typeof saveSettings>[1]) => saveSettings(db, next),

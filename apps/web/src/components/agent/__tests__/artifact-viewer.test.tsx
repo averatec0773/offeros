@@ -53,6 +53,69 @@ describe("ArtifactViewer", () => {
   });
 });
 
+const structuredArtifact: Artifact = {
+  id: "a2",
+  taskId: "t1",
+  kind: "resume",
+  versions: [
+    {
+      id: "v1",
+      content: "Jordan Rivera\njordan@example.com\n\nSUMMARY\nML engineer.",
+      rationale: "Initial tailored draft.",
+      changedLines: ["Led the ML pipeline redesign, cutting latency 40%."],
+      resumeData: {
+        summary: "ML engineer.",
+        experience: [
+          {
+            company: "Acme",
+            title: "ML Engineer",
+            dates: "2021 – Present",
+            bullets: ["Led the ML pipeline redesign, cutting latency 40%.", "Shipped a service."],
+          },
+        ],
+        education: [
+          {
+            school: "UT Austin",
+            degree: "BS",
+            field: "Computer Science",
+            dates: "2016 – 2020",
+            details: "",
+          },
+        ],
+        skills: ["Python", "Machine Learning"],
+      },
+      createdAt: 1,
+    },
+  ],
+  currentVersionId: "v1",
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+describe("ArtifactViewer structured résumé view", () => {
+  it("renders header, summary, experience bullets, education, and skills from resumeData", () => {
+    render(<ArtifactViewer artifact={structuredArtifact} />);
+
+    expect(screen.getByText("Jordan Rivera")).toBeTruthy();
+    expect(screen.getByText("jordan@example.com")).toBeTruthy();
+    expect(screen.getByText("ML engineer.")).toBeTruthy();
+    expect(screen.getByText(/ML Engineer/)).toBeTruthy();
+    expect(screen.getByText(/Acme/)).toBeTruthy();
+    const changedBullet = screen.getByText(/Led the ML pipeline redesign, cutting latency 40%\./);
+    expect(changedBullet.className).toContain("bg-brand/15");
+    const unchangedBullet = screen.getByText(/Shipped a service\./);
+    expect(unchangedBullet.className).not.toContain("bg-brand/15");
+    expect(screen.getByText(/UT Austin/)).toBeTruthy();
+    expect(screen.getByText(/Python, Machine Learning/)).toBeTruthy();
+  });
+
+  it("falls back to the raw text render for a resume version without resumeData", () => {
+    render(<ArtifactViewer artifact={artifact} />);
+    expect(screen.getByText("Jordan Rivera")).toBeTruthy();
+    expect(screen.queryByText("SUMMARY")).toBeNull();
+  });
+});
+
 describe("ArtifactViewer Download PDF", () => {
   function stubObjectUrl() {
     const createObjectURL = vi.fn(() => "blob:mock-url");

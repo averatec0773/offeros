@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PIPELINE_STEPS, serializeResume, type AgentTask, type Profile } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
-import { createApplication } from "../../repositories/application-repo";
+import { createApplication, updateApplication } from "../../repositories/application-repo";
 import { createAgentTask } from "../../repositories/agent-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { getFit } from "../../repositories/fit-repo";
+import { uploadResume } from "../../services/resume-service";
 import { makePipelineContext } from "../context";
 import { advance, choose } from "../runner";
 import { STEPS } from "../steps";
@@ -15,7 +16,7 @@ import { run as tailorResumeRun } from "../steps/tailor-resume";
 import { run as analyzeSiteRun } from "../steps/analyze-site";
 import { run as generateCoverLetterRun } from "../steps/generate-cover-letter";
 import { run as confirmRun } from "../steps/confirm";
-import { buildResumeHeader } from "../steps/grounding";
+import { buildProfileFacts, buildResumeHeader } from "../steps/grounding";
 
 let db: Db;
 let dir: string;
@@ -137,6 +138,44 @@ describe("tailor-resume step", () => {
     expect(second?.versions[0]!.id).toBe(first?.versions[0]!.id);
     expect(second?.currentVersionId).toBe(second?.versions[1]!.id);
     expect(second?.currentVersionId).not.toBe(first?.versions[0]!.id);
+  });
+
+  it("falls back to profile facts when the application has no résumé selected", async () => {
+    const { task } = seed();
+    let capturedResumeText: string | undefined;
+    const capturingRunLlm = async (taskId: string, input: unknown) => {
+      if (taskId === "resume-tailor")
+        capturedResumeText = (input as { resumeText: string }).resumeText;
+      return fakeRunLlm(taskId, input);
+    };
+    const ctx = makePipelineContext(db, task.id, { runLlm: capturingRunLlm });
+
+    await tailorResumeRun(ctx, task);
+
+    expect(capturedResumeText).toBe(buildProfileFacts(profile));
+  });
+
+  it("feeds the selected résumé's stored text, not profile facts", async () => {
+    const { applicationId, task } = seed();
+    const resume = uploadResume(db, {
+      name: "jordan-resume.pdf",
+      mimeType: "application/pdf",
+      dataBase64: Buffer.from("pdf bytes").toString("base64"),
+      text: "Actual résumé body pulled from the stored upload.",
+    });
+    updateApplication(db, applicationId, { resumeId: resume.id });
+
+    let capturedResumeText: string | undefined;
+    const capturingRunLlm = async (taskId: string, input: unknown) => {
+      if (taskId === "resume-tailor")
+        capturedResumeText = (input as { resumeText: string }).resumeText;
+      return fakeRunLlm(taskId, input);
+    };
+    const ctx = makePipelineContext(db, task.id, { runLlm: capturingRunLlm });
+
+    await tailorResumeRun(ctx, task);
+
+    expect(capturedResumeText).toBe("Actual résumé body pulled from the stored upload.");
   });
 });
 

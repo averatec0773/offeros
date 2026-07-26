@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import type { Artifact } from "@offeros/core";
 import { api } from "@/lib/api-client";
+import { ResumeView } from "./resume-view";
 
 const KIND_LABEL: Record<Artifact["kind"], string> = {
   resume: "Résumé",
@@ -159,13 +160,17 @@ export function ArtifactViewer({ artifact }: { artifact: Artifact }) {
         <p className="mt-3 text-caption text-muted-foreground">{version.rationale}</p>
       )}
 
-      <pre className="mt-3 max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-caption leading-relaxed text-foreground">
-        {lines.map((line, i) => (
-          <div key={i} className={changedLines.has(line) ? "bg-brand/15" : undefined}>
-            {line.length > 0 ? line : " "}
-          </div>
-        ))}
-      </pre>
+      {artifact.kind === "resume" && version.resumeData ? (
+        <ResumeView version={version} />
+      ) : (
+        <pre className="mt-3 max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-caption leading-relaxed text-foreground">
+          {lines.map((line, i) => (
+            <div key={i} className={changedLines.has(line) ? "bg-brand/15" : undefined}>
+              {line.length > 0 ? line : " "}
+            </div>
+          ))}
+        </pre>
+      )}
     </div>
   );
 }
