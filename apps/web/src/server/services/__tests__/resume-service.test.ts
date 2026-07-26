@@ -252,4 +252,81 @@ describe("deleteResume", () => {
   it("returns false for a missing resume", () => {
     expect(deleteResume(db, "does-not-exist")).toBe(false);
   });
+
+  it("auto-promotes the newest remaining resume when deleting the primary", async () => {
+    // Upload three resumes in sequence; the last one will be newest
+    const first = uploadResume(
+      db,
+      { name: "a.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const second = uploadResume(
+      db,
+      { name: "b.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const third = uploadResume(
+      db,
+      { name: "c.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+
+    // Make the first one primary
+    setPrimaryResume(db, first.id, true);
+    let all = listResumes(db);
+    expect(all.find((r) => r.id === first.id)?.isPrimary).toBe(true);
+    expect(all.find((r) => r.id === second.id)?.isPrimary).toBe(false);
+    expect(all.find((r) => r.id === third.id)?.isPrimary).toBe(false);
+
+    // Delete the primary; third (newest) should be promoted
+    expect(deleteResume(db, first.id)).toBe(true);
+    all = listResumes(db);
+    expect(all).toHaveLength(2);
+    expect(all.find((r) => r.id === third.id)?.isPrimary).toBe(true);
+    expect(all.find((r) => r.id === second.id)?.isPrimary).toBe(false);
+    // Exactly one primary
+    expect(all.filter((r) => r.isPrimary)).toHaveLength(1);
+  });
+
+  it("keeps primary unchanged when deleting a non-primary resume", () => {
+    const first = uploadResume(
+      db,
+      { name: "a.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64, isPrimary: true },
+      { storageDir },
+    );
+    const second = uploadResume(
+      db,
+      { name: "b.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+    const third = uploadResume(
+      db,
+      { name: "c.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+
+    // Delete non-primary; primary should stay the same
+    expect(deleteResume(db, second.id)).toBe(true);
+    const all = listResumes(db);
+    expect(all).toHaveLength(2);
+    expect(all.find((r) => r.id === first.id)?.isPrimary).toBe(true);
+    expect(all.find((r) => r.id === third.id)?.isPrimary).toBe(false);
+  });
+
+  it("handles deleting the last resume (no auto-promotion needed)", () => {
+    const resume = uploadResume(
+      db,
+      { name: "a.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64, isPrimary: true },
+      { storageDir },
+    );
+
+    // Delete the only resume
+    expect(deleteResume(db, resume.id)).toBe(true);
+    const all = listResumes(db);
+    expect(all).toHaveLength(0);
+    // No resumes to promote
+    expect(all.filter((r) => r.isPrimary)).toHaveLength(0);
+  });
 });

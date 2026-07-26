@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { unlinkSync } from "node:fs";
 import { resumeSchema, type ResumeSummary } from "@offeros/core";
@@ -127,7 +127,9 @@ export function updateResume(
   return toSummary({ ...existing, ...next });
 }
 
-/** Deletes the row and its stored file (if any). False if `id` doesn't exist. */
+/** Deletes the row and its stored file (if any). False if `id` doesn't exist.
+ *  If the deleted resume was primary, auto-promotes the most recently uploaded
+ *  remaining resume by setting isPrimary: true. No-op if none remain. */
 export function deleteResume(db: Db, id: string): boolean {
   const existing = db.select().from(resumes).where(eq(resumes.id, id)).get();
   if (!existing) return false;
@@ -139,5 +141,14 @@ export function deleteResume(db: Db, id: string): boolean {
       // Already gone — nothing left to clean up.
     }
   }
+
+  // Auto-promote the newest remaining resume if we deleted the primary.
+  if (existing.isPrimary) {
+    const newest = db.select().from(resumes).orderBy(desc(resumes.createdAt)).limit(1).get();
+    if (newest) {
+      db.update(resumes).set({ isPrimary: true }).where(eq(resumes.id, newest.id)).run();
+    }
+  }
+
   return true;
 }
