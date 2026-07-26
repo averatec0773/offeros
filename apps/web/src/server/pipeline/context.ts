@@ -6,6 +6,7 @@ import {
   type ProviderCallArgs,
   type RunTaskDeps,
 } from "@offeros/llm";
+import type { Settings } from "@offeros/core";
 import type { Db } from "../db/client";
 import {
   createApplication,
@@ -74,9 +75,19 @@ export function makeRepos(db: Db) {
 
 export type PipelineRepos = ReturnType<typeof makeRepos>;
 
-function apiKeyFor(provider: LlmProvider): string {
-  if (provider === "openai") return process.env.OPENAI_API_KEY ?? "";
-  return process.env.ANTHROPIC_API_KEY ?? "";
+/**
+ * Settings-first key resolution: a key saved in-app beats the environment
+ * variable, which beats nothing. Provider-keyed record, not an if-chain, so
+ * adding a provider only touches `ENV_KEYS`.
+ */
+function apiKeyFor(provider: LlmProvider, settings: Settings): string {
+  const saved = settings.llm.apiKeys[provider];
+  if (saved && saved.trim() !== "") return saved;
+  const ENV_KEYS: Record<LlmProvider, string | undefined> = {
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    openai: process.env.OPENAI_API_KEY,
+  };
+  return ENV_KEYS[provider] ?? "";
 }
 
 export interface PipelineContextOptions {
@@ -111,7 +122,7 @@ export function makePipelineContext(
         getOverride: async (id) => settings.llm.promptOverrides[id] || null,
         getModelOverride: async (id) => settings.llm.modelOverrides[id] || null,
         getProvider: async () => provider,
-        getKey: async () => apiKeyFor(provider),
+        getKey: async () => apiKeyFor(provider, settings),
         getModel: async () => settings.llm.model ?? "",
         callProvider,
       };

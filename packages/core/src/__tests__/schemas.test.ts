@@ -140,6 +140,14 @@ describe("settingsSchema", () => {
     const parsed = settingsSchema.parse({});
     expect(parsed.llm.promptOverrides).toEqual({});
     expect(parsed.llm.modelOverrides).toEqual({});
+    expect(parsed.llm.apiKeys).toEqual({});
+  });
+
+  it("round-trips saved api keys keyed by provider", () => {
+    const parsed = settingsSchema.parse({
+      llm: { apiKeys: { openai: "sk-x" } },
+    });
+    expect(parsed.llm.apiKeys).toEqual({ openai: "sk-x" });
   });
 
   it("accepts per-task prompt and model overrides", () => {

@@ -4,6 +4,7 @@ export const ERROR_CODES = {
   OK: 10000,
   BAD_REQUEST: 40000,
   NOT_FOUND: 40400,
+  NO_API_KEY: 42000,
   INTERNAL: 50000,
 } as const;
 
@@ -59,6 +60,16 @@ export async function handle(fn: () => Promise<Response> | Response): Promise<Re
     // keep this http helper decoupled from the services layer. Routes pre-check
     // entity existence and return notFound, so what reaches here is a 400.
     if (error instanceof Error && error.name === "ServiceError") return badRequest(error.message);
+    // An unconfigured provider key (`@offeros/llm`'s LlmError, kind "no_key").
+    // Matched structurally, same as ServiceError above, to avoid a
+    // server -> packages/llm import cycle question.
+    if (
+      error instanceof Error &&
+      error.name === "LlmError" &&
+      (error as { kind?: string }).kind === "no_key"
+    ) {
+      return fail(ERROR_CODES.NO_API_KEY, error.message, 400);
+    }
     const message = error instanceof Error ? error.message : "unexpected error";
     return fail(ERROR_CODES.INTERNAL, message, 500);
   }

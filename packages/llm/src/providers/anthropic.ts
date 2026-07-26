@@ -11,7 +11,7 @@ export async function callAnthropic(
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
   if (args.key.trim() === "") {
-    throw new LlmError("no_key", "No Anthropic API key configured.");
+    throw new LlmError("no_key", "No API key configured for anthropic. Add one in Settings → AI.");
   }
 
   const body: Record<string, unknown> = {

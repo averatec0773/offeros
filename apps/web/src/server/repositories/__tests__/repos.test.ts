@@ -137,7 +137,7 @@ describe("settings repo", () => {
         useOriginalResume: false,
         autoConfirm: false,
       },
-      llm: { provider: "anthropic", promptOverrides: {}, modelOverrides: {} },
+      llm: { provider: "anthropic", promptOverrides: {}, modelOverrides: {}, apiKeys: {} },
     });
     expect(getSettings(db).agent.enableCustomizeResume).toBe(false);
   });

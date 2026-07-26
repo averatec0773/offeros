@@ -10,7 +10,7 @@ export async function callOpenAI(
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
   if (args.key.trim() === "") {
-    throw new LlmError("no_key", "No OpenAI API key configured.");
+    throw new LlmError("no_key", "No API key configured for openai. Add one in Settings → AI.");
   }
 
   const messages: { role: string; content: string }[] = [];

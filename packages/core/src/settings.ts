@@ -15,6 +15,10 @@ export const llmSettingsSchema = z.object({
   // prompt / the global model choice; see @offeros/llm's runTask.
   promptOverrides: z.record(z.string()).default({}),
   modelOverrides: z.record(z.string()).default({}),
+  // API keys the user has saved in-app, keyed by provider id. Resolution
+  // precedence (settings-first, env fallback) lives in the web app's
+  // `apiKeyFor`; this schema only stores what the user typed.
+  apiKeys: z.record(z.string()).default({}),
 });
 
 export const settingsSchema = z.object({
