@@ -1,0 +1,169 @@
+[
+  {
+    "id": "us-standard",
+    "archetype": "US, two-token name (control)",
+    "fullName": "Michael Torres",
+    "expectedFirst": "Michael",
+    "expectedLast": "Torres",
+    "email": "michael.torres@example.com",
+    "phone": "(415) 555-0142",
+    "address": "1200 Market St, San Francisco, CA 94103",
+    "links": { "linkedin": "https://www.linkedin.com/in/michaeltorres" },
+    "expectedLinks": { "linkedin": "https://www.linkedin.com/in/michaeltorres" }
+  },
+  {
+    "id": "middle-name",
+    "archetype": "middle name written out",
+    "fullName": "Sarah Jane Chen",
+    "expectedFirst": "Sarah",
+    "expectedLast": "Chen",
+    "email": "sarah.chen@example.com",
+    "phone": "206-555-0173",
+    "address": "Seattle, WA",
+    "links": { "linkedin": "linkedin.com/in/sarahjchen", "github": "github.com/sjchen" },
+    "expectedLinks": {
+      "linkedin": "https://linkedin.com/in/sarahjchen",
+      "github": "https://github.com/sjchen"
+    }
+  },
+  {
+    "id": "middle-initial",
+    "archetype": "middle initial",
+    "fullName": "James R. Patterson",
+    "expectedFirst": "James",
+    "expectedLast": "Patterson",
+    "email": "jrpatterson@example.com",
+    "phone": "+1 512-555-0198",
+    "address": "Austin, TX 78701",
+    "links": { "linkedin": "https://linkedin.com/in/jrpatterson" },
+    "expectedLinks": { "linkedin": "https://linkedin.com/in/jrpatterson" }
+  },
+  {
+    "id": "comma-format",
+    "archetype": "\"Last, First\" header ordering",
+    "fullName": "Nguyen, Linh",
+    "expectedFirst": "Linh",
+    "expectedLast": "Nguyen",
+    "email": "linh.nguyen@example.com",
+    "phone": "(669) 555-0110",
+    "address": "San Jose, CA 95112",
+    "links": { "linkedin": "linkedin.com/in/linhnguyen", "portfolio": "linhnguyen.design" },
+    "expectedLinks": {
+      "linkedin": "https://linkedin.com/in/linhnguyen",
+      "portfolio": "https://linhnguyen.design"
+    }
+  },
+  {
+    "id": "particle-surname",
+    "archetype": "Dutch particle surname",
+    "fullName": "Sofia van der Berg",
+    "expectedFirst": "Sofia",
+    "expectedLast": "van der Berg",
+    "email": "s.vandenberg@example.com",
+    "phone": "+31 6 12345678",
+    "address": "Amsterdam, Netherlands",
+    "links": { "linkedin": "https://nl.linkedin.com/in/sofiavandenberg" },
+    "expectedLinks": { "linkedin": "https://nl.linkedin.com/in/sofiavandenberg" }
+  },
+  {
+    "id": "hyphenated-last",
+    "archetype": "hyphenated surname",
+    "fullName": "Raj Gupta-Sharma",
+    "expectedFirst": "Raj",
+    "expectedLast": "Gupta-Sharma",
+    "email": "raj.guptasharma@example.com",
+    "phone": "408.555.0166",
+    "address": "Sunnyvale, CA",
+    "links": { "github": "https://github.com/rajgs", "portfolio": "rajgupta.dev" },
+    "expectedLinks": { "github": "https://github.com/rajgs", "portfolio": "https://rajgupta.dev" }
+  },
+  {
+    "id": "hyphenated-first",
+    "archetype": "hyphenated given name",
+    "fullName": "Anne-Marie Dubois",
+    "expectedFirst": "Anne-Marie",
+    "expectedLast": "Dubois",
+    "email": "am.dubois@example.com",
+    "phone": "+33 6 12 34 56 78",
+    "address": "Paris, France",
+    "links": { "linkedin": "https://fr.linkedin.com/in/amdubois" },
+    "expectedLinks": { "linkedin": "https://fr.linkedin.com/in/amdubois" }
+  },
+  {
+    "id": "suffix",
+    "archetype": "generational suffix",
+    "fullName": "Robert King Jr.",
+    "expectedFirst": "Robert",
+    "expectedLast": "King",
+    "email": "rob.king@example.com",
+    "phone": "(312) 555-0187",
+    "address": "Chicago, IL 60601",
+    "links": { "linkedin": "linkedin.com/in/robertkingjr" },
+    "expectedLinks": { "linkedin": "https://linkedin.com/in/robertkingjr" }
+  },
+  {
+    "id": "intl-phone",
+    "archetype": "international phone + address",
+    "fullName": "Emma Lindqvist",
+    "expectedFirst": "Emma",
+    "expectedLast": "Lindqvist",
+    "email": "emma.lindqvist@example.com",
+    "phone": "+46 70 123 45 67",
+    "address": "Stockholm, Sweden",
+    "links": {
+      "linkedin": "https://se.linkedin.com/in/emmalindqvist",
+      "github": "github.com/elindqvist"
+    },
+    "expectedLinks": {
+      "linkedin": "https://se.linkedin.com/in/emmalindqvist",
+      "github": "https://github.com/elindqvist"
+    }
+  },
+  {
+    "id": "bare-links",
+    "archetype": "all links written without a scheme",
+    "fullName": "Wei Zhang",
+    "expectedFirst": "Wei",
+    "expectedLast": "Zhang",
+    "email": "wei.zhang@example.com",
+    "phone": "(650) 555-0121",
+    "address": "Palo Alto, CA 94301",
+    "links": {
+      "linkedin": "linkedin.com/in/weizhang",
+      "github": "github.com/wzhang",
+      "portfolio": "wei-zhang.dev"
+    },
+    "expectedLinks": {
+      "linkedin": "https://linkedin.com/in/weizhang",
+      "github": "https://github.com/wzhang",
+      "portfolio": "https://wei-zhang.dev"
+    }
+  },
+  {
+    "id": "mononym",
+    "archetype": "single-word professional name",
+    "fullName": "Teagan",
+    "expectedFirst": "Teagan",
+    "expectedLast": "",
+    "email": "teagan@teaganstudio.com",
+    "phone": "(503) 555-0155",
+    "address": "Portland, OR",
+    "links": { "portfolio": "teaganstudio.com" },
+    "expectedLinks": { "portfolio": "https://teaganstudio.com" }
+  },
+  {
+    "id": "accented",
+    "archetype": "accented characters, bare domains",
+    "fullName": "Diego Fernández",
+    "expectedFirst": "Diego",
+    "expectedLast": "Fernández",
+    "email": "diego.fernandez@example.com",
+    "phone": "+34 612 34 56 78",
+    "address": "Madrid, Spain",
+    "links": { "github": "github.com/dfernandez", "portfolio": "diegofernandez.io" },
+    "expectedLinks": {
+      "github": "https://github.com/dfernandez",
+      "portfolio": "https://diegofernandez.io"
+    }
+  }
+]

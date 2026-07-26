@@ -1,0 +1,122 @@
+<!doctype html>
+<!--
+  Workday Skills fixture — real shadow-DOM shape.
+
+  Reproduces the actual Workday "Skills" widget on a real posting: a SAP UI5 web
+  component <ui5-input-xweb-skill-profiler> whose real <input> lives in a
+  SHADOW ROOT, and async suggestions rendered as <ui5-suggestion-item-xweb-
+  skill-profiler> whose clickable text is ALSO in a shadow root. A top-level
+  document.querySelector('[role="option"]') finds nothing here — which is
+  exactly why the naive combobox path fails on real Workday.
+
+  The section is found the way the real code finds it: an <h2> containing
+  "Skills", whose next sibling hosts the widget.
+
+  Taxonomy is closed and imperfect (no "Floating-point arithmetic") to exercise
+  the synonym/candidate fallback path.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Workday Skills — shadow-DOM fixture</title>
+    <style>
+      body { font-family: sans-serif; margin: 40px; }
+      h2 { font-size: 18px; }
+      ui5-input-xweb-skill-profiler { display: block; min-width: 460px; }
+      #chips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { background: #e3ecf7; border-radius: 3px; padding: 2px 8px; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <h2>My Experience</h2>
+    <section id="exp"><p>…work experience…</p></section>
+
+    <h2>Skills</h2>
+    <section id="skills-section">
+      <ui5-input-xweb-skill-profiler id="skill-input-host"></ui5-input-xweb-skill-profiler>
+      <div id="chips" aria-label="Selected skills"></div>
+    </section>
+
+    <script>
+      const TAXONOMY = [
+        "C",
+        "C++",
+        "Linux",
+        "CUDA",
+        "Python",
+        "Rust",
+        "Software Architecture",
+        "GPU Programming",
+      ];
+
+      const selected = new Set();
+      window.__offerosSelectedSkills = () => Array.from(selected);
+      const chips = document.getElementById("chips");
+
+      // ---- <ui5-input-xweb-skill-profiler> : input lives in shadow root ----
+      class SkillInput extends HTMLElement {
+        constructor() {
+          super();
+          const root = this.attachShadow({ mode: "open" });
+          root.innerHTML =
+            '<input type="text" part="input" placeholder="Type to search skills" ' +
+            'style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;font-size:14px" />';
+          this._input = root.querySelector("input");
+          this._renderTimer = null;
+          this._input.addEventListener("input", () => {
+            const q = this._input.value;
+            clearTimeout(this._renderTimer);
+            // async suggestion fetch — items appear ~120ms later
+            this._renderTimer = setTimeout(() => this._renderSuggestions(q), 120);
+          });
+        }
+        _clearSuggestions() {
+          for (const el of Array.from(
+            this.querySelectorAll("ui5-suggestion-item-xweb-skill-profiler"),
+          )) {
+            el.remove();
+          }
+        }
+        _renderSuggestions(query) {
+          this._clearSuggestions();
+          const q = query.trim().toLowerCase();
+          if (!q) return;
+          const matches = TAXONOMY.filter(
+            (t) => t.toLowerCase().includes(q) && !selected.has(t),
+          );
+          for (const label of matches) {
+            const item = document.createElement(
+              "ui5-suggestion-item-xweb-skill-profiler",
+            );
+            item.setAttribute("data-value", label);
+            // clickable text lives in the item's OWN shadow root
+            const r = item.attachShadow({ mode: "open" });
+            r.innerHTML =
+              '<span role="option" style="display:block;padding:6px 10px;cursor:pointer">' +
+              label +
+              "</span>";
+            r.querySelector("span").addEventListener("click", () => this._commit(label));
+            this.appendChild(item);
+          }
+        }
+        _commit(label) {
+          if (selected.has(label)) return;
+          selected.add(label);
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = label;
+          chips.appendChild(chip);
+          const setter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            "value",
+          ).set;
+          setter.call(this._input, "");
+          this._clearSuggestions();
+        }
+      }
+      class SkillSuggestion extends HTMLElement {}
+      customElements.define("ui5-input-xweb-skill-profiler", SkillInput);
+      customElements.define("ui5-suggestion-item-xweb-skill-profiler", SkillSuggestion);
+    </script>
+  </body>
+</html>

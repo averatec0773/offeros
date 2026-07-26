@@ -1,0 +1,18 @@
+{
+  "_persona": "Jordan Rivera (synthetic; no real PII). Captured from the live public Anthropic Greenhouse apply form 2026-07-24.",
+  "first_name": { "label": "First Name*", "expected": "Jordan" },
+  "last_name": { "label": "Last Name*", "expected": "Rivera" },
+  "email": { "label": "Email*", "expected": "jordan.rivera@example.com" },
+  "country": { "label": "Country", "expected": "United States" },
+  "phone": { "label": "Phone", "expected": "+1 555 0100" },
+  "resume": {
+    "label": "Attach",
+    "expected": "",
+    "_note": "file input — must be left unfilled (never auto-fill file inputs)"
+  },
+  "question_14364081008": {
+    "label": "Please note that you will not be considered unless you complete the Constellation application form.*",
+    "expected": "",
+    "_note": "an instruction/note, not an answerable field — engine must not false-fill it"
+  }
+}

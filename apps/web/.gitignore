@@ -1,0 +1,4 @@
+
+# Next.js (apps/web)
+.next/
+next-env.d.ts

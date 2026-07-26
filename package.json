@@ -1,0 +1,31 @@
+{
+  "name": "offeros",
+  "description": "Local-first, open-source AI job-application copilot — web app + companion extension. Review and submit yourself; OfferOS never submits for you.",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @offeros/extension",
+    "dev:web": "npm run dev -w @offeros/web",
+    "build": "npm run build -w @offeros/web",
+    "compile": "npm run compile -w @offeros/extension",
+    "typecheck": "npm run compile -w @offeros/extension && npm run compile -w @offeros/web && npm run typecheck -w @offeros/core",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run && npm run test -w @offeros/extension",
+    "test:ext": "npm run test -w @offeros/extension"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.65.0"
+  }
+}

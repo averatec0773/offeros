@@ -1,0 +1,61 @@
+:root, :host {
+  /* tier 1 — primitives (components never use these directly)
+     The app's light theme. Values are
+     the extension's own primitives; matched to apps/web/src/app/globals.css
+     where a 1:1 semantic role exists, derived where the extension's
+     single-tier model (one --accent/--danger/--warning used for BOTH inline
+     text and solid button fills with reversed text on top) needs a shade
+     that stays AA-compliant in both roles rather than the web's more
+     saturated fill-only brand value. */
+  --c-paper: #f2f4f5;
+  --c-card: #ffffff;
+  --c-card-hover: #f0f2f3;
+  --c-ink: #000000;
+  --c-gray-600: #4b5563;
+  --c-gray-500: #667085;
+  --c-hairline: rgba(0, 0, 0, 0.08);
+
+  /* tier 2 — semantic (the only layer components touch) */
+  --bg-base: var(--c-paper);
+  --bg-elevated: var(--c-card);
+  --bg-elevated-hover: var(--c-card-hover);
+  --border-subtle: var(--c-hairline);
+  --text-primary: var(--c-ink);
+  --text-secondary: var(--c-gray-600);
+  --text-tertiary: var(--c-gray-500);
+  /* Web brand green (#00f0a0) fails AA as text and, on the extension's
+     `bg-accent text-bg-base` button/badge pattern, as a fill under the now
+     light bg-base text — so accent/success use a darker emerald that passes
+     both roles. The one place the literal vivid brand hex belongs
+     (the page-level .offeros-filled outline) is set directly in
+     entrypoints/ats.content.tsx, which cannot read this custom property. */
+  --accent: #047857;
+  --success: #047857;
+  --warning: #b45309;
+  /* darker than the web's --destructive: this token also serves as a solid
+     button fill under text-bg-base, which needs ≥4.5:1 (this passes at ~5.2). */
+  --danger: #c81e1e;
+
+  /* Web-canon role tokens. The side panel adopts the
+     web app's idioms directly — a black primary button, the mint brand accent
+     for done/ready, and the pale-yellow "needs you" card fill. Values are the
+     web's verbatim (apps/web/src/app/globals.css). --brand as *text* fails AA,
+     so it's used only as a small icon/dot fill, never as body text; the darker
+     --accent/--warning above remain the text-role greens/ambers. */
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --brand: #00f0a0;
+  --brand-foreground: #003d29;
+  --warn: #ffd000;
+  --warn-bg: #fceeba;
+
+  /* motion — custom easing curves (the built-in CSS easings are too weak).
+     ease-out for enter/press feedback, spring for the occasional physical
+     surface (launcher/panel/drawer), drawer for slide-overs. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+}

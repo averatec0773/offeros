@@ -1,0 +1,79 @@
+{
+  "ats": "greenhouse",
+  "slug": "anthropic-fellows",
+  "formId": "greenhouse-anthropic-fellows",
+  "url": "https://job-boards.greenhouse.io/anthropic/jobs/5023394008",
+  "capturedAt": "2026-07-24T17:46:28.963Z",
+  "fields": [
+    {
+      "fieldId": "first_name",
+      "label": "First Name*",
+      "name": "",
+      "autocomplete": "given-name",
+      "type": "text",
+      "placeholder": "",
+      "ariaLabel": "First Name",
+      "required": true
+    },
+    {
+      "fieldId": "last_name",
+      "label": "Last Name*",
+      "name": "",
+      "autocomplete": "family-name",
+      "type": "text",
+      "placeholder": "",
+      "ariaLabel": "Last Name",
+      "required": true
+    },
+    {
+      "fieldId": "email",
+      "label": "Email*",
+      "name": "",
+      "autocomplete": "email",
+      "type": "text",
+      "placeholder": "",
+      "ariaLabel": "Email",
+      "required": true
+    },
+    {
+      "fieldId": "country",
+      "label": "Country",
+      "name": "",
+      "autocomplete": "off",
+      "type": "text",
+      "placeholder": "",
+      "ariaLabel": "",
+      "required": false
+    },
+    {
+      "fieldId": "phone",
+      "label": "Phone",
+      "name": "",
+      "autocomplete": "off",
+      "type": "tel",
+      "placeholder": "",
+      "ariaLabel": "Phone",
+      "required": false
+    },
+    {
+      "fieldId": "resume",
+      "label": "Attach",
+      "name": "",
+      "autocomplete": "",
+      "type": "file",
+      "placeholder": "",
+      "ariaLabel": "",
+      "required": false
+    },
+    {
+      "fieldId": "question_14364081008",
+      "label": "Please note that you will not be considered unless you complete the Constellation application form.*",
+      "name": "",
+      "autocomplete": "",
+      "type": "textarea",
+      "placeholder": "",
+      "ariaLabel": "",
+      "required": true
+    }
+  ]
+}

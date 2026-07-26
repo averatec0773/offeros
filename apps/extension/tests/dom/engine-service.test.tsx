@@ -1,0 +1,120 @@
+// @vitest-environment happy-dom
+// @vitest-environment-options { "url": "https://boards.greenhouse.io/acme/jobs/1" }
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  createEngine,
+  registerEngine,
+  type EngineContext,
+} from "../../src/lib/engine/engine-service";
+import type {
+  ScanResponse,
+  FillResponse,
+  CaptureJdResponse,
+} from "../../src/lib/autofill/autofill-messaging";
+
+const greenhouseUrl = "https://boards.greenhouse.io/acme/jobs/1";
+
+// Collect the content-script teardown so listeners don't leak across tests.
+const disposers: (() => void)[] = [];
+const ctx = (): EngineContext => ({ onInvalidated: (cb) => disposers.push(cb) });
+afterEach(() => {
+  for (const d of disposers.splice(0)) d();
+  document.body.innerHTML = "";
+});
+
+const seedForm = () => {
+  history.replaceState(null, "", greenhouseUrl);
+  document.body.innerHTML = `<main><h1>Staff Engineer</h1><form>
+    <label for="e">Email</label><input id="e" name="email" autocomplete="email" type="email" />
+    <label for="n">Full name</label><input id="n" name="name" type="text" />
+  </form></main>`;
+};
+
+describe("engine SCAN handler", () => {
+  it("returns descriptors + meta from a seeded ATS form", async () => {
+    seedForm();
+    registerEngine(document, ctx());
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_SCAN",
+    })) as ScanResponse;
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.atsId).toBe("greenhouse");
+      expect(res.url).toBe(greenhouseUrl);
+      expect(res.title).toBe("Staff Engineer");
+      expect(res.descriptors.map((d) => d.name)).toEqual(["email", "name"]);
+    }
+  });
+
+  it("returns no_form for a supported host with no fields", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    document.body.innerHTML = `<main><h1>Nothing here</h1></main>`;
+    const res = await createEngine(document).scan();
+    expect(res).toEqual({ ok: false, reason: "no_form" });
+  });
+
+  it("returns not_supported for an unsupported url", async () => {
+    // matchAts fails on the URL alone, before the DOM is touched; a stub doc
+    // sidesteps happy-dom's cross-origin replaceState guard.
+    const stub = { location: { href: "https://example.com/careers" } } as unknown as Document;
+    const res = await createEngine(stub).scan();
+    expect(res).toEqual({ ok: false, reason: "not_supported" });
+  });
+});
+
+describe("engine FILL handler", () => {
+  it("writes values and returns JSON-safe outcome entries", async () => {
+    seedForm();
+    registerEngine(document, ctx());
+    const scan = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_SCAN",
+    })) as ScanResponse;
+    expect(scan.ok).toBe(true);
+    if (!scan.ok) return;
+    const emailId = scan.descriptors.find((d) => d.name === "email")!.fieldId;
+
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_FILL",
+      values: [{ fieldId: emailId, value: "a@b.com" }],
+    })) as FillResponse;
+
+    expect(res.filled).toBe(1);
+    expect(Array.isArray(res.outcomes)).toBe(true);
+    expect(res.outcomes).toEqual([[emailId, "filled"]]);
+    expect(document.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe("a@b.com");
+  });
+});
+
+describe("engine teardown", () => {
+  it("stops handling messages after onInvalidated fires", async () => {
+    seedForm();
+    registerEngine(document, ctx());
+    // Tear down (mirrors ctx.onInvalidated on content-script unload).
+    for (const d of disposers.splice(0)) d();
+    // The engine listener is gone: fakeBrowser reports no listeners for the scan.
+    await expect(browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })).rejects.toThrow(
+      /No listeners/,
+    );
+  });
+});
+
+describe("engine CAPTURE_JD handler", () => {
+  it("returns a CaptureJdResponse shape", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    document.body.innerHTML = `<main><h1>Staff Engineer</h1><p>${"We are hiring a staff engineer to build the platform. ".repeat(6)}</p></main>`;
+    registerEngine(document, ctx());
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_CAPTURE_JD",
+    })) as CaptureJdResponse;
+    expect(res.jd).toContain("staff engineer");
+    expect(res.source).toBe("dom");
+    expect(res.title).toBe("Staff Engineer");
+    expect(res.company).toBe("acme");
+    expect(res.url).toBe(greenhouseUrl);
+    expect(res).toHaveProperty("jd");
+    expect(res).toHaveProperty("source");
+    expect(res).toHaveProperty("company");
+    expect(res).toHaveProperty("title");
+    expect(res).toHaveProperty("url");
+  });
+});

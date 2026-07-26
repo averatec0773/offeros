@@ -1,0 +1,7 @@
+node_modules
+.next
+.output
+.wxt
+drizzle
+package-lock.json
+apps/extension

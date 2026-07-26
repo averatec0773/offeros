@@ -1,0 +1,95 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+vendor/
+__pycache__/
+*.pyc
+
+# Build output (WXT + generic)
+.output
+.wxt
+dist/
+build/
+out/
+*.egg-info/
+stats.html
+stats-*.json
+web-ext.config.ts
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Personal (untrack to keep local: git rm --cached TODO.md)
+TODO.md
+.claude/settings.local.json
+
+# AI agent harness (local-only, never published) --------------------
+# These files exist locally to drive AI coding agents but must NEVER be
+# tracked or published. Keep this section in sync with the harness layout.
+AGENTS.md
+CLAUDE.md
+.claude/
+.codex/
+memory/
+loop/
+.superpowers/
+.agents/
+
+# Local test fixtures (real resume, etc.) — never committed
+test-fixtures/
+apps/extension/test-fixtures/
+*.tsbuildinfo
+
+# Raw form captures can contain real PII — never committed. Sanitized fixtures
+# (synthetic persona) live one level up in captured/ and ARE committed.
+**/adaptation/captured/raw/
+
+# Playwright MCP scratch
+.playwright-mcp/
+
+# Internal working notes (local-only; not part of the published repo) ---------
+# Design specs, implementation plans, research notes, conventions, and the
+# running changelog/roadmap are kept local.
+docs/
+conventions/
+CHANGELOG.md
+ROADMAP.md
+
+# Local form-capture tooling + its test (not part of the published repo) ------
+scripts/capture-form.mjs
+scripts/serialize-form.js
+packages/autofill/src/__tests__/capture-form.test.mjs
+
+# Local agent-loop usage probe (references the gitignored loop/ harness) -------
+scripts/check-usage.sh
