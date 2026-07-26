@@ -76,7 +76,6 @@ const RESUME_TWEAK_OUTPUT = {
   changedLines: ["Added a metrics line."],
 };
 
-const RESUME_CONTENT = serializeResume(RESUME_STRUCTURED, buildResumeHeader(profile));
 const RESUME_TWEAK_CONTENT = serializeResume(RESUME_TWEAK_STRUCTURED, buildResumeHeader(profile));
 
 const JD_OUTPUT = {
