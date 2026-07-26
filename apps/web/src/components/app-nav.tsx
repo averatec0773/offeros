@@ -8,7 +8,7 @@ const LINKS = [
   { href: "/", label: "Applications" },
   { href: "/profile", label: "Profile" },
   { href: "/settings/templates", label: "Templates" },
-  { href: "/settings/prompts", label: "Settings" },
+  { href: "/settings/ai", label: "Settings" },
 ];
 
 /** App-wide top nav. Active link is derived from the current path. */
