@@ -281,6 +281,9 @@ export function WorkspaceClient({
   function handleTweakResult(kind: ArtifactKind, result: { diff: LineDiff }) {
     setTweakDiff({ kind, diff: result.diff });
     setTweaking(null);
+    // A successful tweak proves the provider is configured — drop any banner
+    // raised by an earlier failed attempt so it doesn't linger after recovery.
+    setShowConnectBanner(false);
     if (taskId) void syncFull(taskId);
   }
 
@@ -428,7 +431,10 @@ export function WorkspaceClient({
               taskId={taskId}
               kind={tweaking}
               onResult={(result) => handleTweakResult(tweaking, result)}
-              onCancel={() => setTweaking(null)}
+              onCancel={() => {
+                setTweaking(null);
+                setShowConnectBanner(false);
+              }}
               onError={(err) => {
                 if (isLlmNotConfigured(err)) setShowConnectBanner(true);
               }}

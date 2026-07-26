@@ -370,6 +370,79 @@ describe("WorkspaceClient — provider not configured", () => {
   });
 });
 
+describe("WorkspaceClient — tweak banner wiring", () => {
+  const CONFIRM_RESUME_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "confirm-resume");
+
+  it("shows the connect-provider banner on a 42000 tweak failure, then clears it once a retry succeeds", async () => {
+    const task = baseTask({ status: "awaiting_user", step: CONFIRM_RESUME_STEP });
+    vi.mocked(api.agentTasks.tweak)
+      .mockRejectedValueOnce(new ApiError("no key", 42000))
+      .mockResolvedValueOnce({
+        version: { id: "v2", content: "tweaked résumé", rationale: "", createdAt: 2 },
+        diff: [],
+      });
+    vi.mocked(api.agentTasks.get).mockResolvedValue({ task, jdAnalysis: null, artifacts: [] });
+
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={task}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "I Want To Tweak It" }));
+    fireEvent.change(screen.getByPlaceholderText("Tell the agent what to change…"), {
+      target: { value: "Make it punchier" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Tweak" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Connect your AI provider to start/i)).toBeTruthy(),
+    );
+
+    // Retry, this time it succeeds — the banner from the earlier failure must
+    // not linger once the provider is confirmed working.
+    fireEvent.click(screen.getByRole("button", { name: "Apply Tweak" }));
+
+    await waitFor(() => expect(api.agentTasks.tweak).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByText(/Connect your AI provider to start/i)).toBeNull(),
+    );
+  });
+
+  it("clears the banner when the tweak panel is cancelled after a 42000 failure", async () => {
+    const task = baseTask({ status: "awaiting_user", step: CONFIRM_RESUME_STEP });
+    vi.mocked(api.agentTasks.tweak).mockRejectedValue(new ApiError("no key", 42000));
+
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={task}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "I Want To Tweak It" }));
+    fireEvent.change(screen.getByPlaceholderText("Tell the agent what to change…"), {
+      target: { value: "Make it punchier" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Tweak" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Connect your AI provider to start/i)).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByText(/Connect your AI provider to start/i)).toBeNull();
+  });
+});
+
 describe("deriveGate", () => {
   it("returns 'submit' at the submit step when applicationInfo.status is undefined or 1", () => {
     const submitStep = PIPELINE_STEPS.findIndex((s) => s.key === "submit");
