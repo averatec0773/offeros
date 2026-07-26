@@ -86,7 +86,7 @@ export function envApiKeyFor(provider: LlmProvider): string {
     anthropic: process.env.ANTHROPIC_API_KEY,
     openai: process.env.OPENAI_API_KEY,
   };
-  return ENV_KEYS[provider] ?? "";
+  return (ENV_KEYS[provider] ?? "").trim();
 }
 
 /**

@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { profileSchema, type Profile, type Settings } from "@offeros/core";
+import { profileSchema, type Profile } from "@offeros/core";
 import type { ParsedResume } from "@offeros/llm";
 import { OnboardingFlow, mapParsedToProfile } from "../onboarding-flow";
-import { api, ApiError } from "@/lib/api-client";
+import { api, ApiError, type ClientSettings } from "@/lib/api-client";
 import { extractPdfText } from "@offeros/pdf";
 
 vi.mock("@/lib/pdf-worker", () => ({ ensurePdfWorker: vi.fn() }));
@@ -25,7 +25,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
   };
 });
 
-function settings(provider: "anthropic" | "openai" = "anthropic"): Settings {
+function settings(provider: "anthropic" | "openai" = "anthropic"): ClientSettings {
   return {
     agent: {
       enableCustomizeResume: true,
@@ -33,7 +33,7 @@ function settings(provider: "anthropic" | "openai" = "anthropic"): Settings {
       useOriginalResume: false,
       autoConfirm: false,
     },
-    llm: { provider, promptOverrides: {}, modelOverrides: {}, apiKeys: {} },
+    llm: { provider, promptOverrides: {}, modelOverrides: {} },
   };
 }
 

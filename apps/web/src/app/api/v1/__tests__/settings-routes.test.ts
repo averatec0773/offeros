@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { LlmError, type ProviderCallArgs } from "@offeros/llm";
+import { getDb } from "@/server/db/client";
+import { getSettings, saveSettings } from "@/server/repositories/settings-repo";
 
 const dir = mkdtempSync(join(tmpdir(), "offeros-settings-route-"));
 process.env.OFFEROS_DB_PATH = join(dir, "route.db");
@@ -153,10 +155,17 @@ describe("/api/v1/settings/test-llm", () => {
     expect(json.errorMsg).toBe("No API key configured.");
   });
 
-  it("resolves key precedence: body.key, then stored, then env", async () => {
+  it("resolves key precedence: body.key, then stored (trimmed even if stored raw), then env", async () => {
     await clearKey("anthropic");
     vi.stubEnv("ANTHROPIC_API_KEY", "env-anthropic");
-    await llmKeysRoute.PUT(req("PUT", { provider: "anthropic", key: "stored-anthropic" }));
+    // Bypass the (now write-time-trimming) llm-keys PUT to simulate a stored
+    // key that was never trimmed at write time — the read path must still trim.
+    const db = getDb();
+    const current = getSettings(db);
+    saveSettings(db, {
+      ...current,
+      llm: { ...current.llm, apiKeys: { anthropic: "  stored-anthropic\n" } },
+    });
     callProviderMock.mockResolvedValue("OK");
 
     await testLlmRoute.POST(req("POST", { provider: "anthropic", key: "body-anthropic" }));

@@ -47,8 +47,8 @@ describe("apiKeyFor — settings-first key resolution", () => {
     expect(recorded[0]!.key).toBe("saved-key");
   });
 
-  it("falls back to the env var when no saved key is set", async () => {
-    vi.stubEnv("ANTHROPIC_API_KEY", "env-key");
+  it("falls back to the env var when no saved key is set, trimming its surrounding whitespace", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "  env-key\n");
 
     const recorded: ProviderCallArgs[] = [];
     const ctx = makePipelineContext(db, "task-1", { callProvider: fakeCallProvider(recorded) });

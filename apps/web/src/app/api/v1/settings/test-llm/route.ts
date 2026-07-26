@@ -25,7 +25,9 @@ export async function POST(request: Request) {
     const body = bodySchema.parse(await request.json());
     const settings = getSettings(getDb());
     const key =
-      body.key?.trim() || settings.llm.apiKeys[body.provider] || envApiKeyFor(body.provider);
+      body.key?.trim() ||
+      settings.llm.apiKeys[body.provider]?.trim() ||
+      envApiKeyFor(body.provider);
     try {
       await callProvider(body.provider, {
         key,
