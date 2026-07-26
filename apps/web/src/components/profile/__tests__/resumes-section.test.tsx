@@ -150,7 +150,8 @@ describe("ResumesSection", () => {
   });
 
   it("deletes a resume after an inline confirm", async () => {
-    vi.mocked(api.resumes.list).mockResolvedValue([resume]);
+    // Mock initial list and post-delete refetch
+    vi.mocked(api.resumes.list).mockResolvedValueOnce([resume]).mockResolvedValueOnce([]);
     render(<ResumesSection />);
 
     fireEvent.click(await screen.findByLabelText("Delete resume.pdf"));
@@ -158,5 +159,41 @@ describe("ResumesSection", () => {
 
     await waitFor(() => expect(api.resumes.remove).toHaveBeenCalledWith("r1"));
     expect(screen.queryByText("resume.pdf")).toBeNull();
+  });
+
+  it("refetches the resume list after deletion so server-promoted primary shows in the UI", async () => {
+    const primary: ResumeSummary = {
+      id: "r1",
+      name: "primary.pdf",
+      mimeType: "application/pdf",
+      isPrimary: true,
+      createdAt: Date.UTC(2026, 0, 1),
+    };
+    const secondary: ResumeSummary = {
+      id: "r2",
+      name: "secondary.pdf",
+      mimeType: "application/pdf",
+      isPrimary: false,
+      createdAt: Date.UTC(2026, 0, 2),
+    };
+
+    // Initial list has primary and secondary
+    vi.mocked(api.resumes.list).mockResolvedValueOnce([primary, secondary]);
+    render(<ResumesSection />);
+    await screen.findByText("primary.pdf");
+    expect(screen.getByText("Primary")).toBeTruthy();
+
+    // After delete, refetch returns secondary as the new primary
+    vi.mocked(api.resumes.list).mockResolvedValueOnce([{ ...secondary, isPrimary: true }]);
+
+    fireEvent.click(screen.getByLabelText("Delete primary.pdf"));
+    fireEvent.click(screen.getByText("Confirm"));
+
+    // Verify that the refetch happened and the new primary is displayed
+    await waitFor(() => {
+      expect(api.resumes.list).toHaveBeenCalledTimes(2); // initial + refetch after delete
+      expect(screen.getByText("secondary.pdf")).toBeTruthy();
+      expect(screen.getByText("Primary")).toBeTruthy();
+    });
   });
 });

@@ -253,25 +253,28 @@ describe("deleteResume", () => {
     expect(deleteResume(db, "does-not-exist")).toBe(false);
   });
 
-  it("auto-promotes the newest remaining resume when deleting the primary", async () => {
-    // Upload three resumes in sequence; the last one will be newest
+  it("auto-promotes the newest remaining resume when deleting the primary", () => {
+    // Upload three resumes and set explicit createdAt values so ordering is deterministic
     const first = uploadResume(
       db,
       { name: "a.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
       { storageDir },
     );
-    await new Promise((resolve) => setTimeout(resolve, 2));
+    db.update(resumes).set({ createdAt: 1000 }).where(eq(resumes.id, first.id)).run();
+
     const second = uploadResume(
       db,
       { name: "b.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
       { storageDir },
     );
-    await new Promise((resolve) => setTimeout(resolve, 2));
+    db.update(resumes).set({ createdAt: 2000 }).where(eq(resumes.id, second.id)).run();
+
     const third = uploadResume(
       db,
       { name: "c.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
       { storageDir },
     );
+    db.update(resumes).set({ createdAt: 3000 }).where(eq(resumes.id, third.id)).run();
 
     // Make the first one primary
     setPrimaryResume(db, first.id, true);
