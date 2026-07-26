@@ -45,8 +45,9 @@ export async function PUT(request: Request) {
     const db = getDb();
     const settings = getSettings(db);
     const apiKeys = { ...settings.llm.apiKeys };
-    if (body.key === "") delete apiKeys[body.provider];
-    else apiKeys[body.provider] = body.key;
+    const key = body.key.trim();
+    if (key === "") delete apiKeys[body.provider];
+    else apiKeys[body.provider] = key;
     saveSettings(db, { ...settings, llm: { ...settings.llm, apiKeys } });
     return ok(statusRecord(apiKeys));
   });

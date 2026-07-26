@@ -293,6 +293,35 @@ describe("deleteResume", () => {
     expect(all.filter((r) => r.isPrimary)).toHaveLength(1);
   });
 
+  it("breaks a createdAt tie deterministically (desc by id) when promoting", () => {
+    const first = uploadResume(
+      db,
+      { name: "a.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64, isPrimary: true },
+      { storageDir },
+    );
+    const second = uploadResume(
+      db,
+      { name: "b.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+    const third = uploadResume(
+      db,
+      { name: "c.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+    // Give the two candidates for promotion the same createdAt so only the id
+    // tiebreaker can decide between them.
+    db.update(resumes).set({ createdAt: 5000 }).where(eq(resumes.id, second.id)).run();
+    db.update(resumes).set({ createdAt: 5000 }).where(eq(resumes.id, third.id)).run();
+
+    const expectedId = [second.id, third.id].sort().reverse()[0];
+
+    expect(deleteResume(db, first.id)).toBe(true);
+    const all = listResumes(db);
+    expect(all.filter((r) => r.isPrimary)).toHaveLength(1);
+    expect(all.find((r) => r.isPrimary)?.id).toBe(expectedId);
+  });
+
   it("keeps primary unchanged when deleting a non-primary resume", () => {
     const first = uploadResume(
       db,

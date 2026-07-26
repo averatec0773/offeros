@@ -42,7 +42,7 @@ beforeEach(() => {
       useOriginalResume: false,
       autoConfirm: false,
     },
-    llm: { provider: "anthropic", promptOverrides: {}, modelOverrides: {}, apiKeys: {} },
+    llm: { provider: "anthropic", promptOverrides: {}, modelOverrides: {} },
   });
   vi.mocked(api.settings.llmKeys).mockResolvedValue({ anthropic: "env" });
 });

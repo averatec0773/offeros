@@ -107,10 +107,10 @@ export function ResumesSection() {
     setError(null);
     try {
       await api.resumes.remove(id);
+      setConfirmId(null);
       // Refetch the list to ensure any server-side auto-promoted primary shows correctly.
       const updated = await api.resumes.list();
       setResumes(updated);
-      setConfirmId(null);
     } catch {
       setError("Couldn't delete that résumé.");
     }

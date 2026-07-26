@@ -95,7 +95,7 @@ export function envApiKeyFor(provider: LlmProvider): string {
  */
 function apiKeyFor(provider: LlmProvider, settings: Settings): string {
   const saved = settings.llm.apiKeys[provider];
-  if (saved && saved.trim() !== "") return saved;
+  if (saved && saved.trim() !== "") return saved.trim();
   return envApiKeyFor(provider);
 }
 

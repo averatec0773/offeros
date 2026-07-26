@@ -10,6 +10,12 @@ type AgentStep = {
 
 const FILL_STEP_KEY = "fill-form";
 
+const STEP_STATUS_LABEL: Partial<Record<AgentTask["status"], string>> = {
+  queued: "Queued",
+  paused: "Paused",
+  failed: "Failed",
+};
+
 // Derive per-step state from the task. When applicationInfo needs input,
 // the "Fill out application form" step is the current (action-required) step;
 // otherwise the current step is task.step (count of steps completed so far).
@@ -94,7 +100,7 @@ export function StepTimeline({
                   )}
                   {step.state === "current" && !showActionCard && (
                     <span className="shrink-0 text-micro font-semibold text-muted-foreground">
-                      {task.status === "queued" ? "Queued" : "In progress"}
+                      {STEP_STATUS_LABEL[task.status] ?? "In progress"}
                     </span>
                   )}
                   {showActionCard && (

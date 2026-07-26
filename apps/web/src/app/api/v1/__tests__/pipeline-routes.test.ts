@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildResumeHeader, serializeResume, type Profile } from "@offeros/core";
+import { LlmError } from "@offeros/llm";
 
 const dir = mkdtempSync(join(tmpdir(), "offeros-pipeline-api-"));
 process.env.OFFEROS_DB_PATH = join(dir, "pipeline.db");
@@ -226,6 +227,27 @@ describe("/api/v1/agent/tasks/[id] pipeline actions", () => {
     await startRoute.POST(post(), idCtx(taskId));
     const res = await choiceRoute.POST(post({ choice: "maybe" }), idCtx(taskId));
     expect(res.status).toBe(400);
+  });
+
+  it("start surfaces an unconfigured provider key as 400/42000 and persists the task as failed", async () => {
+    const taskId = await createTaskFromJd();
+    __setTestPipelineOverride({
+      runLlm: async () => {
+        throw new LlmError("no_key", "No API key configured.");
+      },
+    });
+    try {
+      const res = await startRoute.POST(post(), idCtx(taskId));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.errorCode).toBe(42000);
+
+      const { getAgentTask } = await import("@/server/repositories/agent-task-repo");
+      const task = getAgentTask(getDb(), taskId);
+      expect(task?.status).toBe("failed");
+    } finally {
+      __setTestPipelineOverride({ runLlm: fakeRunLlm });
+    }
   });
 
   it("keeps the { applicationId } create path working (back-compat)", async () => {

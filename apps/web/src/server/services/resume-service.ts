@@ -144,7 +144,12 @@ export function deleteResume(db: Db, id: string): boolean {
 
   // Auto-promote the newest remaining resume if we deleted the primary.
   if (existing.isPrimary) {
-    const newest = db.select().from(resumes).orderBy(desc(resumes.createdAt)).limit(1).get();
+    const newest = db
+      .select()
+      .from(resumes)
+      .orderBy(desc(resumes.createdAt), desc(resumes.id))
+      .limit(1)
+      .get();
     if (newest) {
       db.update(resumes).set({ isPrimary: true }).where(eq(resumes.id, newest.id)).run();
     }

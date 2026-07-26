@@ -96,6 +96,18 @@ describe("AiSettings", () => {
     expect(screen.queryByRole("option", { name: "Claude Sonnet 5" })).toBeNull();
   });
 
+  it("resets the model draft to Provider default when switching providers", async () => {
+    mockLoad({ ...baseSettings, llm: { ...baseSettings.llm, model: "claude-sonnet-5" } });
+    render(<AiSettings />);
+    await screen.findByLabelText("Anthropic");
+
+    expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("claude-sonnet-5");
+
+    fireEvent.click(screen.getByLabelText("OpenAI"));
+
+    expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("");
+  });
+
   it("saves provider and model through settings.save without any api key in the payload", async () => {
     mockLoad();
     vi.mocked(api.settings.save).mockResolvedValue({

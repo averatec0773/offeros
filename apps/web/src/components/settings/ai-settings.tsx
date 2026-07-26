@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Settings } from "@offeros/core";
 import { modelsFor, type LlmProvider } from "@offeros/llm";
-import { api, ApiError } from "@/lib/api-client";
+import { api, ApiError, type ClientSettings } from "@/lib/api-client";
 
 type KeyStatus = "saved" | "env" | "none";
 
@@ -21,7 +20,7 @@ const STATUS_LABEL: Record<KeyStatus, string> = {
 type TestResult = { ok: true } | { ok: false; message: string };
 
 export function AiSettings() {
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<ClientSettings | null>(null);
   const [keyStatus, setKeyStatus] = useState<Record<string, KeyStatus> | null>(null);
 
   const [providerDraft, setProviderDraft] = useState<LlmProvider>("anthropic");
@@ -70,7 +69,7 @@ export function AiSettings() {
     setSaveError(null);
     setSaved(false);
     try {
-      const next: Settings = {
+      const next: ClientSettings = {
         ...settings,
         llm: {
           ...settings.llm,
@@ -175,7 +174,11 @@ export function AiSettings() {
                 type="radio"
                 name="provider"
                 checked={providerDraft === p.id}
-                onChange={() => setProviderDraft(p.id)}
+                onChange={() => {
+                  setProviderDraft(p.id);
+                  setModelDraft("");
+                  setSaved(false);
+                }}
               />
               {p.label}
             </label>
@@ -189,7 +192,10 @@ export function AiSettings() {
           <select
             id="ai-model"
             value={modelDraft}
-            onChange={(e) => setModelDraft(e.target.value)}
+            onChange={(e) => {
+              setModelDraft(e.target.value);
+              setSaved(false);
+            }}
             className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-body text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="">Provider default</option>
@@ -236,6 +242,7 @@ export function AiSettings() {
             <div className="mt-3 flex items-center gap-2">
               <input
                 type="password"
+                autoComplete="off"
                 aria-label={`${p.label} API key`}
                 placeholder="Paste a new key…"
                 value={keyDrafts[p.id]}

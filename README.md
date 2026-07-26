@@ -33,12 +33,15 @@ npm install
 npm run dev:web     # http://localhost:3000
 ```
 
-Provide your LLM provider key to the web app via `apps/web/.env.local`
-(`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`); pick the provider and tune each AI
-task's model/prompt in **Settings**. Your data is stored locally in SQLite at
-`~/.offeros/offeros.db` (override with `OFFEROS_DB_PATH`); imported résumé files
-live under `~/.offeros/resumes/`. No account, no cloud — everything is on disk on
-your machine, and your key is only ever read server-side.
+On first run, open **Settings → AI** in the web app to pick a provider and paste
+your API key — that's it, no restart and no dotfiles required. If you'd rather
+not paste a key in the UI, `apps/web/.env.local` (`ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY`, see `apps/web/.env.example`) works as an optional fallback.
+Either way, tune each AI task's model/prompt in **Settings**. Your data is
+stored locally in SQLite at `~/.offeros/offeros.db` (override with
+`OFFEROS_DB_PATH`), including any key you save in Settings; imported résumé
+files live under `~/.offeros/resumes/`. No account, no cloud — everything is on
+disk on your machine, and your key is only ever sent to the provider you chose.
 
 ## Features (web app)
 

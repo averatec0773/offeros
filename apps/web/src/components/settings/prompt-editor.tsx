@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Settings } from "@offeros/core";
 import { getTask, modelsFor, type TaskId } from "@offeros/llm";
-import { api } from "@/lib/api-client";
+import { api, type ClientSettings } from "@/lib/api-client";
 
 const TASKS: { id: TaskId; label: string }[] = [
   { id: "resume-tailor", label: "Résumé tailoring" },
@@ -25,7 +24,7 @@ function cleanOverrides(drafts: Record<string, string>): Record<string, string> 
 }
 
 export function PromptEditor() {
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<ClientSettings | null>(null);
   const [promptDrafts, setPromptDrafts] = useState<Record<string, string>>({});
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -49,7 +48,7 @@ export function PromptEditor() {
     setError(null);
     setSaved(false);
     try {
-      const next: Settings = {
+      const next: ClientSettings = {
         ...settings,
         llm: {
           ...settings.llm,

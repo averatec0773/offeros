@@ -37,6 +37,16 @@ export class ApiError extends Error {
 /** Mirrors envelope.ts's `ERROR_CODES.NO_API_KEY` (42000) without importing server code into the client bundle. */
 const NO_API_KEY_CODE = 42000;
 
+/**
+ * `Settings` minus `llm.apiKeys` — the shape the client ever actually sees.
+ * `/settings` (GET/PUT) strips raw keys server-side before responding, so
+ * typing the client surface as `Settings` was a lie the client never reads
+ * true; this type says what's really there instead.
+ */
+export type ClientSettings = Omit<Settings, "llm"> & {
+  llm: Omit<Settings["llm"], "apiKeys">;
+};
+
 /** True only for the "no provider key configured" envelope, never for test-llm's plain 400s. */
 export function isLlmNotConfigured(err: unknown): boolean {
   return err instanceof ApiError && err.code === NO_API_KEY_CODE;
@@ -139,8 +149,8 @@ export const api = {
       request<FitAnalysis>(`/applications/${applicationId}/fit`, json("POST", {})),
   },
   settings: {
-    get: () => request<Settings>("/settings"),
-    save: (settings: Settings) => request<Settings>("/settings", json("PUT", settings)),
+    get: () => request<ClientSettings>("/settings"),
+    save: (settings: ClientSettings) => request<ClientSettings>("/settings", json("PUT", settings)),
     llmKeys: () => request<Record<string, "saved" | "env" | "none">>("/settings/llm-keys"),
     setLlmKey: (provider: string, key: string) =>
       request<Record<string, "saved" | "env" | "none">>(

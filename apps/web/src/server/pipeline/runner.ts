@@ -56,9 +56,21 @@ function load(ctx: PipelineContext): AgentTask {
   return task;
 }
 
-function failed(ctx: PipelineContext, error: unknown): Promise<AgentTask> {
+async function failed(ctx: PipelineContext, error: unknown): Promise<AgentTask> {
   console.error(`[pipeline] task ${ctx.taskId} failed:`, error);
-  return persist(ctx, { status: "failed" });
+  const task = await persist(ctx, { status: "failed" });
+  // A missing provider key is a user-fixable configuration error, not a task
+  // outcome — rethrow it (after persisting `failed`) so it reaches the route's
+  // `handle()` and maps to the 42000 envelope, instead of being swallowed here
+  // as a generic pipeline failure the workspace banner can never see.
+  if (
+    error instanceof Error &&
+    error.name === "LlmError" &&
+    (error as { kind?: string }).kind === "no_key"
+  ) {
+    throw error;
+  }
+  return task;
 }
 
 /**

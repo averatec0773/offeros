@@ -76,6 +76,46 @@ describe("StepTimeline", () => {
     expect(screen.queryByText("In progress")).toBeNull();
   });
 
+  it('shows "Failed" instead of "In progress" for the current step when the task has failed', () => {
+    const task: AgentTask = {
+      id: "t1",
+      applicationId: "app-1",
+      status: "failed",
+      coverLetterRequirement: "unknown",
+      skippedCoverLetter: false,
+      step: 0,
+      fieldReports: [],
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    render(<StepTimeline task={task} />);
+
+    const currentLabel = screen.getByText(PIPELINE_STEPS[0]!.label);
+    const row = currentLabel.closest("li");
+    expect(row?.textContent).toContain("Failed");
+    expect(row?.textContent).not.toContain("In progress");
+  });
+
+  it('shows "Paused" instead of "In progress" for the current step when the task is paused', () => {
+    const task: AgentTask = {
+      id: "t1",
+      applicationId: "app-1",
+      status: "paused",
+      coverLetterRequirement: "unknown",
+      skippedCoverLetter: false,
+      step: 0,
+      fieldReports: [],
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    render(<StepTimeline task={task} />);
+
+    const currentLabel = screen.getByText(PIPELINE_STEPS[0]!.label);
+    const row = currentLabel.closest("li");
+    expect(row?.textContent).toContain("Paused");
+    expect(row?.textContent).not.toContain("In progress");
+  });
+
   it('still shows "In progress" for the current step while the task is running (regression)', () => {
     const task: AgentTask = {
       id: "t1",

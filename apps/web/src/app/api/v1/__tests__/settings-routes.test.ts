@@ -117,6 +117,21 @@ describe("/api/v1/settings/llm-keys", () => {
 
     await clearKey("anthropic");
   });
+
+  it("PUT trims whitespace so a padded key is stored and used identically to its trimmed form", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const set = await (
+      await llmKeysRoute.PUT(req("PUT", { provider: "anthropic", key: "  sk-x\n" }))
+    ).json();
+    expect(set.result.anthropic).toBe("saved");
+
+    callProviderMock.mockResolvedValue("OK");
+    await testLlmRoute.POST(req("POST", { provider: "anthropic" }));
+    const args = callProviderMock.mock.calls[0]![1] as ProviderCallArgs;
+    expect(args.key).toBe("sk-x");
+
+    await clearKey("anthropic");
+  });
 });
 
 describe("/api/v1/settings/test-llm", () => {
@@ -160,5 +175,30 @@ describe("/api/v1/settings/test-llm", () => {
     expect((callProviderMock.mock.calls[0]![1] as ProviderCallArgs).key).toBe("env-anthropic");
 
     await clearKey("anthropic");
+  });
+
+  it("trims a whitespace-padded body.key before falling back to it", async () => {
+    await clearKey("anthropic");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    callProviderMock.mockResolvedValue("OK");
+
+    await testLlmRoute.POST(req("POST", { provider: "anthropic", key: "  sk-body  " }));
+    expect((callProviderMock.mock.calls[0]![1] as ProviderCallArgs).key).toBe("sk-body");
+  });
+
+  it("resolves the model through resolveModel, so a cross-provider model becomes undefined", async () => {
+    callProviderMock.mockResolvedValue("OK");
+    await testLlmRoute.POST(req("POST", { provider: "anthropic", model: "gpt-4o", key: "k" }));
+    const args = callProviderMock.mock.calls[0]![1] as ProviderCallArgs;
+    expect(args.model).toBeUndefined();
+  });
+
+  it("passes through a model that belongs to the given provider", async () => {
+    callProviderMock.mockResolvedValue("OK");
+    await testLlmRoute.POST(
+      req("POST", { provider: "anthropic", model: "claude-sonnet-5", key: "k" }),
+    );
+    const args = callProviderMock.mock.calls[0]![1] as ProviderCallArgs;
+    expect(args.model).toBe("claude-sonnet-5");
   });
 });

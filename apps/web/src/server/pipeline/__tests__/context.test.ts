@@ -72,6 +72,20 @@ describe("apiKeyFor — settings-first key resolution", () => {
     expect(recorded[0]!.key).toBe("env-key");
   });
 
+  it("trims surrounding whitespace off a saved key before using it", async () => {
+    const current = getSettings(db);
+    saveSettings(db, {
+      ...current,
+      llm: { ...current.llm, apiKeys: { anthropic: "  saved-key\n" } },
+    });
+
+    const recorded: ProviderCallArgs[] = [];
+    const ctx = makePipelineContext(db, "task-1", { callProvider: fakeCallProvider(recorded) });
+    await ctx.runLlm("cover-letter", INPUT);
+
+    expect(recorded[0]!.key).toBe("saved-key");
+  });
+
   it("resolves to an empty string when neither settings nor env has a key", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
 

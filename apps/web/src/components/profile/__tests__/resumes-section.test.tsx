@@ -161,6 +161,20 @@ describe("ResumesSection", () => {
     expect(screen.queryByText("resume.pdf")).toBeNull();
   });
 
+  it("closes the confirm row even when the post-delete refetch fails", async () => {
+    vi.mocked(api.resumes.list)
+      .mockResolvedValueOnce([resume])
+      .mockRejectedValueOnce(new Error("network down"));
+    render(<ResumesSection />);
+    await screen.findByText("resume.pdf");
+
+    fireEvent.click(screen.getByLabelText("Delete resume.pdf"));
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(api.resumes.remove).toHaveBeenCalledWith("r1"));
+    await waitFor(() => expect(screen.queryByText("Delete?")).toBeNull());
+  });
+
   it("refetches the resume list after deletion so server-promoted primary shows in the UI", async () => {
     const primary: ResumeSummary = {
       id: "r1",
