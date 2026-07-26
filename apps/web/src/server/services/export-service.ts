@@ -1,17 +1,19 @@
 import { randomUUID } from "node:crypto";
-import type { Artifact, ArtifactKind, Template } from "@offeros/core";
+import type { Artifact, ArtifactKind, ArtifactVersion, Template } from "@offeros/core";
 import type { Db } from "../db/client";
 import { getAgentTask } from "../repositories/agent-task-repo";
 import { getApplication } from "../repositories/application-repo";
 import { getArtifact } from "../repositories/artifact-repo";
+import { getProfile } from "../repositories/profile-repo";
 import { getDefaultTemplate, getTemplate } from "../repositories/template-repo";
 import { hasPdflatex } from "../export/latex-renderer";
 import { RENDERERS, type RenderInput, type RenderResult } from "../export/renderers";
+import { buildResumeHeader } from "../pipeline/steps/grounding";
 
-/** Content of an artifact's current version, or null when the artifact is absent. */
-function currentVersionContent(artifact: Artifact | null): string | null {
+/** An artifact's current version, or null when the artifact is absent. */
+function currentVersion(artifact: Artifact | null): ArtifactVersion | null {
   if (!artifact) return null;
-  return artifact.versions.find((v) => v.id === artifact.currentVersionId)?.content ?? null;
+  return artifact.versions.find((v) => v.id === artifact.currentVersionId) ?? null;
 }
 
 const TITLES: Record<ArtifactKind, string> = {
@@ -36,31 +38,40 @@ const NO_PDFLATEX_NOTE =
  * A `latex` renderer with pdflatex absent returns `{ ok: false }` with a clear
  * note rather than silently degrading; the built-in renderer is always
  * available. (Export's cover-letter path chooses to degrade to the built-in
- * renderer itself, before calling here — see below.)
+ * renderer itself, before calling here — see below.) `resume` is a third,
+ * template-free renderer driven by a structured payload instead of `template`.
  */
 async function renderWith(
   renderer: string,
   template: Template | undefined,
   body: string,
   meta: RenderInput["meta"],
+  resume?: RenderInput["resume"],
 ): Promise<RenderResult> {
   if (renderer === "latex") {
     if (!hasPdflatex()) return { ok: false, error: NO_PDFLATEX_NOTE };
     return RENDERERS.latex({ body, meta, template });
+  }
+  if (renderer === "resume") {
+    return RENDERERS.resume({ body, meta, resume });
   }
   return RENDERERS.builtin({ body, meta, template });
 }
 
 /**
  * Render a task's artifact (`resume` | `cover-letter`) to PDF, choosing the
- * renderer by kind and available template:
+ * renderer by kind and available template/data:
  *
  *  - **cover-letter** with a default `latex` template and pdflatex present →
  *    the latex renderer (template markers + `injectBody`). No latex template OR
  *    pdflatex absent → builtin fallback, flagged via `result.note`. A latex
  *    compile error is returned as-is (with `logExcerpt`), NOT silently fallen
  *    back — the user should see and fix it.
- *  - **resume** → always the builtin renderer.
+ *  - **resume** with a structured current version (`resumeData` present) AND a
+ *    saved profile → the résumé renderer, fed `resumeData` + the profile's
+ *    contact header (`buildResumeHeader`). Either one missing (an artifact
+ *    version from before Task 5, or no profile saved yet) → the builtin text
+ *    render, unchanged from before this renderer existed.
  *
  * Returns `{ ok: false }` when the artifact has no current-version content; the
  * route is responsible for turning missing task/artifact into a 404.
@@ -70,10 +81,11 @@ export async function exportArtifactPdf(
   taskId: string,
   kind: ArtifactKind,
 ): Promise<RenderResult> {
-  const body = currentVersionContent(getArtifact(db, taskId, kind));
-  if (body == null) {
+  const version = currentVersion(getArtifact(db, taskId, kind));
+  if (version == null) {
     return { ok: false, error: `no ${kind} artifact to export for task ${taskId}` };
   }
+  const body = version.content;
 
   const task = getAgentTask(db, taskId);
   const job = task ? getApplication(db, task.applicationId)?.jobInfo : undefined;
@@ -92,6 +104,14 @@ export async function exportArtifactPdf(
     // (flagged), rather than failing the export.
     const result = await renderWith("builtin", template, body, meta);
     return result.ok ? { ...result, note: FALLBACK_NOTE } : result;
+  }
+
+  if (version.resumeData) {
+    const profile = getProfile(db);
+    if (profile) {
+      const header = buildResumeHeader(profile);
+      return renderWith("resume", undefined, body, meta, { data: version.resumeData, header });
+    }
   }
 
   return renderWith("builtin", undefined, body, meta);

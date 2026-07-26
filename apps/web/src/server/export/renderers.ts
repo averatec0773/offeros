@@ -1,6 +1,7 @@
-import type { Template } from "@offeros/core";
+import type { ResumeHeader, StructuredResume, Template } from "@offeros/core";
 import { renderBuiltin } from "./builtin-renderer";
 import { renderLatex } from "./latex-renderer";
+import { renderResume } from "./resume-renderer";
 
 /** Everything a renderer needs to produce a PDF from an artifact's text. */
 export type RenderInput = {
@@ -9,6 +10,9 @@ export type RenderInput = {
   meta: { title: string; jobTitle?: string; company?: string };
   /** Present for template-driven renderers (latex); absent for the builtin. */
   template?: Template;
+  /** Present only for the `resume` renderer: the structured résumé + the
+   *  contact header derived from the profile. */
+  resume?: { data: StructuredResume; header: ResumeHeader };
 };
 
 /**
@@ -25,7 +29,12 @@ export type Renderer = (input: RenderInput) => Promise<RenderResult>;
  * The build-for-change seam. `exportArtifactPdf` picks an entry by template /
  * kind rules; supporting a new output format is adding a key here, nothing more.
  */
-export const RENDERERS: Record<string, Renderer> & { latex: Renderer; builtin: Renderer } = {
+export const RENDERERS: Record<string, Renderer> & {
+  latex: Renderer;
+  builtin: Renderer;
+  resume: Renderer;
+} = {
   latex: (input) => renderLatex(input),
   builtin: (input) => renderBuiltin(input),
+  resume: (input) => renderResume(input),
 };
