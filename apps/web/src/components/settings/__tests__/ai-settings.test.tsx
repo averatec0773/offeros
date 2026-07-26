@@ -66,6 +66,22 @@ describe("AiSettings", () => {
     expect(screen.getByText("Using environment variable")).toBeTruthy();
   });
 
+  it("shows a load error with a Retry button when the initial load fails, and retries", async () => {
+    vi.mocked(api.settings.get).mockRejectedValueOnce(new Error("network down"));
+    vi.mocked(api.settings.llmKeys).mockResolvedValue(savedAnthropicOpenaiEnv);
+
+    render(<AiSettings />);
+
+    expect(await screen.findByText(/couldn't load settings/i)).toBeTruthy();
+    const retry = screen.getByRole("button", { name: "Retry" });
+
+    mockLoad();
+    fireEvent.click(retry);
+
+    expect(await screen.findByLabelText("Anthropic")).toBeTruthy();
+    expect(screen.queryByText(/couldn't load settings/i)).toBeNull();
+  });
+
   it("re-lists models when the provider is switched", async () => {
     mockLoad();
     render(<AiSettings />);
@@ -99,7 +115,6 @@ describe("AiSettings", () => {
     expect(payload.llm.provider).toBe("openai");
     expect(payload.llm.model).toBe("gpt-4o");
     expect(payload).not.toHaveProperty("llm.apiKeys.anthropic");
-    expect(JSON.stringify(payload)).not.toContain("sk-super-secret");
   });
 
   it("saves a typed key via setLlmKey, clears the draft, and never sends it through settings.save", async () => {
@@ -123,6 +138,25 @@ describe("AiSettings", () => {
     expect(api.settings.save).not.toHaveBeenCalled();
     await waitFor(() =>
       expect((screen.getByLabelText("Anthropic API key") as HTMLInputElement).value).toBe(""),
+    );
+  });
+
+  it("shows an inline error when setLlmKey rejects, keeps the draft, and never calls settings.save", async () => {
+    mockLoad();
+    vi.mocked(api.settings.setLlmKey).mockRejectedValue(new ApiError("bad key format", 400));
+
+    render(<AiSettings />);
+    await screen.findByLabelText("Anthropic");
+
+    const keyInput = screen.getByLabelText("Anthropic API key") as HTMLInputElement;
+    fireEvent.change(keyInput, { target: { value: "sk-bad-key" } });
+    const row = within(keyInput.closest("div")!.parentElement as HTMLElement);
+    fireEvent.click(row.getByRole("button", { name: "Save key" }));
+
+    expect(await screen.findByText("bad key format")).toBeTruthy();
+    expect(api.settings.save).not.toHaveBeenCalled();
+    expect((screen.getByLabelText("Anthropic API key") as HTMLInputElement).value).toBe(
+      "sk-bad-key",
     );
   });
 

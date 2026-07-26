@@ -30,6 +30,8 @@ export function AiSettings() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [keyDrafts, setKeyDrafts] = useState<Record<LlmProvider, string>>({
     anthropic: "",
     openai: "",
@@ -38,11 +40,16 @@ export function AiSettings() {
     anthropic: false,
     openai: false,
   });
+  const [keyErrors, setKeyErrors] = useState<Record<LlmProvider, string | null>>({
+    anthropic: null,
+    openai: null,
+  });
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
-  useEffect(() => {
+  function load() {
+    setLoadError(null);
     Promise.all([api.settings.get(), api.settings.llmKeys()])
       .then(([s, keys]) => {
         setSettings(s);
@@ -50,7 +57,11 @@ export function AiSettings() {
         setModelDraft(s.llm.model ?? "");
         setKeyStatus(keys);
       })
-      .catch(() => setSaveError("Couldn't load settings."));
+      .catch(() => setLoadError("Couldn't load settings."));
+  }
+
+  useEffect(() => {
+    load();
   }, []);
 
   async function saveProviderModel() {
@@ -81,10 +92,14 @@ export function AiSettings() {
 
   async function saveKey(provider: LlmProvider) {
     setKeyBusy((b) => ({ ...b, [provider]: true }));
+    setKeyErrors((e) => ({ ...e, [provider]: null }));
     try {
       const status = await api.settings.setLlmKey(provider, keyDrafts[provider]);
       setKeyStatus(status);
       setKeyDrafts((d) => ({ ...d, [provider]: "" }));
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Couldn't save the key. Try again.";
+      setKeyErrors((e) => ({ ...e, [provider]: message }));
     } finally {
       setKeyBusy((b) => ({ ...b, [provider]: false }));
     }
@@ -92,10 +107,14 @@ export function AiSettings() {
 
   async function clearKey(provider: LlmProvider) {
     setKeyBusy((b) => ({ ...b, [provider]: true }));
+    setKeyErrors((e) => ({ ...e, [provider]: null }));
     try {
       const status = await api.settings.setLlmKey(provider, "");
       setKeyStatus(status);
       setKeyDrafts((d) => ({ ...d, [provider]: "" }));
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Couldn't clear the key. Try again.";
+      setKeyErrors((e) => ({ ...e, [provider]: message }));
     } finally {
       setKeyBusy((b) => ({ ...b, [provider]: false }));
     }
@@ -121,6 +140,20 @@ export function AiSettings() {
   }
 
   if (!settings || !keyStatus) {
+    if (loadError) {
+      return (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-caption text-destructive">{loadError}</p>
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex items-center rounded-full bg-muted px-3 py-1.5 text-caption font-medium text-muted-foreground transition-colors hover:bg-secondary"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
     return <p className="text-body text-muted-foreground">Loading…</p>;
   }
 
@@ -141,7 +174,6 @@ export function AiSettings() {
                 id={`provider-${p.id}`}
                 type="radio"
                 name="provider"
-                aria-label={p.label}
                 checked={providerDraft === p.id}
                 onChange={() => setProviderDraft(p.id)}
               />
@@ -156,7 +188,6 @@ export function AiSettings() {
           </label>
           <select
             id="ai-model"
-            aria-label="Model"
             value={modelDraft}
             onChange={(e) => setModelDraft(e.target.value)}
             className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-body text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -230,6 +261,9 @@ export function AiSettings() {
                 </button>
               )}
             </div>
+            {keyErrors[p.id] && (
+              <p className="mt-2 text-caption text-destructive">{keyErrors[p.id]}</p>
+            )}
           </div>
         );
       })}
