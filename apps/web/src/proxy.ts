@@ -27,6 +27,8 @@ export function proxy(request: NextRequest) {
   return NextResponse.json(FORBIDDEN, { status: 403 });
 }
 
+export default proxy;
+
 export const config = {
   // Everything except static assets and the favicon: page routes are
   // force-dynamic server components that serialize DB data into the

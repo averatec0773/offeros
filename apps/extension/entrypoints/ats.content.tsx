@@ -3,14 +3,14 @@ import { registerEngine } from "../src/lib/engine/engine-service";
 
 export default defineContentScript({
   matches: [
-    "*://*.greenhouse.io/*",
-    "*://boards.greenhouse.io/*",
-    "*://job-boards.greenhouse.io/*",
-    "*://jobs.lever.co/*",
-    "*://jobs.eu.lever.co/*",
-    "*://*.ashbyhq.com/*",
-    "*://*.icims.com/*",
-    "*://*.myworkdayjobs.com/*",
+    "https://*.greenhouse.io/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://jobs.eu.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.icims.com/*",
+    "https://*.myworkdayjobs.com/*",
   ],
   async main(ctx) {
     if (!matchAts(location.href)) return;

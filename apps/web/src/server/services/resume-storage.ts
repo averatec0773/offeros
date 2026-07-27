@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -24,7 +24,16 @@ export function writeResumeFile(
   mimeType: string,
   data: Buffer,
 ): string {
-  mkdirSync(storageDir, { recursive: true });
+  mkdirSync(storageDir, { recursive: true, mode: 0o700 });
+  // mkdirSync's `mode` only applies when the directory is newly created, so a
+  // pre-existing dir (from before this tightening, or on a filesystem that
+  // ignores mkdir modes) needs an explicit chmod too. Best-effort: exotic
+  // filesystems degrade silently rather than block a résumé upload.
+  try {
+    chmodSync(storageDir, 0o700);
+  } catch {
+    // best-effort; unsupported on this filesystem/platform
+  }
   const filePath = join(storageDir, `${sanitizeFilename(id)}${extensionForMimeType(mimeType)}`);
   writeFileSync(filePath, data);
   return filePath;

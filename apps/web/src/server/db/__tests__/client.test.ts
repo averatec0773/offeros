@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createDb } from "../client";
 import { applications } from "../schema";
 
@@ -35,4 +35,18 @@ describe("createDb", () => {
     expect(rows[0]?.jobInfo.companyName).toBe("Evolver");
     expect(rows[0]?.status).toBe("saved");
   });
+
+  // Single-user, local-first: the DB directory and file hold résumé/answer
+  // data and should not be group/world-readable. POSIX modes only.
+  it.skipIf(process.platform === "win32")(
+    "locks the DB dir to 0700 and the DB file to 0600",
+    () => {
+      const base = dirname(tempDbPath());
+      const dbPath = join(base, "nested", "offeros.db"); // nested: doesn't exist yet, exercises mkdirSync's mode
+      createDb(dbPath);
+
+      expect(statSync(dirname(dbPath)).mode & 0o777).toBe(0o700);
+      expect(statSync(dbPath).mode & 0o777).toBe(0o600);
+    },
+  );
 });

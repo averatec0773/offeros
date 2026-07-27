@@ -97,13 +97,13 @@ function skillsHost(fieldId: string): Element | null {
 
 export default defineContentScript({
   matches: [
-    "*://*.greenhouse.io/*",
-    "*://boards.greenhouse.io/*",
-    "*://job-boards.greenhouse.io/*",
-    "*://jobs.lever.co/*",
-    "*://jobs.eu.lever.co/*",
-    "*://*.ashbyhq.com/*",
-    "*://*.myworkdayjobs.com/*",
+    "https://*.greenhouse.io/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://jobs.eu.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.myworkdayjobs.com/*",
   ],
   world: "MAIN",
   main() {

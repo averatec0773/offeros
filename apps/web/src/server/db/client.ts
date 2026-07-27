@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { schema } from "./schema";
@@ -76,13 +76,29 @@ export function defaultTemplatesDir(): string {
   return join(dirname(defaultDbPath()), "templates");
 }
 
+/** Best-effort tighten to owner-only. This is a single-user, local-first app;
+ *  the DB and its directory hold the user's résumé, answers, and job data, so
+ *  they should not be group/world-readable. Exotic filesystems (some network
+ *  mounts, Windows) may not support POSIX modes — degrade silently rather
+ *  than block startup. */
+function tightenPerms(path: string, mode: number): void {
+  try {
+    chmodSync(path, mode);
+  } catch {
+    // best-effort; unsupported on this filesystem/platform
+  }
+}
+
 /** Open a database at an explicit path, applying the schema. Used by tests. */
 export function createDb(path: string): Db {
-  mkdirSync(dirname(path), { recursive: true });
+  const dir = dirname(path);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const sqlite = new Database(path);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   sqlite.exec(DDL);
+  tightenPerms(dir, 0o700);
+  tightenPerms(path, 0o600);
   addColumnIfMissing(
     sqlite,
     "agent_tasks",
