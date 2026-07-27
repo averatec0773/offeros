@@ -251,11 +251,20 @@ export function resolveFill(
     throw new ServiceError("task has no outstanding fields to resolve");
   }
   closeOpenHandoffsForTask(db, taskId);
-  const resolvedReports: FieldReport[] = (task.fieldReports ?? []).map((r) =>
-    r.outcome !== "filled" && (r.outcome === "needs-user" || r.required)
-      ? { ...r, outcome: "filled" }
-      : r,
-  );
+  const resolvedReports: FieldReport[] = (task.fieldReports ?? []).map((r) => {
+    if (r.outcome === "filled") return r;
+    // needs-user rows never carried a real attempt — the user filled the
+    // field on the page themselves, so the pre-write classification
+    // source/value would be false provenance (fill-report-card.tsx renders
+    // "Label — source: value"). Clear both; source "none" tells the card to
+    // render just the label.
+    if (r.outcome === "needs-user")
+      return { ...r, outcome: "filled", value: undefined, source: "none" };
+    // Required-but-failed rows carry a real attempted value/source — keep it,
+    // it's approximately accurate.
+    if (r.required) return { ...r, outcome: "filled" };
+    return r;
+  });
   const applicationInfo = deriveApplicationInfo(resolvedReports) ?? {
     status: 1 as const,
     filledFields: [],

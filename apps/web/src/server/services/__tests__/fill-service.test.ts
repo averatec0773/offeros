@@ -284,6 +284,43 @@ describe("resolveFill", () => {
     expect(task.fieldReports.every((r) => r.outcome === "filled")).toBe(true);
   });
 
+  it("'fixed' clears source/value on former needs-user rows but keeps them on a former required-failed row", () => {
+    const { taskId } = seedTaskAtFillForm();
+    applyFillReport(
+      db,
+      taskId,
+      [
+        report({ fieldId: "email", outcome: "filled", required: true }),
+        report({
+          fieldId: "eeo",
+          outcome: "needs-user",
+          required: true,
+          source: "ai-generated",
+          value: "guessed value",
+        }),
+        report({
+          fieldId: "visa",
+          outcome: "failed",
+          required: true,
+          source: "answer-bank",
+          value: "attempted value",
+        }),
+      ],
+      true,
+    );
+    const task = resolveFill(db, taskId, "fixed");
+
+    const eeo = task.fieldReports.find((r) => r.fieldId === "eeo");
+    expect(eeo?.outcome).toBe("filled");
+    expect(eeo?.source).toBe("none");
+    expect(eeo?.value).toBeUndefined();
+
+    const visa = task.fieldReports.find((r) => r.fieldId === "visa");
+    expect(visa?.outcome).toBe("filled");
+    expect(visa?.source).toBe("answer-bank");
+    expect(visa?.value).toBe("attempted value");
+  });
+
   it("'fixed' leaves a non-required, non-blocking outcome untouched", () => {
     const { taskId } = seedTaskAtFillForm();
     applyFillReport(

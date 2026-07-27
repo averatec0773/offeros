@@ -26,11 +26,15 @@ export function FillReportCard({ reports }: { reports: FieldReport[] }) {
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand" />
                 <span>
                   <span className="font-medium">{r.label}</span>
-                  <span className="text-muted-foreground">
-                    {" "}
-                    — {r.source}
-                    {r.value ? `: ${r.value}` : ""}
-                  </span>
+                  {r.source === "none" ? (
+                    r.value && <span className="text-muted-foreground">: {r.value}</span>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      — {r.source}
+                      {r.value ? `: ${r.value}` : ""}
+                    </span>
+                  )}
                 </span>
               </li>
             ))}
