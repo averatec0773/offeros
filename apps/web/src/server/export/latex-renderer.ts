@@ -155,7 +155,10 @@ function stageAssets(assetsDir: string, destDir: string): void {
 }
 
 /** pdflatex compiles user-supplied input, so it gets the bare minimum it needs
- *  to run — never the parent environment, which holds provider API keys. */
+ *  to run — never the parent environment, which holds provider API keys.
+ *  `openin_any: "p"` (paranoid) additionally confines pdflatex's own file
+ *  reads to the cwd/output tree, so a hostile `.tex` (`\input{/etc/passwd}`
+ *  and the like) can't read arbitrary files off the local machine. */
 function childEnv(texmfVar: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     // NODE_ENV is carried only because Next's ProcessEnv augmentation requires
@@ -164,6 +167,7 @@ function childEnv(texmfVar: string): NodeJS.ProcessEnv {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
     TEXMFVAR: texmfVar,
+    openin_any: "p",
   };
   if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
   return env;
@@ -171,6 +175,7 @@ function childEnv(texmfVar: string): NodeJS.ProcessEnv {
 
 function runPdflatex(spawn: SpawnFn, dir: string, texmfVar: string): Promise<number> {
   const args = [
+    "-no-shell-escape",
     "-interaction=nonstopmode",
     "-halt-on-error",
     `-output-directory=${dir}`,

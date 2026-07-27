@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import type { Template } from "@offeros/core";
 import { BODY_START, BODY_END } from "@offeros/core";
 import { escapeLatex, hasPdflatex, renderLatex, type SpawnFn } from "../latex-renderer";
@@ -48,15 +48,16 @@ const input = (content: string): RenderInput => ({
 function stubSpawn(opts: {
   exitCode: number;
   onSpawn?: (outputDir: string) => void;
-  capture?: { args?: readonly string[]; dir?: string };
+  capture?: { args?: readonly string[]; dir?: string; env?: NodeJS.ProcessEnv };
 }): SpawnFn {
-  return (_command, args) => {
+  return (_command, args, options) => {
     const child = new EventEmitter() as unknown as ReturnType<SpawnFn>;
     const dirArg = args.find((a) => a.startsWith("-output-directory="));
     const dir = dirArg ? dirArg.slice("-output-directory=".length) : "";
     if (opts.capture) {
       opts.capture.args = args;
       opts.capture.dir = dir;
+      opts.capture.env = options.env;
     }
     opts.onSpawn?.(dir);
     // Fire asynchronously so the caller's promise handlers are attached first.
@@ -81,6 +82,7 @@ describe("renderLatex (spawn stubbed)", () => {
       expect(result.ok).toBe(true);
       expect(capture.args).toContain("-interaction=nonstopmode");
       expect(capture.args).toContain("-halt-on-error");
+      expect(capture.args).toContain("-no-shell-escape");
       expect(capture.args).toContain(`-output-directory=${capture.dir}`);
       expect(capture.args?.[capture.args.length - 1]).toBe("letter.tex");
       // injectBody replaced the region; scaffold lines preserved.
@@ -88,6 +90,25 @@ describe("renderLatex (spawn stubbed)", () => {
       expect(writtenTex).toContain("Dear Team,");
       expect(writtenTex).not.toContain("OLD BODY");
     });
+  });
+
+  it("spawns pdflatex with a paranoid file-open env and never leaks provider API keys", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-leak");
+    vi.stubEnv("OPENAI_API_KEY", "sk-openai-leak");
+    try {
+      const capture: { env?: NodeJS.ProcessEnv } = {};
+      const spawn = stubSpawn({
+        exitCode: 0,
+        capture,
+        onSpawn: (dir) => writeFileSync(join(dir, "letter.pdf"), "%PDF-1.4 stub\n"),
+      });
+      await renderLatex(input(WITH_MARKERS), { spawn, templatesDir: scratch });
+      expect(capture.env?.openin_any).toBe("p");
+      expect(capture.env?.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(capture.env?.OPENAI_API_KEY).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("writes LaTeX-escaped body content into the .tex", async () => {

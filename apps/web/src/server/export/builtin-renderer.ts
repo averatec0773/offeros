@@ -85,6 +85,13 @@ ${bodyHtml}
  */
 export function buildHtml(input: RenderInput): string {
   if (input.template?.renderer === "builtin") {
+    // The user's own local template is injected into the document unsanitized
+    // BY DESIGN — same trust model as the .tex path in `latex-renderer.ts`
+    // (the user authored this file, or chose to trust whoever gave it to
+    // them). The resulting HTML is rendered in a keyless, network-capable but
+    // env-minimal headless Chromium (`chromiumLaunchOptions` in
+    // `./chromium-pdf`) on the user's own machine, not a shared server — see
+    // SECURITY.md's accepted risks.
     const injected = injectBody(input.template.content, renderBody(input.body));
     return documentShell(input.meta.title, injected);
   }
