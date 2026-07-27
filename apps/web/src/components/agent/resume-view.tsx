@@ -1,4 +1,4 @@
-import type { ArtifactVersion, StructuredResume } from "@offeros/core";
+import { isBlankEducation, isBlankExperience, type ArtifactVersion } from "@offeros/core";
 
 /** The serialized `content`'s header block: the lines before the first blank
  *  line. `resumeData` deliberately carries no header (name/contact info come
@@ -12,27 +12,6 @@ function headerLines(content: string): string[] {
   const blankAt = content.indexOf("\n\n");
   const block = blankAt === -1 ? content : content.slice(0, blankAt);
   return block.split("\n");
-}
-
-/** True when every field of an experience entry (including bullets) is blank after trim. */
-function isBlankExperience(exp: StructuredResume["experience"][number]): boolean {
-  return (
-    !exp.company.trim() &&
-    !exp.title.trim() &&
-    !exp.dates.trim() &&
-    exp.bullets.every((b) => !b.trim())
-  );
-}
-
-/** True when every field of an education entry is blank after trim. */
-function isBlankEducation(edu: StructuredResume["education"][number]): boolean {
-  return (
-    !edu.school.trim() &&
-    !edu.degree.trim() &&
-    !edu.field.trim() &&
-    !edu.dates.trim() &&
-    !edu.details.trim()
-  );
 }
 
 /** Structured résumé view for a `resume` artifact version that has

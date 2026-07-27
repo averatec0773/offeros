@@ -1,4 +1,9 @@
-import type { ResumeHeader, StructuredResume } from "@offeros/core";
+import {
+  isBlankEducation,
+  isBlankExperience,
+  type ResumeHeader,
+  type StructuredResume,
+} from "@offeros/core";
 import { escapeHtml, renderHtmlToPdf } from "./chromium-pdf";
 import type { RenderInput, RenderResult } from "./renderers";
 
@@ -28,27 +33,6 @@ function buildContactLine(header: ResumeHeader): string {
     (v): v is string => Boolean(v && v.trim() !== ""),
   );
   return parts.map(escapeHtml).join(" &middot; ");
-}
-
-/** True when every field of an experience entry (including bullets) is blank after trim. */
-function isBlankExperience(exp: StructuredResume["experience"][number]): boolean {
-  return (
-    !exp.company.trim() &&
-    !exp.title.trim() &&
-    !exp.dates.trim() &&
-    exp.bullets.every((b) => !b.trim())
-  );
-}
-
-/** True when every field of an education entry is blank after trim. */
-function isBlankEducation(edu: StructuredResume["education"][number]): boolean {
-  return (
-    !edu.school.trim() &&
-    !edu.degree.trim() &&
-    !edu.field.trim() &&
-    !edu.dates.trim() &&
-    !edu.details.trim()
-  );
 }
 
 /** One EXPERIENCE entry: title — company (dates), then a bullet list. */

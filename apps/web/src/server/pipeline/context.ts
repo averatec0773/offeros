@@ -79,7 +79,9 @@ export type PipelineRepos = ReturnType<typeof makeRepos>;
  * Env-var fallback for a provider's key. Exported so the settings/llm-keys
  * route can compute "env" status without duplicating this record — read
  * fresh on every call (not hoisted) so tests can control it with
- * `vi.stubEnv`.
+ * `vi.stubEnv`. Hand-keyed by design (provider id -> env var name isn't
+ * derivable from `LLM_PROVIDERS`); its `Record<LlmProvider, ...>` type is
+ * the guard — it fails to compile if the provider catalog drifts.
  */
 export function envApiKeyFor(provider: LlmProvider): string {
   const ENV_KEYS: Record<LlmProvider, string | undefined> = {

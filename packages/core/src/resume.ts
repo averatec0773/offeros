@@ -42,6 +42,27 @@ export const structuredResumeSchema = structuredResumeShape.catch({
 
 export type StructuredResume = z.infer<typeof structuredResumeSchema>;
 
+/** True when every field of an experience entry (including bullets) is blank after trim. */
+export function isBlankExperience(exp: StructuredResume["experience"][number]): boolean {
+  return (
+    !exp.company.trim() &&
+    !exp.title.trim() &&
+    !exp.dates.trim() &&
+    exp.bullets.every((b) => !b.trim())
+  );
+}
+
+/** True when every field of an education entry is blank after trim. */
+export function isBlankEducation(edu: StructuredResume["education"][number]): boolean {
+  return (
+    !edu.school.trim() &&
+    !edu.degree.trim() &&
+    !edu.field.trim() &&
+    !edu.dates.trim() &&
+    !edu.details.trim()
+  );
+}
+
 // Header/contact for the serialized/rendered résumé (from the profile's personal).
 export type ResumeHeader = {
   name: string;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { LlmProvider } from "@offeros/llm";
+import { LLM_PROVIDERS, type LlmProvider } from "@offeros/llm";
 import { getDb } from "@/server/db/client";
 import { getSettings, saveSettings } from "@/server/repositories/settings-repo";
 import { envApiKeyFor } from "@/server/pipeline/context";
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 type KeyStatus = "saved" | "env" | "none";
 
-const PROVIDERS: LlmProvider[] = ["anthropic", "openai"];
+const PROVIDERS = LLM_PROVIDERS;
 
 function statusFor(provider: LlmProvider, apiKeys: Record<string, string>): KeyStatus {
   const saved = apiKeys[provider];
@@ -34,7 +34,7 @@ export async function GET() {
 }
 
 const putSchema = z.object({
-  provider: z.enum(["anthropic", "openai"]),
+  provider: z.enum(LLM_PROVIDERS as [LlmProvider, ...LlmProvider[]]),
   key: z.string(),
 });
 

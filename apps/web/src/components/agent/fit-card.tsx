@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import type { FitAnalysis } from "@offeros/core";
 import { MatchScoreRing } from "./match-score-ring";
+import { ConnectProviderNote } from "./connect-provider-note";
 
 function SubScoreBar({ label, value }: { label: string; value: number }) {
   const pct = Math.max(0, Math.min(100, value));
@@ -49,17 +49,7 @@ export function FitCard({
         </button>
       </div>
 
-      {llmError && (
-        <div className="mt-3 rounded-xl bg-warn-bg p-3 text-caption text-foreground">
-          Connect your AI provider to start —{" "}
-          <Link
-            href="/settings/ai"
-            className="font-semibold underline underline-offset-2 hover:no-underline"
-          >
-            Settings → AI
-          </Link>
-        </div>
-      )}
+      {llmError && <ConnectProviderNote message="Connect your AI provider to start" />}
 
       <div className="mt-4 space-y-3">
         <SubScoreBar label="Experience" value={fit.subScores.experience} />

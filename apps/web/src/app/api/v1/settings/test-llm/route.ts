@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { callProvider, resolveModel } from "@offeros/llm";
+import { callProvider, resolveModel, LLM_PROVIDERS, type LlmProvider } from "@offeros/llm";
 import { getDb } from "@/server/db/client";
 import { getSettings } from "@/server/repositories/settings-repo";
 import { envApiKeyFor } from "@/server/pipeline/context";
@@ -8,7 +8,7 @@ import { badRequest, handle, ok } from "@/server/http/envelope";
 export const runtime = "nodejs";
 
 const bodySchema = z.object({
-  provider: z.enum(["anthropic", "openai"]),
+  provider: z.enum(LLM_PROVIDERS as [LlmProvider, ...LlmProvider[]]),
   model: z.string().optional(),
   key: z.string().optional(),
 });

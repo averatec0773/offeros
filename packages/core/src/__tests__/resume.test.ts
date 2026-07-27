@@ -3,6 +3,8 @@ import {
   structuredResumeSchema,
   serializeResume,
   buildResumeHeader,
+  isBlankExperience,
+  isBlankEducation,
   type ResumeHeader,
 } from "../resume";
 import type { Profile } from "../profile";
@@ -143,6 +145,66 @@ describe("serializeResume", () => {
     const text = serializeResume(structuredResumeSchema.parse({}), { name: "Jordan Rivera" });
     expect(text.split("\n")[0]).toBe("Jordan Rivera");
     expect(text).not.toContain("undefined");
+  });
+});
+
+describe("isBlankExperience", () => {
+  it("is true when every field, including all bullets, is blank after trim", () => {
+    expect(isBlankExperience({ company: "  ", title: "", dates: "\t", bullets: ["", "  "] })).toBe(
+      true,
+    );
+  });
+
+  it("is false when any single field is non-blank", () => {
+    expect(isBlankExperience({ company: "Evolver", title: "", dates: "", bullets: [] })).toBe(
+      false,
+    );
+    expect(isBlankExperience({ company: "", title: "", dates: "", bullets: ["did stuff"] })).toBe(
+      false,
+    );
+  });
+
+  it("is false for a fully-populated entry", () => {
+    expect(
+      isBlankExperience({
+        company: "Evolver",
+        title: "Senior Engineer",
+        dates: "2021 - Present",
+        bullets: ["Led migration to Kubernetes"],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isBlankEducation", () => {
+  it("is true when every field is blank after trim", () => {
+    expect(
+      isBlankEducation({ school: " ", degree: "", field: "\t", dates: "", details: "  " }),
+    ).toBe(true);
+  });
+
+  it("is false when any single field is non-blank", () => {
+    expect(
+      isBlankEducation({
+        school: "State University",
+        degree: "",
+        field: "",
+        dates: "",
+        details: "",
+      }),
+    ).toBe(false);
+  });
+
+  it("is false for a fully-populated entry", () => {
+    expect(
+      isBlankEducation({
+        school: "State University",
+        degree: "B.S.",
+        field: "Computer Science",
+        dates: "2013 - 2017",
+        details: "Graduated with honors",
+      }),
+    ).toBe(false);
   });
 });
 

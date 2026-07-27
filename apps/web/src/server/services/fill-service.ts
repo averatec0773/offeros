@@ -4,7 +4,6 @@ import {
   mergeFieldReports,
   answerSchema,
   type AgentTask,
-  type ApplicationInfo,
   type Artifact,
   type FieldReport,
   type FillHandoff,
@@ -237,25 +236,34 @@ export function resolveFill(
       throw new ServiceError("task is not awaiting a fill resolution");
     }
     closeOpenHandoffsForTask(db, taskId);
-    updateApplication(db, task.applicationId, { status: "applied" });
+    updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
     return persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
   }
 
-  // "fixed": only meaningful for an Action-Required task (status 2). Clear the
-  // outstanding fields into filledFields, status → 1.
+  // "fixed": only meaningful for an Action-Required task (status 2). The user
+  // handled every outstanding field themselves, so every report still
+  // needs-user (always outstanding) — or non-filled but required (the other
+  // way a field lands in missingFields) — becomes "filled": the only outcome
+  // fill-report-card.tsx renders in the resolved section. applicationInfo is
+  // then rederived from those same reports (the applyFillReport pattern), so
+  // the report card and the gate never disagree about what's resolved.
   if (task.applicationInfo?.status !== 2) {
     throw new ServiceError("task has no outstanding fields to resolve");
   }
   closeOpenHandoffsForTask(db, taskId);
-  const existing = task.applicationInfo;
-  const filled = [...(existing?.filledFields ?? []), ...(existing?.missingFields ?? [])];
-  const applicationInfo: ApplicationInfo = {
-    status: 1,
-    filledFields: filled,
+  const resolvedReports: FieldReport[] = (task.fieldReports ?? []).map((r) =>
+    r.outcome !== "filled" && (r.outcome === "needs-user" || r.required)
+      ? { ...r, outcome: "filled" }
+      : r,
+  );
+  const applicationInfo = deriveApplicationInfo(resolvedReports) ?? {
+    status: 1 as const,
+    filledFields: [],
     missingFields: [],
-    totalFields: existing?.totalFields,
+    totalFields: [],
   };
   return persist(db, taskId, {
+    fieldReports: resolvedReports,
     applicationInfo,
     step: stepIndex("submit"),
     status: "awaiting_user",
@@ -271,7 +279,7 @@ export function completeSubmitted(db: Db, taskId: string): AgentTask {
   if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "submit") {
     throw new ServiceError("task is not at the submit gate");
   }
-  updateApplication(db, task.applicationId, { status: "applied" });
+  updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
   return persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
 }
 

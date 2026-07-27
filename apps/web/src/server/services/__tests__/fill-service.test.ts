@@ -263,12 +263,55 @@ describe("resolveFill", () => {
     expect(task.status).toBe("awaiting_user");
   });
 
-  it("'applied-manually' finishes the task and marks the application applied", () => {
+  it("'fixed' rewrites fieldReports so no needs-user rows remain and the report card renders them resolved", () => {
+    const { taskId } = seedTaskAtFillForm();
+    applyFillReport(
+      db,
+      taskId,
+      [
+        report({ fieldId: "email", outcome: "filled", required: true }),
+        report({ fieldId: "eeo", outcome: "needs-user", required: true }),
+        report({ fieldId: "visa", outcome: "failed", required: true }),
+      ],
+      true,
+    );
+    const task = resolveFill(db, taskId, "fixed");
+
+    expect(task.fieldReports.some((r) => r.outcome === "needs-user")).toBe(false);
+    // fill-report-card.tsx buckets by outcome === "filled" -> "Filled",
+    // anything else -> "Needs attention". Every report should now land in
+    // the resolved bucket.
+    expect(task.fieldReports.every((r) => r.outcome === "filled")).toBe(true);
+  });
+
+  it("'fixed' leaves a non-required, non-blocking outcome untouched", () => {
+    const { taskId } = seedTaskAtFillForm();
+    applyFillReport(
+      db,
+      taskId,
+      [
+        report({ fieldId: "email", outcome: "filled", required: true }),
+        report({ fieldId: "eeo", outcome: "needs-user", required: true }),
+        report({ fieldId: "optional-note", outcome: "skipped", required: false }),
+      ],
+      true,
+    );
+    const task = resolveFill(db, taskId, "fixed");
+
+    const optional = task.fieldReports.find((r) => r.fieldId === "optional-note");
+    expect(optional?.outcome).toBe("skipped");
+  });
+
+  it("'applied-manually' finishes the task and marks the application applied with appliedAt", () => {
     const { taskId, applicationId } = seedTaskAtFillForm();
+    const before = Date.now();
     const task = resolveFill(db, taskId, "applied-manually");
     expect(task.status).toBe("done");
     expect(task.step).toBe(PIPELINE_STEPS.length);
-    expect(getApplication(db, applicationId)?.status).toBe("applied");
+    const application = getApplication(db, applicationId);
+    expect(application?.status).toBe("applied");
+    expect(application?.appliedAt).toBeGreaterThanOrEqual(before);
+    expect(application?.appliedAt).toBeLessThanOrEqual(Date.now());
   });
 
   it("'fixed' completes an open claimed handoff (does not leave it open forever)", () => {
@@ -308,13 +351,17 @@ describe("completeSubmitted", () => {
     expect(() => completeSubmitted(db, taskId)).toThrow(ServiceError);
   });
 
-  it("marks the task done and the application applied at the submit gate", () => {
+  it("marks the task done and the application applied (with appliedAt) at the submit gate", () => {
     const { taskId, applicationId } = seedTaskAtFillForm();
     updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    const before = Date.now();
     const task = completeSubmitted(db, taskId);
     expect(task.status).toBe("done");
     expect(task.step).toBe(PIPELINE_STEPS.length);
-    expect(getApplication(db, applicationId)?.status).toBe("applied");
+    const application = getApplication(db, applicationId);
+    expect(application?.status).toBe("applied");
+    expect(application?.appliedAt).toBeGreaterThanOrEqual(before);
+    expect(application?.appliedAt).toBeLessThanOrEqual(Date.now());
     expect(getAgentTask(db, taskId)?.status).toBe("done");
   });
 });

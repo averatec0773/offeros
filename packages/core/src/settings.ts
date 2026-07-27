@@ -8,6 +8,9 @@ export const agentSettingsSchema = z.object({
 });
 
 export const llmSettingsSchema = z.object({
+  // Mirrors `LLM_PROVIDERS` in packages/llm/src/models.ts. core cannot import
+  // llm (layering: llm depends on core, not the reverse), so this list is
+  // duplicated by hand — a web test asserts the two stay in sync.
   provider: z.enum(["anthropic", "openai"]).default("anthropic"),
   model: z.string().optional(),
   // Per-task overrides, keyed by TaskId (e.g. "resume-tailor", "jd-analysis",

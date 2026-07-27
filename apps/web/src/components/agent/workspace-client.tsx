@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   PIPELINE_STEPS,
   type Application,
@@ -25,6 +24,7 @@ import { GapsCard } from "./gaps-card";
 import { FitCard } from "./fit-card";
 import { FillReportCard } from "./fill-report-card";
 import { SubmitGateCard } from "./submit-gate-card";
+import { ConnectProviderNote } from "./connect-provider-note";
 import { EmptyState } from "@/components/empty-state";
 
 const POLL_MS = 1500;
@@ -331,17 +331,7 @@ export function WorkspaceClient({
     <main className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col px-6 py-6">
       <AgentStatusBar state={statusBarState} jobCount={1} onAction={statusBarAction} />
 
-      {showConnectBanner && (
-        <div className="mt-3 rounded-xl bg-warn-bg p-3 text-caption text-foreground">
-          Connect your AI provider to start —{" "}
-          <Link
-            href="/settings/ai"
-            className="font-semibold underline underline-offset-2 hover:no-underline"
-          >
-            Settings → AI
-          </Link>
-        </div>
-      )}
+      {showConnectBanner && <ConnectProviderNote message="Connect your AI provider to start" />}
 
       <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[380px_1fr]">
         <div className="min-h-0 space-y-4 overflow-y-auto pb-2 pr-1">

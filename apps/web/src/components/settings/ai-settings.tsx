@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { modelsFor, type LlmProvider } from "@offeros/llm";
+import { modelsFor, LLM_PROVIDERS, type LlmProvider } from "@offeros/llm";
 import { api, ApiError, type ClientSettings } from "@/lib/api-client";
 
 type KeyStatus = "saved" | "env" | "none";
 
-const PROVIDERS: { id: LlmProvider; label: string }[] = [
-  { id: "anthropic", label: "Anthropic" },
-  { id: "openai", label: "OpenAI" },
-];
+const PROVIDER_LABELS: Record<LlmProvider, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+};
+
+const PROVIDERS: { id: LlmProvider; label: string }[] = LLM_PROVIDERS.map((id) => ({
+  id,
+  label: PROVIDER_LABELS[id],
+}));
 
 const STATUS_LABEL: Record<KeyStatus, string> = {
   saved: "Saved",

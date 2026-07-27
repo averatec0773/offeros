@@ -26,6 +26,11 @@ export function modelsFor(provider: LlmProvider): ModelOption[] {
   return MODELS[provider];
 }
 
+/** The provider catalog, derived from `MODELS` so every consumer (settings
+ * routes, ai-settings.tsx, the drift-guard test) reads one list instead of
+ * hand-keying its own. */
+export const LLM_PROVIDERS: readonly LlmProvider[] = Object.keys(MODELS) as LlmProvider[];
+
 /**
  * The chosen model to send, or `undefined` to let the provider apply its default.
  * Guards against a stale cross-provider selection: a saved model that does not
