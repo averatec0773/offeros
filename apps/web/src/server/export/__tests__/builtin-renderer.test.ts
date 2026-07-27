@@ -21,9 +21,9 @@ function builtinTemplate(content: string): Template {
   };
 }
 
-/** True only when the Chromium browser is actually installed — CI runners have
- *  the playwright package but no browser download, so the real-render smoke is
- *  skipped there rather than failing red. */
+/** True only when the Chromium browser is actually installed — without a local
+ *  Chromium download (`npx playwright install chromium`) the real-render smoke
+ *  skips rather than failing red. CI installs Chromium, so it runs there. */
 async function chromiumInstalled(): Promise<boolean> {
   try {
     const { chromium } = await import("playwright");

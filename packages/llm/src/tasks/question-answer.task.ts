@@ -34,7 +34,7 @@ const DEFAULT_SYSTEM = [
 // would close the fence early and let the rest of its content masquerade as
 // content outside it (i.e. as instructions). Grounding inputs (profile,
 // resume, JD) are not scraped page text and are left as-is.
-const safe = (s: string) => s.replace(/<\/?untrusted-page-text>/gi, "[fence]");
+const safe = (s: string) => s.replace(/<\s*\/?\s*untrusted-page-text\s*>/gi, "[fence]");
 
 export const questionAnswerTask: LlmTask<QuestionAnswerInput, QuestionAnswerOutput> = {
   id: "question-answer",
