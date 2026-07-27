@@ -12,11 +12,12 @@ or a public issue for anything security-sensitive.
 OfferOS is designed to run as a **localhost-only, single-user** server on your
 own machine. There is no multi-tenant or hosted deployment, and the API is
 intentionally unauthenticated — it relies on the server only ever answering
-the person sitting at that machine. Every `/api/v1` request is checked against
-a loopback `Host` header, and mutating requests are additionally checked
+the person sitting at that machine. Every request — page routes as well as
+`/api/v1` (the middleware matcher covers both) — is checked against a
+loopback `Host` header, and mutating requests are additionally checked
 against an `Origin` allowlist (the web app's own origin and the browser
-extension's `chrome-extension://` origin). Requests that fail either check are
-rejected with a 403 before reaching any route handler.
+extension's `chrome-extension://` origin). Requests that fail either check
+are rejected with a 403 before reaching any route handler.
 
 Running an OfferOS instance reachable from outside localhost (reverse proxy,
 port forwarding, `0.0.0.0` binding) is outside the supported deployment model
@@ -43,14 +44,20 @@ Some behaviors are deliberate trade-offs of a local-first, single-user tool
 and are not treated as vulnerabilities on their own:
 
 - **API keys are stored in plaintext** in your local `~/.offeros` directory
-  (the directory is `0700`, the database file `0600`). The key never leaves
-  your machine except in requests to the LLM provider you configured. If
-  someone has access to your local user account or filesystem, they already
-  have access to everything else in `~/.offeros`.
+  (the directory is `0700`, the database file `0600`, applied best-effort —
+  these Unix permission bits only take effect on filesystems that support
+  POSIX modes). The key never leaves your machine except in requests to the
+  LLM provider you configured. If someone has access to your local user
+  account or filesystem, they already have access to everything else in
+  `~/.offeros`.
 - **User-authored templates render unsanitized.** A cover-letter template you
   import (`.tex`, or the built-in HTML template) is compiled/rendered on your
   own machine, by design — the same trust boundary as running your own
   document through your own toolchain. We do still run template rendering
   (pdflatex, headless Chromium) with a minimal subprocess environment, so a
-  malicious template can't read your provider key or other process secrets
-  even though it executes with your local trust.
+  malicious template never sees your provider key or other environment
+  secrets, even though it executes with your local trust. That said, the
+  built-in HTML path renders in a network-capable headless browser, so a
+  template you don't trust can still cause the document it renders to send
+  its contents to a remote host (e.g. a remote-loaded image or script) —
+  don't import templates you don't trust.

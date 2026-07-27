@@ -284,7 +284,7 @@ describe("resolveFill", () => {
     expect(task.fieldReports.every((r) => r.outcome === "filled")).toBe(true);
   });
 
-  it("'fixed' clears source/value on former needs-user rows but keeps them on a former required-failed row", () => {
+  it("'fixed' clears source/value on every force-flipped row (needs-user and required-failed alike)", () => {
     const { taskId } = seedTaskAtFillForm();
     applyFillReport(
       db,
@@ -315,10 +315,32 @@ describe("resolveFill", () => {
     expect(eeo?.source).toBe("none");
     expect(eeo?.value).toBeUndefined();
 
+    // A required-failed row's value is the attempted-but-never-written value —
+    // same false-provenance class as needs-user, so it gets cleared too.
     const visa = task.fieldReports.find((r) => r.fieldId === "visa");
     expect(visa?.outcome).toBe("filled");
-    expect(visa?.source).toBe("answer-bank");
-    expect(visa?.value).toBe("attempted value");
+    expect(visa?.source).toBe("none");
+    expect(visa?.value).toBeUndefined();
+  });
+
+  it("'fixed' on a legacy row (applicationInfo set, fieldReports empty) merges missingFields into filledFields instead of dropping them", () => {
+    const { taskId } = seedTaskAtFillForm();
+    updateAgentTask(db, taskId, {
+      applicationInfo: {
+        status: 2,
+        filledFields: ["email"],
+        missingFields: ["eeo"],
+        totalFields: ["email", "eeo"],
+      },
+      fieldReports: [],
+    });
+
+    const task = resolveFill(db, taskId, "fixed");
+    expect(task.applicationInfo?.status).toBe(1);
+    expect(task.applicationInfo?.missingFields ?? []).toEqual([]);
+    expect(task.applicationInfo?.filledFields).toEqual(expect.arrayContaining(["email", "eeo"]));
+    expect(task.applicationInfo?.totalFields).toEqual(["email", "eeo"]);
+    expect(task.fieldReports).toEqual([]);
   });
 
   it("'fixed' leaves a non-required, non-blocking outcome untouched", () => {

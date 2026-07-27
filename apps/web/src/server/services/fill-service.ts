@@ -253,23 +253,27 @@ export function resolveFill(
   closeOpenHandoffsForTask(db, taskId);
   const resolvedReports: FieldReport[] = (task.fieldReports ?? []).map((r) => {
     if (r.outcome === "filled") return r;
-    // needs-user rows never carried a real attempt — the user filled the
-    // field on the page themselves, so the pre-write classification
-    // source/value would be false provenance (fill-report-card.tsx renders
-    // "Label — source: value"). Clear both; source "none" tells the card to
-    // render just the label.
-    if (r.outcome === "needs-user")
+    // Every force-flipped row — needs-user (never carried a real attempt; the
+    // user filled the field on the page themselves) and required-but-failed
+    // (the value is the attempted-but-never-written value) — would render
+    // false provenance if the pre-write source/value survived
+    // (fill-report-card.tsx renders "Label — source: value"). Clear both;
+    // source "none" tells the card to render just the label.
+    if (r.outcome === "needs-user" || r.required)
       return { ...r, outcome: "filled", value: undefined, source: "none" };
-    // Required-but-failed rows carry a real attempted value/source — keep it,
-    // it's approximately accurate.
-    if (r.required) return { ...r, outcome: "filled" };
     return r;
   });
+  // deriveApplicationInfo returns undefined for empty reports — a legacy row
+  // (applicationInfo already set, fieldReports empty) would otherwise lose
+  // its known fields. Fall back to the pre-Phase-8 merge instead of an empty
+  // shell: fold missingFields into filledFields, clear missingFields, and
+  // keep the existing totalFields.
+  const existing = task.applicationInfo;
   const applicationInfo = deriveApplicationInfo(resolvedReports) ?? {
     status: 1 as const,
-    filledFields: [],
+    filledFields: [...(existing?.filledFields ?? []), ...(existing?.missingFields ?? [])],
     missingFields: [],
-    totalFields: [],
+    totalFields: existing?.totalFields,
   };
   return persist(db, taskId, {
     fieldReports: resolvedReports,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import proxy, { config } from "../proxy";
+import proxyDefault, { proxy, config } from "../proxy";
 
 // Pins the loopback/Origin security layer (proxy.ts + request-guard.ts)
 // against silent breakage from a Next.js upgrade. If this literal legitimately
@@ -9,8 +9,13 @@ import proxy, { config } from "../proxy";
 const KNOWN_GOOD_MATCHER = ["/((?!_next/static/|_next/image/|favicon\\.ico$).*)"];
 
 describe("proxy contract", () => {
-  it("default-exports a function", () => {
+  // Pins BOTH exports: Next.js's middleware convention prefers the default
+  // export, so removing the named `proxy` export alone would fail loudly
+  // here instead of silently breaking a caller that imports it by name.
+  it("exports both a named `proxy` and a default export, and they are the same function", () => {
     expect(typeof proxy).toBe("function");
+    expect(typeof proxyDefault).toBe("function");
+    expect(proxy).toBe(proxyDefault);
   });
 
   it("pins the matcher to the current known-good value", () => {
