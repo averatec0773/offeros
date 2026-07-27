@@ -70,7 +70,9 @@ export async function handle(fn: () => Promise<Response> | Response): Promise<Re
     ) {
       return fail(ERROR_CODES.NO_API_KEY, error.message, 400);
     }
-    const message = error instanceof Error ? error.message : "unexpected error";
-    return fail(ERROR_CODES.INTERNAL, message, 500);
+    // Raw error text (which may embed filesystem paths, stack detail, etc.) is
+    // server-console-only — the client only ever sees the fixed message.
+    console.error(error);
+    return fail(ERROR_CODES.INTERNAL, "unexpected server error", 500);
   }
 }

@@ -18,6 +18,7 @@ export function toDomain(row: Row): AgentTask {
     coverLetterRequirement: row.coverLetterRequirement,
     skippedCoverLetter: row.skippedCoverLetter,
     fieldReports: row.fieldReports ?? undefined,
+    failureReason: row.failureReason ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   });
@@ -45,6 +46,7 @@ export function createAgentTask(db: Db, input: { applicationId: string }): Agent
     coverLetterRequirement: "unknown",
     skippedCoverLetter: false,
     fieldReports: null,
+    failureReason: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -66,6 +68,7 @@ export function updateAgentTask(
       | "coverLetterRequirement"
       | "skippedCoverLetter"
       | "fieldReports"
+      | "failureReason"
     >
   >,
 ): AgentTask | null {
@@ -81,6 +84,7 @@ export function updateAgentTask(
       coverLetterRequirement: patch.coverLetterRequirement ?? existing.coverLetterRequirement,
       skippedCoverLetter: patch.skippedCoverLetter ?? existing.skippedCoverLetter,
       fieldReports: patch.fieldReports ?? existing.fieldReports,
+      failureReason: patch.failureReason ?? existing.failureReason,
       updatedAt: Date.now(),
     })
     .where(eq(agentTasks.id, id))

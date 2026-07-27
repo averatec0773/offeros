@@ -56,9 +56,26 @@ function load(ctx: PipelineContext): AgentTask {
   return task;
 }
 
+/** User-readable copy for a failed task, shown in the workspace timeline.
+ *  Structural `LlmError` detection (matches the `no_key` check below) to avoid
+ *  a server -> packages/llm import cycle. */
+export function failureReasonFor(error: unknown): string {
+  if (error instanceof Error && error.name === "LlmError") {
+    const kind = (error as { kind?: string }).kind;
+    if (kind === "no_key") return error.message;
+    if (kind === "http") {
+      return "Your AI provider rejected the request — check your API key and model in Settings → AI.";
+    }
+    if (kind === "bad_output") {
+      return "The AI response couldn't be parsed — try again or switch models.";
+    }
+  }
+  return "Something went wrong while generating. Check the server logs for details.";
+}
+
 async function failed(ctx: PipelineContext, error: unknown): Promise<AgentTask> {
   console.error(`[pipeline] task ${ctx.taskId} failed:`, error);
-  const task = await persist(ctx, { status: "failed" });
+  const task = await persist(ctx, { status: "failed", failureReason: failureReasonFor(error) });
   // A missing provider key is a user-fixable configuration error, not a task
   // outcome — rethrow it (after persisting `failed`) so it reaches the route's
   // `handle()` and maps to the 42000 envelope, instead of being swallowed here

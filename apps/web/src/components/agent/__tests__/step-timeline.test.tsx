@@ -96,6 +96,26 @@ describe("StepTimeline", () => {
     expect(row?.textContent).not.toContain("In progress");
   });
 
+  it("shows the failure reason under the current step when the task has failed with one", () => {
+    const task: AgentTask = {
+      id: "t1",
+      applicationId: "app-1",
+      status: "failed",
+      coverLetterRequirement: "unknown",
+      skippedCoverLetter: false,
+      step: 0,
+      fieldReports: [],
+      failureReason: "The AI response couldn't be parsed — try again or switch models.",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    render(<StepTimeline task={task} />);
+
+    expect(
+      screen.getByText("The AI response couldn't be parsed — try again or switch models."),
+    ).toBeTruthy();
+  });
+
   it('shows "Paused" instead of "In progress" for the current step when the task is paused', () => {
     const task: AgentTask = {
       id: "t1",

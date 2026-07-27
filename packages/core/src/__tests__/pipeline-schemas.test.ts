@@ -68,4 +68,29 @@ describe("agentTaskSchema additions", () => {
     expect(t.coverLetterRequirement).toBe("unknown");
     expect(t.skippedCoverLetter).toBe(false);
   });
+
+  it("parses without failureReason (backward compat) and round-trips it when present", () => {
+    const noReason = agentTaskSchema.parse({
+      id: "t",
+      applicationId: "a",
+      status: "failed",
+      step: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(noReason.failureReason).toBeUndefined();
+
+    const withReason = agentTaskSchema.parse({
+      id: "t",
+      applicationId: "a",
+      status: "failed",
+      step: 0,
+      failureReason: "The AI response couldn't be parsed — try again or switch models.",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(withReason.failureReason).toBe(
+      "The AI response couldn't be parsed — try again or switch models.",
+    );
+  });
 });

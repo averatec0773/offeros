@@ -111,6 +111,10 @@ export function StepTimeline({
                   )}
                 </div>
 
+                {step.state === "current" && task.status === "failed" && task.failureReason && (
+                  <p className="mt-1 text-caption text-destructive">{task.failureReason}</p>
+                )}
+
                 {showActionCard && task.applicationInfo && (
                   <div className="mt-2">
                     <ActionRequiredCard

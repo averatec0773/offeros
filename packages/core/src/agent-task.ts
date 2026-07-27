@@ -41,6 +41,7 @@ export const agentTaskSchema = z.object({
   coverLetterRequirement: coverLetterRequirementSchema.default("unknown"),
   skippedCoverLetter: z.boolean().default(false),
   fieldReports: z.array(fieldReportSchema).default([]),
+  failureReason: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

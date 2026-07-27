@@ -67,6 +67,17 @@ describe("envelope", () => {
     expect((await res.json()).errorCode).toBe(ERROR_CODES.INTERNAL);
   });
 
+  it("sanitizes a 500's body to the fixed message, keeping raw error text out of the response", async () => {
+    const res = await handle(() => {
+      throw new Error("/Users/someone/secret/path failed");
+    });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.errorMsg).toBe("unexpected server error");
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain("/Users/someone/secret/path");
+  });
+
   it("maps a no_key LlmError to a typed 42000 through handle()", async () => {
     const res = await handle(() => {
       throw new FakeLlmError(

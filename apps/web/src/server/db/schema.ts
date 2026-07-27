@@ -60,6 +60,7 @@ export const agentTasks = sqliteTable("agent_tasks", {
   coverLetterRequirement: text("cover_letter_requirement").notNull().default("unknown"),
   skippedCoverLetter: integer("skipped_cover_letter", { mode: "boolean" }).notNull().default(false),
   fieldReports: text("field_reports", { mode: "json" }).$type<FieldReport[]>(),
+  failureReason: text("failure_reason"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
