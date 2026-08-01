@@ -33,6 +33,12 @@ export type FillTaskBundle = {
   jdSummary: string | null;
 };
 
+/** Mirrors apps/web's `Application` structurally, trimmed to what the panel needs. */
+export type ApplicationSummary = {
+  id: string;
+  jobInfo: { jobTitle: string; companyName: string; applyLink?: string };
+};
+
 export type FieldReportOutcome = "filled" | "skipped" | "needs-user" | "failed";
 
 /** Mirrors @offeros/core's `FieldReport` structurally. */
@@ -120,4 +126,37 @@ export function generateAnswer(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<{ answer: string }>> {
   return call<{ answer: string }>(`/agent/tasks/${taskId}/fill/answer`, json("POST", body), fetchImpl);
+}
+
+/** Dedup lookup for "Add this job": exact-match applications already tracking this job URL. */
+export function findApplicationsByJobUrl(
+  jobUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<ApplicationSummary[]>> {
+  return call<ApplicationSummary[]>(
+    `/applications?jobUrl=${encodeURIComponent(jobUrl)}`,
+    undefined,
+    fetchImpl,
+  );
+}
+
+/** One-click "Add this job": creates the application + task from captured JD text in one call. */
+export function createTaskFromJd(
+  input: { jobTitle: string; companyName: string; jobUrl: string; jdText: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<{ id: string; applicationId: string }>> {
+  return call<{ id: string; applicationId: string }>(
+    "/agent/tasks",
+    json("POST", {
+      jobInfo: {
+        jobId: crypto.randomUUID(),
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        applyLink: input.jobUrl,
+      },
+      jdText: input.jdText,
+      source: "extension",
+    }),
+    fetchImpl,
+  );
 }

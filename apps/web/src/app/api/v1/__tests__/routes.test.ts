@@ -64,7 +64,9 @@ describe("/api/v1/applications", () => {
     expect(created.success).toBe(true);
     const id: string = created.result.id;
 
-    const list = await (await appsRoute.GET()).json();
+    const list = await (
+      await appsRoute.GET(new Request("http://localhost/api/v1/applications"))
+    ).json();
     expect(list.result.length).toBeGreaterThan(0);
 
     const got = await (
@@ -110,6 +112,51 @@ describe("/api/v1/applications", () => {
       }),
     );
     expect(res.status).toBe(400);
+  });
+
+  it("?jobUrl= returns only matching applications; absent param returns all", async () => {
+    const jobUrl = "https://boards.greenhouse.io/acme/jobs/999";
+    const matching = await (
+      await appsRoute.POST(
+        new Request("http://localhost/api/v1/applications", {
+          method: "POST",
+          body: JSON.stringify({
+            jobInfo: {
+              jobId: "j-url-1",
+              jobTitle: "Dedup Target",
+              companyName: "Acme",
+              applyLink: jobUrl,
+            },
+          }),
+        }),
+      )
+    ).json();
+    await appsRoute.POST(
+      new Request("http://localhost/api/v1/applications", {
+        method: "POST",
+        body: JSON.stringify({
+          jobInfo: {
+            jobId: "j-url-2",
+            jobTitle: "Other",
+            companyName: "Other Co",
+            applyLink: "https://example.com/other",
+          },
+        }),
+      }),
+    );
+
+    const filtered = await (
+      await appsRoute.GET(
+        new Request(`http://localhost/api/v1/applications?jobUrl=${encodeURIComponent(jobUrl)}`),
+      )
+    ).json();
+    expect(filtered.result).toHaveLength(1);
+    expect(filtered.result[0].id).toBe(matching.result.id);
+
+    const all = await (
+      await appsRoute.GET(new Request("http://localhost/api/v1/applications"))
+    ).json();
+    expect(all.result.length).toBeGreaterThanOrEqual(2);
   });
 });
 

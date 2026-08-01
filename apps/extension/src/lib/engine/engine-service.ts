@@ -72,6 +72,8 @@ export function createEngine(doc: Document): Engine {
       source: r.source,
       company: meta.company || "",
       title: meta.title || "",
+      structuredTitle: r.title,
+      structuredCompany: r.company,
       url: url(),
     };
   };

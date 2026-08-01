@@ -29,6 +29,11 @@ export function listApplications(db: Db): Application[] {
   return db.select().from(applications).orderBy(desc(applications.updatedAt)).all().map(toDomain);
 }
 
+/** Dedup lookup for "Add this job": exact-match applications tracking this job URL (jobInfo.applyLink). */
+export function listApplicationsByJobUrl(db: Db, jobUrl: string): Application[] {
+  return listApplications(db).filter((a) => a.jobInfo.applyLink === jobUrl);
+}
+
 export function getApplication(db: Db, id: string): Application | null {
   const row = db.select().from(applications).where(eq(applications.id, id)).get();
   return row ? toDomain(row) : null;

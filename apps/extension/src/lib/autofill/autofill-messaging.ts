@@ -23,6 +23,9 @@ export interface CaptureJdResponse {
   company: string;
   title: string;
   url: string;
+  /** JSON-LD-only structured fields from jd-capture (sanitized); undefined on DOM fallback. */
+  structuredTitle?: string;
+  structuredCompany?: string;
 }
 
 // Engine wire-contract: the side panel drives the active tab's content-script engine over

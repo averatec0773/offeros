@@ -5,10 +5,18 @@ import { Button } from "../../src/components/ui/button";
 import { matchAts } from "../../src/lib/autofill/recipes";
 import {
   isEnginePageChanged,
+  sendEngineCaptureJd,
   sendEngineFill,
   sendEngineScan,
 } from "../../src/lib/autofill/autofill-messaging";
-import { claim, generateAnswer, getPending, postReport } from "../../src/lib/offeros-api";
+import {
+  claim,
+  createTaskFromJd,
+  findApplicationsByJobUrl,
+  generateAnswer,
+  getPending,
+  postReport,
+} from "../../src/lib/offeros-api";
 import { settings } from "../../src/lib/settings";
 import { PlugZap } from "lucide-react";
 
@@ -22,7 +30,14 @@ const PLATFORMS = [
 ] as const;
 
 // The web-app fill API, bound to the real fetch. Tests inject fakes into FillPanel directly.
-const api = { getPending: () => getPending(), claim, postReport, generateAnswer };
+const api = {
+  getPending: () => getPending(),
+  claim,
+  postReport,
+  generateAnswer,
+  findApplicationsByJobUrl,
+  createTaskFromJd,
+};
 
 export default function App() {
   const activeTab = useActiveTab();
@@ -72,7 +87,12 @@ export default function App() {
   const tabId = activeTab?.id ?? -1;
   const scan = useCallback(() => sendEngineScan(tabId), [tabId]);
   const fill = useCallback((values: Parameters<typeof sendEngineFill>[1]) => sendEngineFill(tabId, values), [tabId]);
+  const capture = useCallback(() => sendEngineCaptureJd(tabId), [tabId]);
   const openWebApp = useMemo(() => () => void browser.tabs.create({ url: apiBase || undefined }), [apiBase]);
+  const openApplication = useCallback(
+    (applicationId: string) => void browser.tabs.create({ url: `${apiBase}/applications/${applicationId}` }),
+    [apiBase],
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-bg-base p-3 font-sans text-text-primary">
@@ -108,7 +128,16 @@ export default function App() {
 
       <div className="flex-1">
         {supported ? (
-          <FillPanel scan={scan} fill={fill} api={api} rescanNonce={rescanNonce} openWebApp={openWebApp} />
+          <FillPanel
+            scan={scan}
+            fill={fill}
+            capture={capture}
+            api={api}
+            rescanNonce={rescanNonce}
+            openWebApp={openWebApp}
+            openApplication={openApplication}
+            webReachable={webReachable}
+          />
         ) : (
           <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
             <p className="text-body font-semibold text-text-primary">Open a job application page</p>

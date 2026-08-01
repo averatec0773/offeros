@@ -12,8 +12,14 @@ import {
 } from "@offeros/autofill";
 import type { FillValue } from "../lib/autofill/dom-fill";
 import { jobIdFromUrl } from "../lib/autofill/recipes";
-import type { ScanResponse, FillResponse } from "../lib/autofill/autofill-messaging";
-import type { ApiResult, FieldReport, FillTaskBundle, FillTicket } from "../lib/offeros-api";
+import type { ScanResponse, FillResponse, CaptureJdResponse } from "../lib/autofill/autofill-messaging";
+import type {
+  ApiResult,
+  ApplicationSummary,
+  FieldReport,
+  FillTaskBundle,
+  FillTicket,
+} from "../lib/offeros-api";
 import {
   buildFieldReports,
   isCoverLetterField,
@@ -46,6 +52,180 @@ export interface FillApi {
     taskId: string,
     body: { question: string; label: string; context?: string; existingAnswer?: string },
   ) => Promise<ApiResult<{ answer: string }>>;
+  findApplicationsByJobUrl: (jobUrl: string) => Promise<ApiResult<ApplicationSummary[]>>;
+  createTaskFromJd: (input: {
+    jobTitle: string;
+    companyName: string;
+    jobUrl: string;
+    jdText: string;
+  }) => Promise<ApiResult<{ id: string; applicationId: string }>>;
+}
+
+/**
+ * One-click "Add this job": capture the JD off the active tab, let the user
+ * confirm/edit title + company, dedup by job URL, then create the
+ * application + task in one call. Only rendered when there's no active fill
+ * task for this tab (see the `!bundle` gate at the call site) — it owns no
+ * state outside itself, so switching tabs/jobs just remounts it fresh.
+ */
+function AddJobCard({
+  capture,
+  api,
+  openApplication,
+}: {
+  capture: () => Promise<CaptureJdResponse>;
+  api: Pick<FillApi, "findApplicationsByJobUrl" | "createTaskFromJd">;
+  openApplication: (applicationId: string) => void;
+}) {
+  const [captured, setCaptured] = useState<CaptureJdResponse | null>(null);
+  const [title, setTitle] = useState("");
+  const [company, setCompany] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [dedupMatches, setDedupMatches] = useState<ApplicationSummary[] | null>(null);
+  const [createdApplicationId, setCreatedApplicationId] = useState<string | null>(null);
+
+  const onAddThisJob = async () => {
+    setBusy(true);
+    try {
+      const res = await capture();
+      setCaptured(res);
+      setTitle(res.structuredTitle ?? "");
+      setCompany(res.structuredCompany ?? "");
+      setDedupMatches(null);
+      setCreatedApplicationId(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doCreate = async () => {
+    if (!captured) return;
+    setBusy(true);
+    try {
+      const created = await api.createTaskFromJd({
+        jobTitle: title.trim(),
+        companyName: company.trim(),
+        jobUrl: captured.url,
+        jdText: captured.jd,
+      });
+      if (created.ok) setCreatedApplicationId(created.value.applicationId);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCreate = async () => {
+    if (!captured) return;
+    setBusy(true);
+    try {
+      const dedup = await api.findApplicationsByJobUrl(captured.url);
+      if (dedup.ok && dedup.value.length > 0) {
+        setDedupMatches(dedup.value);
+        return;
+      }
+      await doCreate();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCancel = () => {
+    setCaptured(null);
+    setDedupMatches(null);
+    setCreatedApplicationId(null);
+  };
+
+  if (createdApplicationId) {
+    return (
+      <div className="mt-3 rounded-xl bg-bg-base p-3">
+        <p className="text-caption text-success">Added — tracked in OfferOS.</p>
+        <Button
+          variant="primary"
+          className="mt-2 rounded-full"
+          onClick={() => openApplication(createdApplicationId)}
+        >
+          Open in OfferOS
+        </Button>
+      </div>
+    );
+  }
+
+  if (dedupMatches) {
+    return (
+      <div className="mt-3 rounded-xl bg-bg-base p-3">
+        <p className="text-caption text-text-secondary">Already tracked.</p>
+        <div className="mt-2 flex gap-2">
+          <Button
+            variant="primary"
+            className="rounded-full"
+            onClick={() => openApplication(dedupMatches[0]!.id)}
+          >
+            Open existing
+          </Button>
+          <Button className="rounded-full" disabled={busy} onClick={() => void doCreate()}>
+            Create anyway
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (captured) {
+    if (captured.source === "none") {
+      return (
+        <div className="mt-3 rounded-xl bg-bg-base p-3">
+          <p className="text-caption leading-relaxed text-text-secondary">
+            Couldn't read a posting here — open the job posting page.
+          </p>
+          <Button className="mt-2 rounded-full" onClick={onCancel}>
+            Close
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-3 space-y-2 rounded-xl bg-bg-base p-3">
+        <label className="block text-caption text-text-tertiary">
+          Job title
+          <input
+            className="mt-1 w-full rounded-xl border border-border-subtle bg-bg-elevated px-3 py-2 text-caption text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            aria-label="Job title"
+          />
+        </label>
+        <label className="block text-caption text-text-tertiary">
+          Company
+          <input
+            className="mt-1 w-full rounded-xl border border-border-subtle bg-bg-elevated px-3 py-2 text-caption text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            aria-label="Company"
+          />
+        </label>
+        <p className="text-micro text-text-tertiary">{captured.jd.length} characters captured</p>
+        <div className="flex gap-2">
+          <Button
+            variant="primary"
+            className="rounded-full"
+            disabled={busy || title.trim() === "" || company.trim() === ""}
+            onClick={() => void onCreate()}
+          >
+            Create
+          </Button>
+          <Button className="rounded-full" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Button className="mt-2 rounded-full" disabled={busy} onClick={() => void onAddThisJob()}>
+      Add this job
+    </Button>
+  );
 }
 
 // Submit-readiness bar: required fields we have a value for / total.
@@ -96,15 +276,21 @@ function FieldGroup({ title, items }: { title: string; items: FillItem[] }) {
 export function FillPanel({
   scan,
   fill,
+  capture,
   api,
   rescanNonce,
   openWebApp,
+  openApplication,
+  webReachable,
 }: {
   scan: () => Promise<ScanResponse>;
   fill: (values: FillValue[]) => Promise<FillResponse>;
+  capture: () => Promise<CaptureJdResponse>;
   api: FillApi;
   rescanNonce: number;
   openWebApp: () => void;
+  openApplication: (applicationId: string) => void;
+  webReachable: boolean;
 }) {
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [scanNonce, setScanNonce] = useState(0);
@@ -382,6 +568,9 @@ export function FillPanel({
               Open OfferOS
             </Button>
           </div>
+        )}
+        {!bundle && webReachable && (
+          <AddJobCard capture={capture} api={api} openApplication={openApplication} />
         )}
         {drift && (
           <p className="mb-2 text-caption text-warning">

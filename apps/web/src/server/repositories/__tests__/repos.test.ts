@@ -6,6 +6,7 @@ import { createDb, type Db } from "../../db/client";
 import { getProfile, saveProfile } from "../profile-repo";
 import {
   listApplications,
+  listApplicationsByJobUrl,
   getApplication,
   createApplication,
   updateApplication,
@@ -76,6 +77,25 @@ describe("application repo", () => {
   it("returns null for a missing id", () => {
     expect(getApplication(db, "nope")).toBeNull();
     expect(updateApplication(db, "nope", { status: "applied" })).toBeNull();
+  });
+
+  it("lists only applications with a matching jobInfo.applyLink", () => {
+    const jobUrl = "https://boards.greenhouse.io/acme/jobs/1";
+    const match = createApplication(db, {
+      jobInfo: { jobId: "j1", jobTitle: "T", companyName: "C", applyLink: jobUrl },
+    });
+    createApplication(db, {
+      jobInfo: {
+        jobId: "j2",
+        jobTitle: "T2",
+        companyName: "C2",
+        applyLink: "https://example.com/other",
+      },
+    });
+    createApplication(db, { jobInfo: { jobId: "j3", jobTitle: "T3", companyName: "C3" } });
+
+    expect(listApplicationsByJobUrl(db, jobUrl)).toEqual([match]);
+    expect(listApplicationsByJobUrl(db, "https://nomatch.example.com")).toEqual([]);
   });
 });
 

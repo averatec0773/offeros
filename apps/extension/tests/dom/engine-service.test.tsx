@@ -116,5 +116,27 @@ describe("engine CAPTURE_JD handler", () => {
     expect(res).toHaveProperty("company");
     expect(res).toHaveProperty("title");
     expect(res).toHaveProperty("url");
+    // No JSON-LD on this fixture — structured fields carry through as undefined.
+    expect(res.structuredTitle).toBeUndefined();
+    expect(res.structuredCompany).toBeUndefined();
+  });
+
+  it("carries jd-capture's structured title/company through when JSON-LD is present", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    const ld = {
+      "@type": "JobPosting",
+      title: "Staff Engineer",
+      hiringOrganization: { name: "Acme" },
+      description: "Build the platform reliably at scale for our growing engineering org.",
+    };
+    document.head.innerHTML = `<script type="application/ld+json">${JSON.stringify(ld)}</script>`;
+    document.body.innerHTML = `<main><h1>Staff Engineer</h1></main>`;
+    registerEngine(document, ctx());
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_CAPTURE_JD",
+    })) as CaptureJdResponse;
+    expect(res.source).toBe("jsonld");
+    expect(res.structuredTitle).toBe("Staff Engineer");
+    expect(res.structuredCompany).toBe("Acme");
   });
 });

@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
-import type { ScanResponse, FillResponse } from "../../src/lib/autofill/autofill-messaging";
+import type { ScanResponse, FillResponse, CaptureJdResponse } from "../../src/lib/autofill/autofill-messaging";
 import type { FillValue } from "../../src/lib/autofill/dom-fill";
-import type { ApiResult, FillTaskBundle, FillTicket } from "../../src/lib/offeros-api";
+import type { ApiResult, ApplicationSummary, FillTaskBundle, FillTicket } from "../../src/lib/offeros-api";
 
 const scanOk: ScanResponse = {
   ok: true,
@@ -46,22 +46,49 @@ const emptyApi = (): FillApi => ({
   claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
+  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
+  createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
 });
 
-const renderPanel = (over: { scan?: () => Promise<ScanResponse>; fill?: (v: FillValue[]) => Promise<FillResponse>; api?: FillApi; openWebApp?: () => void } = {}) => {
+const captureOk: CaptureJdResponse = {
+  jd: "We are hiring a senior engineer to build reliable backend services.",
+  source: "jsonld",
+  company: "Acme",
+  title: "Backend Engineer",
+  url: scanOk.url,
+  structuredTitle: "Backend Engineer",
+  structuredCompany: "Acme",
+};
+
+const renderPanel = (
+  over: {
+    scan?: () => Promise<ScanResponse>;
+    fill?: (v: FillValue[]) => Promise<FillResponse>;
+    capture?: () => Promise<CaptureJdResponse>;
+    api?: FillApi;
+    openWebApp?: () => void;
+    openApplication?: (id: string) => void;
+    webReachable?: boolean;
+  } = {},
+) => {
   const fill = over.fill ?? vi.fn(async (v: FillValue[]) => okFill(v));
+  const capture = over.capture ?? vi.fn(async () => captureOk);
   const api = over.api ?? emptyApi();
   const openWebApp = over.openWebApp ?? vi.fn();
+  const openApplication = over.openApplication ?? vi.fn();
   render(
     <FillPanel
       scan={over.scan ?? (async () => scanOk)}
       fill={fill}
+      capture={capture}
       api={api}
       rescanNonce={0}
       openWebApp={openWebApp}
+      openApplication={openApplication}
+      webReachable={over.webReachable ?? true}
     />,
   );
-  return { fill, api, openWebApp };
+  return { fill, capture, api, openWebApp, openApplication };
 };
 
 describe("FillPanel", () => {
@@ -84,6 +111,7 @@ describe("FillPanel", () => {
 
   it("claims a matching handoff, fills the fillable field, generates open-ended answers, and reports", async () => {
     const api: FillApi = {
+      ...emptyApi(),
       getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
@@ -128,13 +156,23 @@ describe("FillPanel", () => {
 
   it("renders canon idioms: lucide status icons + a black pill primary button, no raw glyphs", async () => {
     const api: FillApi = {
+      ...emptyApi(),
       getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
       generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
     };
     const { container } = render(
-      <FillPanel scan={async () => scanOk} fill={vi.fn(async (v: FillValue[]) => okFill(v))} api={api} rescanNonce={0} openWebApp={vi.fn()} />,
+      <FillPanel
+        scan={async () => scanOk}
+        fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+        capture={vi.fn(async () => captureOk)}
+        api={api}
+        rescanNonce={0}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+      />,
     );
     const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
     expect(fillBtn).toHaveClass("rounded-full", "bg-primary");
@@ -147,6 +185,7 @@ describe("FillPanel", () => {
     // First scan: web app is down (network error) → no claim, stuck in "no task".
     let tickets: ApiResult<FillTicket[]> = { ok: false, error: "network error" };
     const api: FillApi = {
+      ...emptyApi(),
       getPending: vi.fn(async () => tickets),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
@@ -154,16 +193,129 @@ describe("FillPanel", () => {
     };
     const scan = async () => scanOk;
     const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+    const capture = vi.fn(async () => captureOk);
     const { rerender } = render(
-      <FillPanel scan={scan} fill={fill} api={api} rescanNonce={0} openWebApp={vi.fn()} />,
+      <FillPanel
+        scan={scan}
+        fill={fill}
+        capture={capture}
+        api={api}
+        rescanNonce={0}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+      />,
     );
     await screen.findByText("No fill task for this page. Start one from the OfferOS workspace.");
     expect(api.claim).not.toHaveBeenCalled();
 
     // Web app comes back with a matching ticket + App forces a rescan (rescanNonce bump).
     tickets = { ok: true, value: [ticket] };
-    rerender(<FillPanel scan={scan} fill={fill} api={api} rescanNonce={1} openWebApp={vi.fn()} />);
+    rerender(
+      <FillPanel
+        scan={scan}
+        fill={fill}
+        capture={capture}
+        api={api}
+        rescanNonce={1}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+      />,
+    );
     expect(await screen.findByRole("button", { name: "Fill 1 field" })).toBeInTheDocument();
     expect(api.claim).toHaveBeenCalledWith("h1");
+  });
+
+  describe("Add this job", () => {
+    it("is hidden when the web app is unreachable", async () => {
+      renderPanel({ webReachable: false });
+      await screen.findByText("No fill task for this page. Start one from the OfferOS workspace.");
+      expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
+    });
+
+    it("captures the JD and shows an editable confirm card pre-filled from structured fields", async () => {
+      const { capture } = renderPanel();
+      const addBtn = await screen.findByRole("button", { name: "Add this job" });
+      await userEvent.click(addBtn);
+
+      expect(capture).toHaveBeenCalledTimes(1);
+      expect(await screen.findByLabelText("Job title")).toHaveValue("Backend Engineer");
+      expect(screen.getByLabelText("Company")).toHaveValue("Acme");
+      expect(screen.getByText(`${captureOk.jd.length} characters captured`)).toBeInTheDocument();
+
+      const titleInput = screen.getByLabelText("Job title");
+      await userEvent.clear(titleInput);
+      await userEvent.type(titleInput, "Staff Engineer");
+      expect(titleInput).toHaveValue("Staff Engineer");
+    });
+
+    it("shows the none-state message with no Create button when source is none", async () => {
+      renderPanel({ capture: vi.fn(async () => ({ ...captureOk, jd: "", source: "none", structuredTitle: undefined, structuredCompany: undefined })) });
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+
+      expect(
+        await screen.findByText("Couldn't read a posting here — open the job posting page."),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+    });
+
+    it("leaves the inputs blank when there are no structured fields (DOM fallback)", async () => {
+      renderPanel({
+        capture: vi.fn(async () => ({ ...captureOk, source: "dom", structuredTitle: undefined, structuredCompany: undefined })),
+      });
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+
+      expect(await screen.findByLabelText("Job title")).toHaveValue("");
+      expect(screen.getByLabelText("Company")).toHaveValue("");
+    });
+
+    it("dedups by job URL: Create checks first, then renders Open existing + Create anyway", async () => {
+      const existing: ApplicationSummary = { id: "existing-1", jobInfo: { jobTitle: "Backend Engineer", companyName: "Acme", applyLink: captureOk.url } };
+      const api: FillApi = {
+        ...emptyApi(),
+        findApplicationsByJobUrl: vi.fn(async () => ({ ok: true as const, value: [existing] })),
+      };
+      const { openApplication } = renderPanel({ api });
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+      await screen.findByLabelText("Job title");
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+      expect(api.findApplicationsByJobUrl).toHaveBeenCalledWith(captureOk.url);
+      expect(await screen.findByText("Already tracked.")).toBeInTheDocument();
+      expect(api.createTaskFromJd).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByRole("button", { name: "Open existing" }));
+      expect(openApplication).toHaveBeenCalledWith("existing-1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Create anyway" }));
+      expect(api.createTaskFromJd).toHaveBeenCalledTimes(1);
+    });
+
+    it("creates with a POST shape carrying edited title/company + captured JD, then offers Open in OfferOS", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t9", applicationId: "a9" } })),
+      };
+      const { openApplication } = renderPanel({ api });
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+      const titleInput = await screen.findByLabelText("Job title");
+      await userEvent.clear(titleInput);
+      await userEvent.type(titleInput, "Staff Engineer");
+
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+
+      await waitFor(() => expect(api.createTaskFromJd).toHaveBeenCalledTimes(1));
+      expect(api.createTaskFromJd).toHaveBeenCalledWith({
+        jobTitle: "Staff Engineer",
+        companyName: "Acme",
+        jobUrl: captureOk.url,
+        jdText: captureOk.jd,
+      });
+
+      const openBtn = await screen.findByRole("button", { name: "Open in OfferOS" });
+      await userEvent.click(openBtn);
+      expect(openApplication).toHaveBeenCalledWith("a9");
+    });
   });
 });

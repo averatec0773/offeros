@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { claim, generateAnswer, getPending, postReport } from "../src/lib/offeros-api";
+import {
+  claim,
+  createTaskFromJd,
+  findApplicationsByJobUrl,
+  generateAnswer,
+  getPending,
+  postReport,
+} from "../src/lib/offeros-api";
 
 interface Call { url: string; init: RequestInit }
 const fakeFetch = (status: number, body: unknown) => {
@@ -80,5 +87,46 @@ describe("generateAnswer", () => {
     const r = await generateAnswer("t1", { question: "Are you legally authorized?", label: "Authorized?" }, f.fn);
     expect(r).toEqual({ ok: true, value: { answer: "Yes" } });
     expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/fill/answer");
+  });
+});
+
+describe("findApplicationsByJobUrl", () => {
+  it("GETs the applications endpoint with a jobUrl filter and unwraps the list", async () => {
+    const apps = [{ id: "a1", jobInfo: { jobTitle: "SWE", companyName: "Acme", applyLink: "https://boards.greenhouse.io/acme/jobs/1" } }];
+    const f = fakeFetch(200, ok(apps));
+    const r = await findApplicationsByJobUrl("https://boards.greenhouse.io/acme/jobs/1", f.fn);
+    expect(r).toEqual({ ok: true, value: apps });
+    expect(f.calls[0]!.url).toBe(
+      "http://localhost:3000/api/v1/applications?jobUrl=https%3A%2F%2Fboards.greenhouse.io%2Facme%2Fjobs%2F1",
+    );
+  });
+
+  it("returns ok:false on a network throw", async () => {
+    const fn = (async () => { throw new Error("net down"); }) as typeof fetch;
+    const r = await findApplicationsByJobUrl("https://example.com/job/1", fn);
+    expect(r).toEqual({ ok: false, error: "network error" });
+  });
+});
+
+describe("createTaskFromJd", () => {
+  it("POSTs the byJd payload with a generated uuid jobId and unwraps { id, applicationId }", async () => {
+    const f = fakeFetch(200, ok({ id: "t1", applicationId: "a1" }));
+    const r = await createTaskFromJd(
+      { jobTitle: "SWE", companyName: "Acme", jobUrl: "https://boards.greenhouse.io/acme/jobs/1", jdText: "We need a SWE." },
+      f.fn,
+    );
+    expect(r).toEqual({ ok: true, value: { id: "t1", applicationId: "a1" } });
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks");
+    expect(f.calls[0]!.init.method).toBe("POST");
+    const body = JSON.parse(String(f.calls[0]!.init.body));
+    expect(body.jobInfo).toMatchObject({
+      jobTitle: "SWE",
+      companyName: "Acme",
+      applyLink: "https://boards.greenhouse.io/acme/jobs/1",
+    });
+    expect(typeof body.jobInfo.jobId).toBe("string");
+    expect(body.jobInfo.jobId.length).toBeGreaterThan(0);
+    expect(body.jdText).toBe("We need a SWE.");
+    expect(body.source).toBe("extension");
   });
 });
