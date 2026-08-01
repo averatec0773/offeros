@@ -6,6 +6,7 @@ import {
   classifiedRatio,
   explainFillPlan,
   fillCoverage,
+  normalizeQuestion,
   type Coverage,
   type FieldTrace,
   type FillItem,
@@ -20,6 +21,7 @@ import type {
   AttachFileResponse,
 } from "../lib/autofill/autofill-messaging";
 import type {
+  AnswerEntry,
   ApiResult,
   ApplicationSummary,
   FieldReport,
@@ -73,6 +75,10 @@ export interface FillApi {
   fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
   /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
   fetchArtifactPdf: (taskId: string, kind: "resume" | "cover-letter") => Promise<FileFetchResult>;
+  /** Answer memory — accepted AI answers persist here, deduped by normalized question. */
+  listAnswers: () => Promise<ApiResult<AnswerEntry[]>>;
+  createAnswer: (input: { question: string; answer: string }) => Promise<ApiResult<AnswerEntry>>;
+  updateAnswer: (id: string, input: { question: string; answer: string }) => Promise<ApiResult<AnswerEntry>>;
 }
 
 /** One OfferOS-managed file kind a file input can classify as — the only
@@ -340,6 +346,10 @@ export function FillPanel({
   const [bundle, setBundle] = useState<FillTaskBundle | null>(null);
   const [aiAnswers, setAiAnswers] = useState<{ fieldId: string; label: string; answer: string }[]>([]);
   const [reported, setReported] = useState(false);
+  // fieldIds whose current AI answer text has been accepted + persisted to the answer
+  // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
+  // the caption never claims an unsaved edit was saved.
+  const [savedFieldIds, setSavedFieldIds] = useState<Set<string>>(new Set());
 
   const pendingRef = useRef(false);
   const pageSigRef = useRef<string | null>(null);
@@ -360,6 +370,7 @@ export function FillPanel({
     setBundle(null);
     reportsRef.current.clear();
     setAiAnswers([]);
+    setSavedFieldIds(new Set());
     setReported(false);
     setFilledOnce(false);
     claimTriedRef.current = false;
@@ -510,12 +521,47 @@ export function FillPanel({
     if (!ans.ok || !(await writeOne(entry.fieldId, ans.value.answer))) return;
     const answer = ans.value.answer;
     setAiAnswers((prev) => prev.map((e) => (e.fieldId === entry.fieldId ? { ...e, answer } : e)));
+    setSavedFieldIds((prev) => {
+      if (!prev.has(entry.fieldId)) return prev;
+      const next = new Set(prev);
+      next.delete(entry.fieldId);
+      return next;
+    });
     for (const [k, r] of reportsRef.current) {
       if (r.fieldId === entry.fieldId) {
         reportsRef.current.set(k, { ...r, value: answer, outcome: "filled", source: "ai-generated" });
       }
     }
     await api.postReport(b.taskId, allReports(), false);
+  };
+
+  // Accept the (possibly user-edited) AI answer text in the panel: write it into the
+  // page field, then persist it to the answer bank so future applications reuse it
+  // (answer-match prefers bank entries during fill). Dedup by normalized question —
+  // an existing entry whose question-pattern normalizes the same way gets overwritten
+  // instead of duplicated. Bank-save failures silent-degrade: no caption, no crash —
+  // bookkeeping must never break the fill flow.
+  const acceptAnswer = async (entry: { fieldId: string; label: string; answer: string }) => {
+    const b = bundleRef.current;
+    if (!b) return;
+    if (await writeOne(entry.fieldId, entry.answer)) {
+      for (const [k, r] of reportsRef.current) {
+        if (r.fieldId === entry.fieldId) {
+          reportsRef.current.set(k, { ...r, value: entry.answer, outcome: "filled", source: "ai-generated" });
+        }
+      }
+      await api.postReport(b.taskId, allReports(), false);
+    }
+
+    const list = await api.listAnswers();
+    if (!list.ok) return;
+    const normalized = normalizeQuestion(entry.label);
+    const match = list.value.find((a) => a.questionPatterns.some((p) => normalizeQuestion(p) === normalized));
+    const saved = match
+      ? await api.updateAnswer(match.id, { question: entry.label, answer: entry.answer })
+      : await api.createAnswer({ question: entry.label, answer: entry.answer });
+    if (!saved.ok) return;
+    setSavedFieldIds((prev) => new Set(prev).add(entry.fieldId));
   };
 
   const onDone = async () => {
@@ -696,9 +742,37 @@ export function FillPanel({
                       Regenerate
                     </button>
                   </div>
-                  <p className="rounded-xl border border-border-subtle bg-bg-base p-2 text-caption text-text-secondary">
-                    {a.answer}
-                  </p>
+                  <textarea
+                    aria-label={`Answer: ${a.label}`}
+                    rows={3}
+                    className="w-full rounded-xl border border-border-subtle bg-bg-base p-2 text-caption text-text-secondary focus:outline-none focus:ring-1 focus:ring-brand"
+                    value={a.answer}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAiAnswers((prev) =>
+                        prev.map((x) => (x.fieldId === a.fieldId ? { ...x, answer: value } : x)),
+                      );
+                      setSavedFieldIds((prev) => {
+                        if (!prev.has(a.fieldId)) return prev;
+                        const next = new Set(prev);
+                        next.delete(a.fieldId);
+                        return next;
+                      });
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void acceptAnswer(a)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-[color,transform] duration-fast ease-out-strong hover:text-text-primary active:scale-[0.97]"
+                    >
+                      <Check aria-hidden className="h-3 w-3" />
+                      Accept
+                    </button>
+                    {savedFieldIds.has(a.fieldId) && (
+                      <span className="text-caption text-success">Saved to your answers.</span>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

@@ -11,6 +11,7 @@ import type {
 } from "../../src/lib/autofill/autofill-messaging";
 import type { FillValue } from "../../src/lib/autofill/dom-fill";
 import type {
+  AnswerEntry,
   ApiResult,
   ApplicationSummary,
   FileFetchResult,
@@ -92,6 +93,15 @@ const emptyApi = (): FillApi => ({
   createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
   fetchResumeFile: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
+  listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+  createAnswer: vi.fn(async (): Promise<ApiResult<AnswerEntry>> => ({
+    ok: true,
+    value: { id: "new-1", questionPatterns: [], answer: "", type: "text", category: "custom" },
+  })),
+  updateAnswer: vi.fn(async (): Promise<ApiResult<AnswerEntry>> => ({
+    ok: true,
+    value: { id: "existing-1", questionPatterns: [], answer: "", type: "text", category: "custom" },
+  })),
 });
 
 const captureOk: CaptureJdResponse = {
@@ -188,13 +198,139 @@ describe("FillPanel", () => {
     });
     expect(api.postReport).toHaveBeenCalledWith("t1", expect.any(Array), false);
     expect(await screen.findByText("AI answers")).toBeInTheDocument();
-    expect(screen.getByText("Because I build compilers.")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Because I build compilers.")).toBeInTheDocument();
 
     await act(async () => {
       await userEvent.click(screen.getByRole("button", { name: "Done — report to workspace" }));
     });
     expect(api.postReport).toHaveBeenLastCalledWith("t1", expect.any(Array), true);
     expect(await screen.findByText("Reported — check the workspace.")).toBeInTheDocument();
+  });
+
+  describe("AI answer memory (accept → persist, deduped)", () => {
+    const answerLabel = "Why do you want to work here?";
+    const generatedAnswer = "Because I build compilers.";
+
+    const apiWithGeneratedAnswer = (overrides: Partial<FillApi> = {}): FillApi => ({
+      ...emptyApi(),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+      postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
+      generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: generatedAnswer } })),
+      ...overrides,
+    });
+
+    const fillAndGetTextarea = async () => {
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+      return screen.getByDisplayValue(generatedAnswer);
+    };
+
+    it("accept with no normalized match in the bank creates a new answer entry", async () => {
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+      });
+      renderPanel({ api });
+      await fillAndGetTextarea();
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Accept" }));
+      });
+
+      expect(api.listAnswers).toHaveBeenCalledTimes(1);
+      expect(api.createAnswer).toHaveBeenCalledWith({ question: answerLabel, answer: generatedAnswer });
+      expect(api.updateAnswer).not.toHaveBeenCalled();
+      expect(await screen.findByText("Saved to your answers.")).toBeInTheDocument();
+    });
+
+    it("accept when a normalized match exists updates that entry instead of creating one", async () => {
+      const existing: AnswerEntry = {
+        id: "ans-1",
+        questionPatterns: ["Why do you want to work here?!"], // normalizes to the same phrase
+        answer: "stale answer",
+        type: "text",
+        category: "custom",
+      };
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [existing] })),
+      });
+      renderPanel({ api });
+      await fillAndGetTextarea();
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Accept" }));
+      });
+
+      expect(api.updateAnswer).toHaveBeenCalledWith("ans-1", { question: answerLabel, answer: generatedAnswer });
+      expect(api.createAnswer).not.toHaveBeenCalled();
+      expect(await screen.findByText("Saved to your answers.")).toBeInTheDocument();
+    });
+
+    it("edited-then-accepted text is what gets saved, not the original generated text", async () => {
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+      });
+      renderPanel({ api });
+      const textarea = await fillAndGetTextarea();
+
+      await userEvent.clear(textarea);
+      await userEvent.type(textarea, "Because your mission matches my values.");
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Accept" }));
+      });
+
+      expect(api.createAnswer).toHaveBeenCalledWith({
+        question: answerLabel,
+        answer: "Because your mission matches my values.",
+      });
+    });
+
+    it("shows no caption when the save fails (silent degrade)", async () => {
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+        createAnswer: vi.fn(async (): Promise<ApiResult<AnswerEntry>> => ({ ok: false, error: "network error" })),
+      });
+      renderPanel({ api });
+      await fillAndGetTextarea();
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Accept" }));
+      });
+
+      expect(api.createAnswer).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Saved to your answers.")).not.toBeInTheDocument();
+    });
+
+    it("regenerate never calls the answer-bank APIs", async () => {
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+      });
+      renderPanel({ api });
+      await fillAndGetTextarea();
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+      });
+
+      expect(api.listAnswers).not.toHaveBeenCalled();
+      expect(api.createAnswer).not.toHaveBeenCalled();
+      expect(api.updateAnswer).not.toHaveBeenCalled();
+    });
+
+    it("generating an answer alone (no accept click) never calls the answer-bank APIs", async () => {
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+      });
+      renderPanel({ api });
+      await fillAndGetTextarea();
+
+      expect(api.listAnswers).not.toHaveBeenCalled();
+      expect(api.createAnswer).not.toHaveBeenCalled();
+      expect(api.updateAnswer).not.toHaveBeenCalled();
+    });
   });
 
   it("attempts a claim only once and stays in the no-task state when nothing matches", async () => {

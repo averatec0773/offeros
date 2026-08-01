@@ -46,6 +46,15 @@ export type ApplicationSummary = {
   jobInfo: { jobTitle: string; companyName: string; applyLink?: string };
 };
 
+/** Mirrors apps/web's `AnswerEntry` (@offeros/core `answerSchema`) structurally. */
+export type AnswerEntry = {
+  id: string;
+  questionPatterns: string[];
+  answer: string;
+  type: "enum" | "text" | "number" | "boolean";
+  category: "eeo" | "screening" | "custom";
+};
+
 export type FieldReportOutcome = "filled" | "skipped" | "needs-user" | "failed";
 
 /** Mirrors @offeros/core's `FieldReport` structurally. */
@@ -194,6 +203,43 @@ export function generateAnswer(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<{ answer: string }>> {
   return call<{ answer: string }>(`/agent/tasks/${taskId}/fill/answer`, json("POST", body), fetchImpl);
+}
+
+/** The full answer bank (`GET /answers`) — used to dedup an accepted AI answer against
+ *  an existing entry before deciding create vs. update. */
+export function listAnswers(fetchImpl: typeof fetch = fetch): Promise<ApiResult<AnswerEntry[]>> {
+  return call<AnswerEntry[]>("/answers", undefined, fetchImpl);
+}
+
+/** Persist a newly-accepted AI answer as a new answer-bank entry (single question pattern:
+ *  the field label as asked). */
+export function createAnswer(
+  input: { question: string; answer: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<AnswerEntry>> {
+  return call<AnswerEntry>(
+    "/answers",
+    json("POST", {
+      questionPatterns: [input.question],
+      answer: input.answer,
+      type: "text",
+      category: "custom",
+    }),
+    fetchImpl,
+  );
+}
+
+/** Overwrite an existing answer-bank entry's text (re-accepting the same question). */
+export function updateAnswer(
+  id: string,
+  input: { question: string; answer: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<AnswerEntry>> {
+  return call<AnswerEntry>(
+    `/answers/${id}`,
+    json("PUT", { questionPatterns: [input.question], answer: input.answer }),
+    fetchImpl,
+  );
 }
 
 /** Dedup lookup for "Add this job": exact-match applications already tracking this job URL. */

@@ -12,13 +12,16 @@ import {
 } from "../../src/lib/autofill/autofill-messaging";
 import {
   claim,
+  createAnswer,
   createTaskFromJd,
   fetchArtifactPdf,
   fetchResumeFile,
   findApplicationsByJobUrl,
   generateAnswer,
   getPending,
+  listAnswers,
   postReport,
+  updateAnswer,
 } from "../../src/lib/offeros-api";
 import { settings } from "../../src/lib/settings";
 import { PlugZap } from "lucide-react";
@@ -42,6 +45,9 @@ const api = {
   createTaskFromJd,
   fetchResumeFile,
   fetchArtifactPdf,
+  listAnswers,
+  createAnswer,
+  updateAnswer,
 };
 
 export default function App() {
