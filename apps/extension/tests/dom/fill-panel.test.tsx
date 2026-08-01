@@ -263,9 +263,37 @@ describe("FillPanel", () => {
         await userEvent.click(screen.getByRole("button", { name: "Accept" }));
       });
 
-      expect(api.updateAnswer).toHaveBeenCalledWith("ans-1", { question: answerLabel, answer: generatedAnswer });
+      // Answer-only patch: never send questionPatterns on an update (see the
+      // multi-pattern regression test below for why).
+      expect(api.updateAnswer).toHaveBeenCalledWith("ans-1", { answer: generatedAnswer });
       expect(api.createAnswer).not.toHaveBeenCalled();
       expect(await screen.findByText("Saved to your answers.")).toBeInTheDocument();
+    });
+
+    it("a matched curated entry with multiple patterns is never clobbered: update carries no questionPatterns", async () => {
+      const existing: AnswerEntry = {
+        id: "ans-multi",
+        questionPatterns: ["why do you want this role", "Why do you want to work here?"],
+        answer: "stale answer",
+        type: "text",
+        category: "custom",
+      };
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [existing] })),
+      });
+      renderPanel({ api });
+      await fillAndGetTextarea();
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Accept" }));
+      });
+
+      expect(api.updateAnswer).toHaveBeenCalledTimes(1);
+      const [id, payload] = (api.updateAnswer as ReturnType<typeof vi.fn>).mock.calls[0]!;
+      expect(id).toBe("ans-multi");
+      expect(payload).toEqual({ answer: generatedAnswer });
+      expect(payload).not.toHaveProperty("questionPatterns");
+      expect(api.createAnswer).not.toHaveBeenCalled();
     });
 
     it("edited-then-accepted text is what gets saved, not the original generated text", async () => {
@@ -327,6 +355,27 @@ describe("FillPanel", () => {
       renderPanel({ api });
       await fillAndGetTextarea();
 
+      expect(api.listAnswers).not.toHaveBeenCalled();
+      expect(api.createAnswer).not.toHaveBeenCalled();
+      expect(api.updateAnswer).not.toHaveBeenCalled();
+    });
+
+    it("emptying the textarea disables Accept and blocks the save (no blank overwrite)", async () => {
+      const api = apiWithGeneratedAnswer({
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+      });
+      renderPanel({ api });
+      const textarea = await fillAndGetTextarea();
+
+      await userEvent.clear(textarea);
+
+      const acceptBtn = screen.getByRole("button", { name: "Accept" });
+      expect(acceptBtn).toBeDisabled();
+
+      // A disabled button never fires its click handler — confirm no API calls fired.
+      await act(async () => {
+        await userEvent.click(acceptBtn);
+      });
       expect(api.listAnswers).not.toHaveBeenCalled();
       expect(api.createAnswer).not.toHaveBeenCalled();
       expect(api.updateAnswer).not.toHaveBeenCalled();

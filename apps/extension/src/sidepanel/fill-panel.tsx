@@ -78,7 +78,7 @@ export interface FillApi {
   /** Answer memory — accepted AI answers persist here, deduped by normalized question. */
   listAnswers: () => Promise<ApiResult<AnswerEntry[]>>;
   createAnswer: (input: { question: string; answer: string }) => Promise<ApiResult<AnswerEntry>>;
-  updateAnswer: (id: string, input: { question: string; answer: string }) => Promise<ApiResult<AnswerEntry>>;
+  updateAnswer: (id: string, input: { answer: string }) => Promise<ApiResult<AnswerEntry>>;
 }
 
 /** One OfferOS-managed file kind a file input can classify as — the only
@@ -543,7 +543,7 @@ export function FillPanel({
   // bookkeeping must never break the fill flow.
   const acceptAnswer = async (entry: { fieldId: string; label: string; answer: string }) => {
     const b = bundleRef.current;
-    if (!b) return;
+    if (!b || entry.answer.trim() === "") return;
     if (await writeOne(entry.fieldId, entry.answer)) {
       for (const [k, r] of reportsRef.current) {
         if (r.fieldId === entry.fieldId) {
@@ -557,8 +557,11 @@ export function FillPanel({
     if (!list.ok) return;
     const normalized = normalizeQuestion(entry.label);
     const match = list.value.find((a) => a.questionPatterns.some((p) => normalizeQuestion(p) === normalized));
+    // Update is answer-only: the entry was already matched by an existing pattern, so
+    // never send `questionPatterns` here — the web repo's PUT merges via object spread
+    // and would clobber every other pattern a curated multi-pattern entry carries.
     const saved = match
-      ? await api.updateAnswer(match.id, { question: entry.label, answer: entry.answer })
+      ? await api.updateAnswer(match.id, { answer: entry.answer })
       : await api.createAnswer({ question: entry.label, answer: entry.answer });
     if (!saved.ok) return;
     setSavedFieldIds((prev) => new Set(prev).add(entry.fieldId));
@@ -763,8 +766,9 @@ export function FillPanel({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={a.answer.trim() === ""}
                       onClick={() => void acceptAnswer(a)}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-[color,transform] duration-fast ease-out-strong hover:text-text-primary active:scale-[0.97]"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-[color,transform] duration-fast ease-out-strong hover:text-text-primary active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
                     >
                       <Check aria-hidden className="h-3 w-3" />
                       Accept

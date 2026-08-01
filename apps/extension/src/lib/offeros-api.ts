@@ -229,17 +229,17 @@ export function createAnswer(
   );
 }
 
-/** Overwrite an existing answer-bank entry's text (re-accepting the same question). */
+/** Overwrite an existing answer-bank entry's text (re-accepting the same question).
+ *  Answer-only patch — deliberately omits `questionPatterns`: the entry was already
+ *  matched by an existing pattern, and the web repo's PUT merges the patch via object
+ *  spread, so sending `questionPatterns: [label]` here would clobber every other
+ *  pattern a curated multi-pattern entry carries. */
 export function updateAnswer(
   id: string,
-  input: { question: string; answer: string },
+  input: { answer: string },
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<AnswerEntry>> {
-  return call<AnswerEntry>(
-    `/answers/${id}`,
-    json("PUT", { questionPatterns: [input.question], answer: input.answer }),
-    fetchImpl,
-  );
+  return call<AnswerEntry>(`/answers/${id}`, json("PUT", { answer: input.answer }), fetchImpl);
 }
 
 /** Dedup lookup for "Add this job": exact-match applications already tracking this job URL. */
