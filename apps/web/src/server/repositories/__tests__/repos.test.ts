@@ -74,6 +74,17 @@ describe("application repo", () => {
     expect(getApplication(db, created.id)?.resumeId).toBe("resume-9");
   });
 
+  it("persists and reads back attachResume", () => {
+    const created = createApplication(db, {
+      jobInfo: { jobId: "j1", jobTitle: "T", companyName: "C" },
+    });
+    expect(created.attachResume).toBeUndefined();
+
+    const updated = updateApplication(db, created.id, { attachResume: "original" });
+    expect(updated?.attachResume).toBe("original");
+    expect(getApplication(db, created.id)?.attachResume).toBe("original");
+  });
+
   it("returns null for a missing id", () => {
     expect(getApplication(db, "nope")).toBeNull();
     expect(updateApplication(db, "nope", { status: "applied" })).toBeNull();

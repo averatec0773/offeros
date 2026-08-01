@@ -116,6 +116,7 @@ export function createDb(path: string): Db {
   addColumnIfMissing(sqlite, "resumes", "note", "note TEXT");
   addColumnIfMissing(sqlite, "resumes", "text", "text TEXT");
   addColumnIfMissing(sqlite, "applications", "resume_id", "resume_id TEXT");
+  addColumnIfMissing(sqlite, "applications", "attach_resume", "attach_resume TEXT");
   return drizzle(sqlite, { schema });
 }
 

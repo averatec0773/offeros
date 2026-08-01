@@ -60,6 +60,7 @@ export const resumeSchema = z.object({
   targetRole: z.string().optional(),
   note: z.string().optional(),
   text: z.string().optional(),
+  hasFile: z.boolean().default(false),
   createdAt: z.number(),
 });
 

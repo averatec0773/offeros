@@ -81,6 +81,7 @@ function resume(overrides: Partial<ResumeSummary>): ResumeSummary {
     name: "resume.pdf",
     mimeType: "application/pdf",
     isPrimary: false,
+    hasFile: false,
     createdAt: 1,
     ...overrides,
   };

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { APPLICATION_STATUSES } from "@offeros/core";
+import { APPLICATION_STATUSES, ATTACH_RESUME_OPTIONS } from "@offeros/core";
 import { getDb } from "@/server/db/client";
 import { getApplication, updateApplication } from "@/server/repositories/application-repo";
 import { handle, ok, notFound } from "@/server/http/envelope";
@@ -13,6 +13,7 @@ const patchSchema = z.object({
   notes: z.string().optional(),
   jdText: z.string().optional(),
   resumeId: z.string().optional(),
+  attachResume: z.enum(ATTACH_RESUME_OPTIONS).optional(),
   appliedAt: z.number().optional(),
 });
 

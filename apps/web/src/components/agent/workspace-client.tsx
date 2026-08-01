@@ -12,6 +12,7 @@ import {
 } from "@offeros/core";
 import type { LineDiff } from "@/lib/diff";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
 import { JobCard } from "./job-card";
 import { StepTimeline } from "./step-timeline";
@@ -114,6 +115,9 @@ export function WorkspaceClient({
   const [ticketCreated, setTicketCreated] = useState(false);
   const [resumes, setResumes] = useState<ResumeSummary[]>([]);
   const [resumeId, setResumeId] = useState<string | undefined>(application.resumeId);
+  const [attachResume, setAttachResume] = useState<"tailored" | "original">(
+    application.attachResume ?? "tailored",
+  );
   const busyRef = useRef(false);
 
   // The résumé picker's options; failing to load them simply hides the picker.
@@ -140,6 +144,17 @@ export function WorkspaceClient({
     } catch {
       setResumeId(prev);
       setError("Couldn't update the résumé for this application.");
+    }
+  }
+
+  async function handleAttachResumeChange(next: "tailored" | "original") {
+    const prev = attachResume;
+    setAttachResume(next); // optimistic
+    try {
+      await api.applications.update(application.id, { attachResume: next });
+    } catch {
+      setAttachResume(prev);
+      setError("Couldn't update the attach choice for this application.");
     }
   }
 
@@ -358,6 +373,40 @@ export function WorkspaceClient({
                     Re-upload it to enable real-résumé tailoring.
                   </p>
                 ) : null;
+              })()}
+              {(() => {
+                const effective = resumes.find(
+                  (r) => r.id === effectiveResumeId(resumeId, resumes),
+                );
+                if (!effective?.hasFile) return null;
+                return (
+                  <div className="mt-3">
+                    <span className="text-caption font-medium text-muted-foreground">Attach</span>
+                    <div className="mt-1 inline-flex overflow-hidden rounded-full ring-1 ring-inset ring-border">
+                      {(
+                        [
+                          { value: "tailored", label: "Tailored PDF" },
+                          { value: "original", label: "Original file" },
+                        ] as const
+                      ).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={attachResume === option.value}
+                          onClick={() => handleAttachResumeChange(option.value)}
+                          className={cn(
+                            "px-3.5 py-1.5 text-caption font-semibold transition-colors",
+                            attachResume === option.value
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-card text-foreground hover:bg-muted",
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
               })()}
             </div>
           )}

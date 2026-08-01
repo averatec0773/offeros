@@ -212,6 +212,7 @@ describe("OnboardingFlow — apply", () => {
       name: "resume.pdf",
       mimeType: "application/pdf",
       isPrimary: true,
+      hasFile: true,
       createdAt: Date.now(),
     });
   });

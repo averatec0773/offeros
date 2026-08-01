@@ -476,6 +476,7 @@ describe("effectiveResumeId", () => {
     name: "Primary.pdf",
     mimeType: "application/pdf",
     isPrimary: true,
+    hasFile: true,
     createdAt: 1,
   };
   const other: ResumeSummary = { ...primary, id: "r-other", name: "Other.pdf", isPrimary: false };
@@ -503,6 +504,7 @@ describe("WorkspaceClient — résumé picker", () => {
     name: "Primary.pdf",
     mimeType: "application/pdf",
     isPrimary: true,
+    hasFile: true,
     createdAt: 1,
   };
   const backend: ResumeSummary = {
@@ -510,6 +512,7 @@ describe("WorkspaceClient — résumé picker", () => {
     name: "Backend.pdf",
     mimeType: "application/pdf",
     isPrimary: false,
+    hasFile: true,
     note: "For backend roles",
     createdAt: 1,
   };
@@ -610,6 +613,99 @@ describe("WorkspaceClient — résumé picker", () => {
 
     await screen.findByLabelText(/résumé for this application/i);
     expect(screen.queryByText(/No text extracted from this résumé/i)).toBeNull();
+  });
+});
+
+describe("WorkspaceClient — attach résumé toggle", () => {
+  const primaryWithFile: ResumeSummary = {
+    id: "r-primary",
+    name: "Primary.pdf",
+    mimeType: "application/pdf",
+    isPrimary: true,
+    hasFile: true,
+    createdAt: 1,
+  };
+  const primaryNoFile: ResumeSummary = { ...primaryWithFile, hasFile: false };
+
+  it("renders both attach options when the effective résumé has a stored file", async () => {
+    vi.mocked(api.resumes.list).mockResolvedValue([primaryWithFile]);
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={baseTask({})}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    await screen.findByLabelText(/résumé for this application/i);
+    expect(screen.getByRole("button", { name: "Tailored PDF" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Original file" })).toBeTruthy();
+  });
+
+  it("hides the toggle when the effective résumé has no stored file", async () => {
+    vi.mocked(api.resumes.list).mockResolvedValue([primaryNoFile]);
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={baseTask({})}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    await screen.findByLabelText(/résumé for this application/i);
+    expect(screen.queryByRole("button", { name: "Original file" })).toBeNull();
+  });
+
+  it("defaults the active option to Tailored PDF when the application has no attachResume set", async () => {
+    vi.mocked(api.resumes.list).mockResolvedValue([primaryWithFile]);
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={baseTask({})}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    await screen.findByLabelText(/résumé for this application/i);
+    expect(screen.getByRole("button", { name: "Tailored PDF" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("persists the selection via applications.update when switched to Original file", async () => {
+    vi.mocked(api.resumes.list).mockResolvedValue([primaryWithFile]);
+    vi.mocked(api.applications.update).mockResolvedValue({
+      ...application,
+      attachResume: "original",
+    });
+
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={baseTask({})}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    await screen.findByLabelText(/résumé for this application/i);
+    fireEvent.click(screen.getByRole("button", { name: "Original file" }));
+
+    await waitFor(() =>
+      expect(api.applications.update).toHaveBeenCalledWith("app-1", { attachResume: "original" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Original file" }).getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
   });
 });
 

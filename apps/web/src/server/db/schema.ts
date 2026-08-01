@@ -44,6 +44,7 @@ export const applications = sqliteTable("applications", {
   jdText: text("jd_text"),
   notes: text("notes"),
   resumeId: text("resume_id"),
+  attachResume: text("attach_resume"),
   appliedAt: integer("applied_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),

@@ -31,8 +31,24 @@ function toSummary(row: Row): ResumeSummary {
     targetRole: row.targetRole ?? undefined,
     note: row.note ?? undefined,
     text: row.text ?? undefined,
+    hasFile: Boolean(row.filePath),
     createdAt: row.createdAt,
   });
+}
+
+export interface StoredResumeFile {
+  filePath: string;
+  mimeType: string;
+  name: string;
+}
+
+/** Row lookup for streaming a résumé's stored bytes. Null when `id` is
+ *  unknown or the row has no stored file (`filePath` null — an imported slot
+ *  that never carried a blob, or a legacy row). */
+export function getResumeFile(db: Db, id: string): StoredResumeFile | null {
+  const row = db.select().from(resumes).where(eq(resumes.id, id)).get();
+  if (!row || !row.filePath) return null;
+  return { filePath: row.filePath, mimeType: row.mimeType, name: row.name };
 }
 
 /** Clears `isPrimary` on every resume row — the single-primary invariant is

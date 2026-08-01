@@ -4,12 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PIPELINE_STEPS, type Artifact, type FieldReport, type Profile } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
-import { createApplication, getApplication } from "../../repositories/application-repo";
+import {
+  createApplication,
+  getApplication,
+  updateApplication,
+} from "../../repositories/application-repo";
 import { createAgentTask, updateAgentTask, getAgentTask } from "../../repositories/agent-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
 import { saveJdAnalysis } from "../../repositories/jd-analysis-repo";
 import { getFillHandoff } from "../../repositories/fill-handoff-repo";
+import { uploadResume } from "../resume-service";
 import { answers } from "../../db/schema";
 import {
   createHandoffForTask,
@@ -84,6 +89,21 @@ function seedArtifact(taskId: string, kind: "resume" | "cover-letter", content: 
     updatedAt: now,
   };
   return upsertArtifact(db, artifact);
+}
+
+const PDF_BASE64 = Buffer.from("%PDF-1.4 fake resume bytes").toString("base64");
+
+function seedResume(over: { name: string; isPrimary?: boolean }) {
+  return uploadResume(
+    db,
+    {
+      name: over.name,
+      mimeType: "application/pdf",
+      dataBase64: PDF_BASE64,
+      isPrimary: over.isPrimary,
+    },
+    { storageDir: join(dir, "resumes") },
+  );
 }
 
 function report(over: Partial<FieldReport> & Pick<FieldReport, "fieldId">): FieldReport {
@@ -198,6 +218,42 @@ describe("claimHandoff", () => {
 
   it("throws when the ticket does not exist", () => {
     expect(() => claimHandoff(db, "nope")).toThrow(ServiceError);
+  });
+});
+
+describe("claimHandoff — attachResume + resumeId", () => {
+  it("defaults attachResume to 'tailored' and resolves resumeId to the primary résumé", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const primary = seedResume({ name: "Primary.pdf", isPrimary: true });
+    const handoff = createHandoffForTask(db, taskId);
+    const bundle = claimHandoff(db, handoff.id);
+    expect(bundle.attachResume).toBe("tailored");
+    expect(bundle.resumeId).toBe(primary.id);
+  });
+
+  it("resolves resumeId to the application's explicit selection over the primary", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    seedResume({ name: "Primary.pdf", isPrimary: true });
+    const selected = seedResume({ name: "Selected.pdf" });
+    updateApplication(db, applicationId, { resumeId: selected.id });
+    const handoff = createHandoffForTask(db, taskId);
+    const bundle = claimHandoff(db, handoff.id);
+    expect(bundle.resumeId).toBe(selected.id);
+  });
+
+  it("carries an explicit attachResume choice from the application", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    updateApplication(db, applicationId, { attachResume: "original" });
+    const handoff = createHandoffForTask(db, taskId);
+    const bundle = claimHandoff(db, handoff.id);
+    expect(bundle.attachResume).toBe("original");
+  });
+
+  it("leaves resumeId undefined when there are no résumés at all", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    const bundle = claimHandoff(db, handoff.id);
+    expect(bundle.resumeId).toBeUndefined();
   });
 });
 

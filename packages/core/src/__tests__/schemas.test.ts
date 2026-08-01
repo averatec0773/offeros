@@ -68,6 +68,40 @@ describe("applicationSchema", () => {
     });
     expect(old.resumeId).toBeUndefined();
   });
+
+  it("round-trips an optional attachResume and parses an old-shaped application without one", () => {
+    const withAttach = applicationSchema.parse({
+      id: "app-4",
+      jobInfo: { jobId: "j1", jobTitle: "GenAI Engineer", companyName: "Evolver" },
+      status: "saved",
+      attachResume: "original",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(withAttach.attachResume).toBe("original");
+
+    // An application persisted before this task has no attachResume — still valid.
+    const old = applicationSchema.parse({
+      id: "app-5",
+      jobInfo: { jobId: "j1", jobTitle: "GenAI Engineer", companyName: "Evolver" },
+      status: "saved",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(old.attachResume).toBeUndefined();
+  });
+
+  it("rejects an unknown attachResume value", () => {
+    const bad = applicationSchema.safeParse({
+      id: "app-6",
+      jobInfo: { jobId: "j1", jobTitle: "GenAI Engineer", companyName: "Evolver" },
+      status: "saved",
+      attachResume: "nonsense",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(bad.success).toBe(false);
+  });
 });
 
 describe("resumeSchema", () => {
@@ -110,6 +144,26 @@ describe("resumeSchema", () => {
       createdAt: 1,
     });
     expect(old.text).toBeUndefined();
+  });
+
+  it("defaults hasFile to false and parses an old-shaped resume without one", () => {
+    const withFile = resumeSchema.parse({
+      id: "r1",
+      name: "Backend.pdf",
+      mimeType: "application/pdf",
+      hasFile: true,
+      createdAt: 1,
+    });
+    expect(withFile.hasFile).toBe(true);
+
+    // A resume row persisted before this task has no hasFile — defaults false.
+    const old = resumeSchema.parse({
+      id: "r2",
+      name: "Old.pdf",
+      mimeType: "application/pdf",
+      createdAt: 1,
+    });
+    expect(old.hasFile).toBe(false);
   });
 });
 

@@ -104,6 +104,29 @@ describe("uploadResume", () => {
     expect(reloaded?.text).toBe("Jordan Rivera\nBackend engineer...");
   });
 
+  it("reports hasFile true when the upload wrote a file to disk", () => {
+    const resume = uploadResume(
+      db,
+      { name: "a.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
+      { storageDir },
+    );
+    expect(resume.hasFile).toBe(true);
+  });
+
+  it("reports hasFile false for a row with no stored file (e.g. an imported slot without a blob)", () => {
+    db.insert(resumes)
+      .values({
+        id: "no-file",
+        name: "No File.pdf",
+        mimeType: "application/pdf",
+        isPrimary: false,
+        filePath: null,
+        createdAt: Date.now(),
+      })
+      .run();
+    expect(listResumes(db).find((r) => r.id === "no-file")?.hasFile).toBe(false);
+  });
+
   it("defaults to an empty string when no text is provided", () => {
     const resume = uploadResume(
       db,

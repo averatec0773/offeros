@@ -19,6 +19,7 @@ function toDomain(row: Row): Application {
     jdText: row.jdText ?? undefined,
     notes: row.notes ?? undefined,
     resumeId: row.resumeId ?? undefined,
+    attachResume: row.attachResume ?? undefined,
     appliedAt: row.appliedAt ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -51,6 +52,7 @@ export function createApplication(
     jdText: input.jdText ?? null,
     notes: null,
     resumeId: null,
+    attachResume: null,
     appliedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -62,7 +64,9 @@ export function createApplication(
 export function updateApplication(
   db: Db,
   id: string,
-  patch: Partial<Pick<Application, "status" | "notes" | "jdText" | "resumeId" | "appliedAt">>,
+  patch: Partial<
+    Pick<Application, "status" | "notes" | "jdText" | "resumeId" | "attachResume" | "appliedAt">
+  >,
 ): Application | null {
   const existing = db.select().from(applications).where(eq(applications.id, id)).get();
   if (!existing) return null;
@@ -72,6 +76,7 @@ export function updateApplication(
       notes: patch.notes ?? existing.notes,
       jdText: patch.jdText ?? existing.jdText,
       resumeId: patch.resumeId ?? existing.resumeId,
+      attachResume: patch.attachResume ?? existing.attachResume,
       appliedAt: patch.appliedAt ?? existing.appliedAt,
       updatedAt: Date.now(),
     })

@@ -17,7 +17,8 @@ import { getApplication, updateApplication } from "../repositories/application-r
 import { getArtifact } from "../repositories/artifact-repo";
 import { getJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getProfile } from "../repositories/profile-repo";
-import { buildProfileFacts } from "../pipeline/steps/grounding";
+import { buildProfileFacts, resolveEffectiveResume } from "../pipeline/steps/grounding";
+import { listResumes } from "./resume-service";
 import {
   createFillHandoff,
   getFillHandoff,
@@ -88,6 +89,17 @@ export type FillTaskBundle = {
   resumeText: string | null;
   coverLetterText: string | null;
   jdSummary: string | null;
+  /** Which stored résumé file the extension should attach to the ATS's file
+   *  input: the AI-tailored PDF export, or the user's original uploaded file
+   *  (`resumeId` below). Defaults to "tailored" when the application has no
+   *  explicit choice. */
+  attachResume: "tailored" | "original";
+  /** The application's effective résumé id (explicit selection, else the
+   *  account's primary) — the same résumé `resumeText` is grounded in.
+   *  Present so the panel can fetch the original stored file via
+   *  `GET /api/v1/resumes/[id]/file` when `attachResume` is "original".
+   *  Undefined when the account has no résumés at all. */
+  resumeId?: string;
 };
 
 const EMPTY_PERSONAL: FillPersonalInfo = { name: "", email: "", phone: "", address: "", links: {} };
@@ -140,6 +152,10 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
   const application = getApplication(db, handoff.applicationId);
   const jdAnalysis = getJdAnalysis(db, handoff.applicationId);
   const profile = getProfile(db);
+  const effectiveResume = resolveEffectiveResume(
+    { resumeId: application?.resumeId },
+    listResumes(db),
+  );
 
   const fillProfile: FillProfile = {
     personal: toFillPersonal(profile),
@@ -164,6 +180,8 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
     resumeText: currentVersionContent(getArtifact(db, handoff.taskId, "resume")),
     coverLetterText: coverLetter,
     jdSummary: jdAnalysis?.summary ?? null,
+    attachResume: application?.attachResume ?? "tailored",
+    resumeId: effectiveResume?.id,
   };
 
   updateFillHandoff(db, handoff.id, { status: "claimed" });

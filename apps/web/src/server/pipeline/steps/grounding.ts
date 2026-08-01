@@ -55,20 +55,30 @@ export function buildGroundingFacts(profile: Profile, resumeText: string): strin
 }
 
 /**
- * Resolves which résumé's stored text should ground the tailor task: the
- * application's explicit selection (`application.resumeId`) if it still
- * exists, else the account's primary résumé — the same default-to-primary
- * rule the workspace picker's `effectiveResumeId` applies. Falls back to
- * `buildProfileFacts` when there's no selected/primary résumé, or its stored
- * text is empty/whitespace-only.
+ * Resolves which stored résumé applies to an application: the explicit
+ * selection (`application.resumeId`) if it still exists, else the account's
+ * primary résumé. Single source of the default-to-primary rule so the
+ * workspace picker, the tailor grounding, and the fill bundle's "which file
+ * to attach" all agree. A selection pointing at a since-deleted résumé
+ * self-heals to primary rather than resolving to nothing.
+ */
+export function resolveEffectiveResume(
+  application: Pick<Application, "resumeId">,
+  resumes: ResumeSummary[],
+): ResumeSummary | undefined {
+  return resumes.find((r) => r.id === application.resumeId) ?? resumes.find((r) => r.isPrimary);
+}
+
+/**
+ * Resolves which résumé's stored text should ground the tailor task, via
+ * `resolveEffectiveResume`. Falls back to `buildProfileFacts` when there's no
+ * selected/primary résumé, or its stored text is empty/whitespace-only.
  */
 export function resolveResumeText(
   application: Pick<Application, "resumeId">,
   resumes: ResumeSummary[],
   profile: Profile,
 ): string {
-  const selected =
-    resumes.find((r) => r.id === application.resumeId) ?? resumes.find((r) => r.isPrimary);
-  const text = selected?.text;
+  const text = resolveEffectiveResume(application, resumes)?.text;
   return text && text.trim() ? text : buildProfileFacts(profile);
 }

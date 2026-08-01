@@ -36,6 +36,7 @@ const resume: ResumeSummary = {
   name: "resume.pdf",
   mimeType: "application/pdf",
   isPrimary: true,
+  hasFile: true,
   createdAt: Date.UTC(2026, 0, 1),
 };
 
@@ -181,6 +182,7 @@ describe("ResumesSection", () => {
       name: "primary.pdf",
       mimeType: "application/pdf",
       isPrimary: true,
+      hasFile: true,
       createdAt: Date.UTC(2026, 0, 1),
     };
     const secondary: ResumeSummary = {
@@ -188,6 +190,7 @@ describe("ResumesSection", () => {
       name: "secondary.pdf",
       mimeType: "application/pdf",
       isPrimary: false,
+      hasFile: true,
       createdAt: Date.UTC(2026, 0, 2),
     };
 

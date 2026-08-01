@@ -93,6 +93,7 @@ export const api = {
         notes: string;
         jdText: string;
         resumeId: string;
+        attachResume: "tailored" | "original";
         appliedAt: number;
       }>,
     ) => request<Application>(`/applications/${id}`, json("PATCH", patch)),
