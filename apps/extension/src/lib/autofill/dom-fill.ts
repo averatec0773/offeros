@@ -97,6 +97,24 @@ export function setControlledValue(el: Fillable, value: string): void {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+/**
+ * Attach a file to a file <input> by assigning a synthetic DataTransfer's
+ * FileList, then dispatching input+change so any React/JS listener on the
+ * field observes it. Verifies by re-reading `input.files` afterward — a
+ * site that ignores the programmatic assignment (or clears it) must not be
+ * reported as filled; the caller falls back to the manual-attach reason on
+ * a false return.
+ */
+export function attachFile(input: HTMLInputElement, file: File): boolean {
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  const attached = input.files;
+  return attached !== null && attached.length === 1 && attached[0]?.name === file.name;
+}
+
 export function highlight(el: HTMLElement): void {
   el.classList.add("offeros-filled");
   el.ownerDocument.defaultView?.setTimeout(() => el.classList.remove("offeros-filled"), 800);

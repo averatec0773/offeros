@@ -5,6 +5,8 @@ import {
   buildFieldReports,
   isCoverLetterField,
   isTextAnswerTarget,
+  NO_FILE_REASON,
+  CUSTOM_UPLOADER_REASON,
 } from "../src/lib/autofill/task-mode";
 import type { FillTicket } from "../src/lib/offeros-api";
 import { jobIdFromUrl } from "../src/lib/autofill/recipes";
@@ -168,6 +170,85 @@ describe("buildFieldReports", () => {
     const t = [trace({ fieldId: "f1", status: "fillable", source: "answerBank", chosenValue: "Yes" })];
     const r = buildFieldReports(t, new Map([["f1", "filled"]]), new Set(), "p")[0]!;
     expect(r.source).toBe("answer-bank");
+  });
+
+  it("maps a verified résumé attach to filled + source resume-file + filename value", () => {
+    const t = [
+      trace({
+        fieldId: "f1",
+        label: "Resume/CV",
+        classifiedType: "resume",
+        status: "needs-answer",
+        source: "personal",
+      }),
+    ];
+    const r = buildFieldReports(
+      t,
+      new Map([["f1", { outcome: "filled", value: "Jordan_Rivera_Resume.pdf", source: "resume-file" }]]),
+      new Set(["f1"]),
+      "p",
+    )[0]!;
+    expect(r).toMatchObject({
+      outcome: "filled",
+      source: "resume-file",
+      value: "Jordan_Rivera_Resume.pdf",
+    });
+  });
+
+  it("maps a cover-letter file attach to filled + source cover-letter-file", () => {
+    const t = [
+      trace({
+        fieldId: "f1",
+        label: "Cover Letter",
+        classifiedType: "coverLetter",
+        status: "needs-answer",
+        source: "personal",
+      }),
+    ];
+    const r = buildFieldReports(
+      t,
+      new Map([["f1", { outcome: "filled", value: "Cover_Letter.pdf", source: "cover-letter-file" }]]),
+      new Set(),
+      "p",
+    )[0]!;
+    expect(r).toMatchObject({ outcome: "filled", source: "cover-letter-file", value: "Cover_Letter.pdf" });
+  });
+
+  it("a write outcome's explicit reason overrides the trace's default reason", () => {
+    const t = [
+      trace({
+        fieldId: "f1",
+        classifiedType: "resume",
+        status: "needs-answer",
+        reason: "file input (classified 'resume') → always manual upload, left needs-answer",
+      }),
+    ];
+    const r = buildFieldReports(
+      t,
+      new Map([["f1", { outcome: "needs-user", reason: NO_FILE_REASON, source: "resume-file" }]]),
+      new Set(),
+      "p",
+    )[0]!;
+    expect(r.outcome).toBe("needs-user");
+    expect(r.reason).toBe(NO_FILE_REASON);
+  });
+
+  it("a failed-verification attach reports needs-user with the custom-uploader reason", () => {
+    const t = [trace({ fieldId: "f1", classifiedType: "coverLetter", status: "needs-answer" })];
+    const r = buildFieldReports(
+      t,
+      new Map([["f1", { outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON, source: "cover-letter-file" }]]),
+      new Set(),
+      "p",
+    )[0]!;
+    expect(r.outcome).toBe("needs-user");
+    expect(r.reason).toBe(CUSTOM_UPLOADER_REASON);
+  });
+
+  it("without a write override, reason falls back to the trace's classify-time reason unchanged", () => {
+    const t = [trace({ fieldId: "f1", status: "unknown", source: "none", reason: "no classifier match → left unknown" })];
+    const r = buildFieldReports(t, new Map(), new Set(), "p")[0]!;
+    expect(r.reason).toBe("no classifier match → left unknown");
   });
 });
 

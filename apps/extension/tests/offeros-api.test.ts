@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   claim,
   createTaskFromJd,
+  fetchArtifactPdf,
+  fetchResumeFile,
   findApplicationsByJobUrl,
   generateAnswer,
   getPending,
@@ -60,6 +62,7 @@ describe("claim", () => {
       resumeText: null,
       coverLetterText: null,
       jdSummary: null,
+      attachResume: "tailored" as const,
     };
     const f = fakeFetch(200, ok(bundle));
     const r = await claim("h1", f.fn);
@@ -105,6 +108,73 @@ describe("findApplicationsByJobUrl", () => {
     const fn = (async () => { throw new Error("net down"); }) as typeof fetch;
     const r = await findApplicationsByJobUrl("https://example.com/job/1", fn);
     expect(r).toEqual({ ok: false, error: "network error" });
+  });
+});
+
+interface RawCall { url: string; init: RequestInit | undefined }
+const fakeRawFetch = (status: number, body: Uint8Array, headers?: Record<string, string>) => {
+  const calls: RawCall[] = [];
+  const fn = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(body.buffer as ArrayBuffer, { status, headers });
+  }) as typeof fetch;
+  return { fn, calls };
+};
+
+describe("fetchResumeFile", () => {
+  it("GETs the resume file route and returns bytes + filename + mimeType on success", async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const f = fakeRawFetch(200, bytes, {
+      "content-type": "application/pdf",
+      "content-disposition": 'attachment; filename="Resume.pdf"; filename*=UTF-8\'\'Resume.pdf',
+    });
+    const r = await fetchResumeFile("r1", f.fn);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(new Uint8Array(r.bytes)).toEqual(bytes);
+    expect(r.fileName).toBe("Resume.pdf");
+    expect(r.mimeType).toBe("application/pdf");
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/resumes/r1/file");
+  });
+
+  it("returns ok:false on a 404 (no stored file — the honest fallback trigger)", async () => {
+    const f = fakeRawFetch(404, new Uint8Array());
+    const r = await fetchResumeFile("missing", f.fn);
+    expect(r).toEqual({ ok: false });
+  });
+
+  it("returns ok:false on a network throw", async () => {
+    const fn = (async () => { throw new Error("net down"); }) as typeof fetch;
+    expect(await fetchResumeFile("r1", fn)).toEqual({ ok: false });
+  });
+
+  it("falls back to a default filename/mimeType when headers are absent", async () => {
+    const f = fakeRawFetch(200, new Uint8Array([9]));
+    const r = await fetchResumeFile("r1", f.fn);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fileName).toBe("file");
+    expect(r.mimeType).toBe("application/octet-stream");
+  });
+});
+
+describe("fetchArtifactPdf", () => {
+  it("GETs the task artifact pdf route for the given kind", async () => {
+    const f = fakeRawFetch(200, new Uint8Array([4, 5]), {
+      "content-type": "application/pdf",
+      "content-disposition": 'attachment; filename="Acme_Cover_Letter.pdf"',
+    });
+    const r = await fetchArtifactPdf("t1", "cover-letter", f.fn);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.fileName).toBe("Acme_Cover_Letter.pdf");
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/artifacts/cover-letter/pdf");
+  });
+
+  it("returns ok:false on a 404 (render failed / artifact absent)", async () => {
+    const f = fakeRawFetch(404, new Uint8Array());
+    const r = await fetchArtifactPdf("t1", "resume", f.fn);
+    expect(r).toEqual({ ok: false });
   });
 });
 

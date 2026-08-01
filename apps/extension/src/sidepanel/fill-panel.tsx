@@ -12,11 +12,18 @@ import {
 } from "@offeros/autofill";
 import type { FillValue } from "../lib/autofill/dom-fill";
 import { jobIdFromUrl } from "../lib/autofill/recipes";
-import type { ScanResponse, FillResponse, CaptureJdResponse } from "../lib/autofill/autofill-messaging";
+import { bytesToBase64 } from "../lib/autofill/base64";
+import type {
+  ScanResponse,
+  FillResponse,
+  CaptureJdResponse,
+  AttachFileResponse,
+} from "../lib/autofill/autofill-messaging";
 import type {
   ApiResult,
   ApplicationSummary,
   FieldReport,
+  FileFetchResult,
   FillTaskBundle,
   FillTicket,
 } from "../lib/offeros-api";
@@ -25,6 +32,9 @@ import {
   isCoverLetterField,
   isTextAnswerTarget,
   matchHandoff,
+  CUSTOM_UPLOADER_REASON,
+  NO_FILE_REASON,
+  type FieldReportSource,
   type WriteOutcome,
 } from "../lib/autofill/task-mode";
 
@@ -59,7 +69,18 @@ export interface FillApi {
     jobUrl: string;
     jdText: string;
   }) => Promise<ApiResult<{ id: string; applicationId: string }>>;
+  /** Original stored résumé bytes (`bundle.attachResume === "original"`). */
+  fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
+  /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
+  fetchArtifactPdf: (taskId: string, kind: "resume" | "cover-letter") => Promise<FileFetchResult>;
 }
+
+/** One OfferOS-managed file kind a file input can classify as — the only
+ *  kinds the panel ever auto-attaches. Maps to the report source vocabulary. */
+const FILE_KIND_SOURCE: Record<"resume" | "coverLetter", FieldReportSource> = {
+  resume: "resume-file",
+  coverLetter: "cover-letter-file",
+};
 
 /**
  * One-click "Add this job": capture the JD off the active tab, let the user
@@ -288,6 +309,7 @@ export function FillPanel({
   scan,
   fill,
   capture,
+  attachFile,
   api,
   rescanNonce,
   openWebApp,
@@ -297,6 +319,12 @@ export function FillPanel({
   scan: () => Promise<ScanResponse>;
   fill: (values: FillValue[]) => Promise<FillResponse>;
   capture: () => Promise<CaptureJdResponse>;
+  /** Cross the messaging boundary to attach a fetched file to a file input in
+   *  the content-script's DOM (see engine-service.ts's Engine.attachFile). */
+  attachFile: (
+    fieldId: string,
+    file: { fileName: string; mimeType: string; bytesBase64: string },
+  ) => Promise<AttachFileResponse>;
   api: FillApi;
   rescanNonce: number;
   openWebApp: () => void;
@@ -344,9 +372,34 @@ export function FillPanel({
     return r.outcomes?.some(([id, o]) => id === fieldId && o === "filled") ?? false;
   };
 
+  // Fetch bytes for one OfferOS-managed file kind, then drive the content-script
+  // attach + DOM verify over the messaging boundary. A 404 (nothing stored, or a
+  // stale attachResume preference) and a failed DOM verify both fall back to an
+  // honest needs-user reason — never a crash, never a false "filled".
+  const attachManagedFile = async (
+    fieldId: string,
+    fetched: FileFetchResult,
+    kind: "resume" | "coverLetter",
+  ): Promise<WriteOutcome> => {
+    const source = FILE_KIND_SOURCE[kind];
+    if (!fetched.ok) {
+      return { outcome: "needs-user", reason: NO_FILE_REASON, source };
+    }
+    const res = await attachFile(fieldId, {
+      fileName: fetched.fileName,
+      mimeType: fetched.mimeType,
+      bytesBase64: bytesToBase64(fetched.bytes),
+    });
+    if (res.ok) {
+      return { outcome: "filled", value: fetched.fileName, source };
+    }
+    return { outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON, source };
+  };
+
   // Task-mode fill for one (wizard) page: classified/personal fields from the bundle
   // profile, cover-letter textareas verbatim, AI answers for open-ended free-text,
-  // then a cumulative FieldReport back to the workspace. Never touches file inputs.
+  // résumé/cover-letter file attaches, then a cumulative FieldReport back to the
+  // workspace. Any other (unrecognized) file input is still never touched.
   const taskFillPage = async (planForFill: FillItem[], sr: OkScan, traceForFill: FieldTrace[]) => {
     const b = bundleRef.current;
     if (!b || pendingRef.current) return;
@@ -407,7 +460,29 @@ export function FillPanel({
         setAiAnswers((prev) => [...prev.filter((e) => !collected.some((c) => c.fieldId === e.fieldId)), ...collected]);
       }
 
-      // 4) build + accumulate + send the cumulative report for this page.
+      // 4) résumé / cover-letter file attach — only the file inputs the classifier
+      // recognized as one of the two OfferOS-managed kinds; cover-letter only
+      // when the bundle actually carries a confirmed cover letter.
+      for (const t of traceForFill) {
+        if (t.status !== "needs-answer") continue;
+        const desc = descriptorById.get(t.fieldId);
+        if (!desc || desc.type !== "file") continue;
+
+        if (t.classifiedType === "resume") {
+          const fetched =
+            b.attachResume === "original"
+              ? b.resumeId
+                ? await api.fetchResumeFile(b.resumeId)
+                : ({ ok: false } as const)
+              : await api.fetchArtifactPdf(b.taskId, "resume");
+          writes.set(t.fieldId, await attachManagedFile(t.fieldId, fetched, "resume"));
+        } else if (t.classifiedType === "coverLetter" && coverText) {
+          const fetched = await api.fetchArtifactPdf(b.taskId, "cover-letter");
+          writes.set(t.fieldId, await attachManagedFile(t.fieldId, fetched, "coverLetter"));
+        }
+      }
+
+      // 5) build + accumulate + send the cumulative report for this page.
       const page = pageSigRef.current ?? sr.url;
       const requiredIds = new Set(planForFill.filter((i) => i.required).map((i) => i.fieldId));
       accumulateReports(buildFieldReports(traceForFill, writes, requiredIds, page));

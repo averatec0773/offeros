@@ -55,6 +55,47 @@ describe("fieldReportSchema", () => {
     expect(FIELD_REPORT_OUTCOMES).toEqual(["filled", "skipped", "needs-user", "failed"]);
   });
 
+  it("round-trips the file-attach sources (resume-file, cover-letter-file) — additive, old reports unaffected", () => {
+    const resumeFile = fieldReportSchema.parse({
+      fieldId: "f1",
+      label: "Resume/CV",
+      classifiedType: "resume",
+      status: "needs-answer",
+      value: "Jordan_Rivera_Resume.pdf",
+      source: "resume-file",
+      reason: "attached the tailored résumé PDF",
+      outcome: "filled",
+      required: true,
+    });
+    expect(resumeFile.source).toBe("resume-file");
+
+    const coverLetterFile = fieldReportSchema.parse({
+      fieldId: "f2",
+      label: "Cover letter",
+      classifiedType: "coverLetter",
+      status: "needs-answer",
+      source: "cover-letter-file",
+      reason: "no file available to attach",
+      outcome: "needs-user",
+      required: false,
+    });
+    expect(coverLetterFile.source).toBe("cover-letter-file");
+
+    // an old report (pre-Phase-9 source vocabulary) still parses unchanged.
+    const old = fieldReportSchema.parse({
+      fieldId: "f3",
+      label: "Email",
+      classifiedType: "email",
+      status: "filled",
+      value: "a@b.c",
+      source: "personal",
+      reason: "matched personal.email",
+      outcome: "filled",
+      required: true,
+    });
+    expect(old.source).toBe("personal");
+  });
+
   it("rejects an unknown outcome", () => {
     const bad = fieldReportSchema.safeParse({
       fieldId: "f1",

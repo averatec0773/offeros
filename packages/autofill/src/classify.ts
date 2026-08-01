@@ -25,6 +25,7 @@ export type CanonicalField =
   | "github"
   | "portfolio"
   | "resume"
+  | "coverLetter"
   | "skills";
 
 const norm = (s: string) =>
@@ -96,6 +97,10 @@ const LABEL_RULES: { test: (t: string) => boolean; field: CanonicalField }[] = [
   { test: (t) => /\bskills?\b/.test(t), field: "skills" },
 ];
 
+// mirrors task-mode.ts's isCoverLetterField phrase set; duplicated (not
+// imported) because this package must stay DOM-free and extension-independent.
+const COVER_LETTER_PHRASES = ["cover letter", "motivation letter", "cover note"];
+
 // autocomplete may be compound ("section-x shipping home tel") — the field
 // token sits at the end, so scan tokens right-to-left for a mapped one.
 function autocompleteField(ac: string): CanonicalField | null {
@@ -113,6 +118,12 @@ export function classifyField(desc: FieldDescriptor): CanonicalField | null {
 
   const label = norm([desc.label, desc.ariaLabel, desc.placeholder].filter((s) => s).join(" "));
   if (desc.type === "file" && (label.includes("resume") || label.includes("cv"))) return "resume";
+  // cover-letter file kind: guarded to type "file" only, exactly like resume
+  // above — a cover-letter *textarea* stays ungoverned by the classifier
+  // (task-mode.ts's isCoverLetterField + the paste-verbatim flow own that case).
+  if (desc.type === "file" && COVER_LETTER_PHRASES.some((phrase) => label.includes(phrase))) {
+    return "coverLetter";
+  }
   // long question-like labels ("We would like to contact you via SMS…") must not
   // hit keyword rules built for short field labels; they belong to the answer bank.
   if (label && label.split(" ").length <= 6) {

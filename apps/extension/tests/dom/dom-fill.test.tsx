@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
-import { applyFill, scanFields, setControlledValue } from "../../src/lib/autofill/dom-fill";
+import { applyFill, attachFile, scanFields, setControlledValue } from "../../src/lib/autofill/dom-fill";
 import { matchAts } from "../../src/lib/autofill/recipes";
 
 const recipe = matchAts("https://boards.greenhouse.io/acme/jobs/1")!;
@@ -171,6 +171,40 @@ describe("applyFill", () => {
     const [f] = scanFields(document.body, recipe);
     const filled = await applyFill(document, [{ fieldId: f!.descriptor.fieldId, value: "evil" }]);
     expect(filled).toBe(0);
+  });
+});
+
+describe("attachFile", () => {
+  it("assigns the file to input.files, dispatches input+change, and verifies it took", () => {
+    document.body.innerHTML = `<input type="file" name="resume" />`;
+    const input = document.querySelector("input")! as HTMLInputElement;
+    const events: string[] = [];
+    input.addEventListener("input", () => events.push("input"));
+    input.addEventListener("change", () => events.push("change"));
+    const file = new File(["%PDF-1.4 fake"], "Jordan_Rivera_Resume.pdf", { type: "application/pdf" });
+
+    const ok = attachFile(input, file);
+
+    expect(ok).toBe(true);
+    expect(events).toEqual(["input", "change"]);
+    expect(input.files).toHaveLength(1);
+    expect(input.files?.[0]?.name).toBe("Jordan_Rivera_Resume.pdf");
+  });
+
+  it("returns false when the assignment doesn't verify (site ignores the write, reads back empty)", () => {
+    document.body.innerHTML = `<input type="file" name="resume" />`;
+    const input = document.querySelector("input")! as HTMLInputElement;
+    // Simulate a site/browser that silently swallows the programmatic
+    // assignment: the setter is a no-op, the getter always reads back empty.
+    const emptyFiles = new DataTransfer().files;
+    Object.defineProperty(input, "files", {
+      get: () => emptyFiles,
+      set: () => {},
+      configurable: true,
+    });
+    const file = new File(["x"], "resume.pdf", { type: "application/pdf" });
+
+    expect(attachFile(input, file)).toBe(false);
   });
 });
 

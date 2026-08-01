@@ -10,7 +10,9 @@ import type {
   ScanResponse,
   FillResponse,
   CaptureJdResponse,
+  AttachFileResponse,
 } from "../../src/lib/autofill/autofill-messaging";
+import { bytesToBase64 } from "../../src/lib/autofill/base64";
 
 const greenhouseUrl = "https://boards.greenhouse.io/acme/jobs/1";
 
@@ -82,6 +84,72 @@ describe("engine FILL handler", () => {
     expect(Array.isArray(res.outcomes)).toBe(true);
     expect(res.outcomes).toEqual([[emailId, "filled"]]);
     expect(document.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe("a@b.com");
+  });
+});
+
+describe("engine ATTACH_FILE handler", () => {
+  const seedFileForm = () => {
+    history.replaceState(null, "", greenhouseUrl);
+    document.body.innerHTML = `<main><h1>Staff Engineer</h1><form>
+      <label for="r">Resume</label><input id="r" type="file" name="resume" />
+      <label for="n">Full name</label><input id="n" name="name" type="text" />
+    </form></main>`;
+  };
+
+  it("decodes the base64 payload, attaches it to the file input, and verifies", async () => {
+    seedFileForm();
+    registerEngine(document, ctx());
+    const scan = (await browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })) as ScanResponse;
+    expect(scan.ok).toBe(true);
+    if (!scan.ok) return;
+    const resumeId = scan.descriptors.find((d) => d.name === "resume")!.fieldId;
+
+    const bytes = new Uint8Array([37, 80, 68, 70]); // "%PDF"
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_ATTACH_FILE",
+      fieldId: resumeId,
+      fileName: "Jordan_Rivera_Resume.pdf",
+      mimeType: "application/pdf",
+      bytesBase64: bytesToBase64(bytes),
+    })) as AttachFileResponse;
+
+    expect(res.ok).toBe(true);
+    const input = document.querySelector<HTMLInputElement>('input[name="resume"]')!;
+    expect(input.files).toHaveLength(1);
+    expect(input.files?.[0]?.name).toBe("Jordan_Rivera_Resume.pdf");
+  });
+
+  it("returns ok:false for a fieldId that doesn't resolve to a file input", async () => {
+    seedFileForm();
+    registerEngine(document, ctx());
+    const scan = (await browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })) as ScanResponse;
+    expect(scan.ok).toBe(true);
+    if (!scan.ok) return;
+    const nameId = scan.descriptors.find((d) => d.name === "name")!.fieldId;
+
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_ATTACH_FILE",
+      fieldId: nameId,
+      fileName: "resume.pdf",
+      mimeType: "application/pdf",
+      bytesBase64: bytesToBase64(new Uint8Array([1])),
+    })) as AttachFileResponse;
+
+    expect(res.ok).toBe(false);
+  });
+
+  it("returns ok:false for a fieldId with no matching element", async () => {
+    seedFileForm();
+    registerEngine(document, ctx());
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_ATTACH_FILE",
+      fieldId: "no-such-field",
+      fileName: "resume.pdf",
+      mimeType: "application/pdf",
+      bytesBase64: bytesToBase64(new Uint8Array([1])),
+    })) as AttachFileResponse;
+
+    expect(res.ok).toBe(false);
   });
 });
 

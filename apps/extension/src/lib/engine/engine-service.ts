@@ -1,21 +1,32 @@
 import { matchAts, companyFromUrl } from "../autofill/recipes";
-import { scanFields, applyFillDetailed, type FillValue } from "../autofill/dom-fill";
+import {
+  scanFields,
+  applyFillDetailed,
+  attachFile as domAttachFile,
+  resolveFieldEl,
+  highlight,
+  type FillValue,
+} from "../autofill/dom-fill";
 import { captureJd } from "../autofill/jd-capture";
+import { base64ToBytes } from "../autofill/base64";
 import { effectiveDocOf, watchPage } from "../overlay/page-watcher";
 import {
   isEngineScanRequest,
   isEngineFillRequest,
   isEngineCaptureJdRequest,
+  isEngineAttachFileRequest,
   sendEnginePageChanged,
   type ScanResponse,
   type FillResponse,
   type CaptureJdResponse,
+  type AttachFileResponse,
 } from "../autofill/autofill-messaging";
 
 export interface Engine {
   scan(): Promise<ScanResponse>;
   fill(values: FillValue[]): Promise<FillResponse>;
   capture(): CaptureJdResponse;
+  attachFile(fieldId: string, fileName: string, mimeType: string, bytesBase64: string): Promise<AttachFileResponse>;
   watch(cb: () => void): () => void;
 }
 
@@ -78,9 +89,32 @@ export function createEngine(doc: Document): Engine {
     };
   };
 
+  // File input only — resolveFieldEl re-resolves at call time (stale-ref
+  // survival, same as fill()). A non-file or missing element never attaches.
+  const attachFile = async (
+    fieldId: string,
+    fileName: string,
+    mimeType: string,
+    bytesBase64: string,
+  ): Promise<AttachFileResponse> => {
+    const el = resolveFieldEl(edoc(), fieldId);
+    if (!(el instanceof HTMLInputElement) || el.type !== "file") return { ok: false };
+    const bytes = base64ToBytes(bytesBase64);
+    // base64ToBytes always allocates a fresh, exactly-sized buffer (never a
+    // subview) — .buffer is safe to hand to File as-is. Cast only to satisfy
+    // BlobPart's stricter Uint8Array<ArrayBuffer> vs. the DOM lib's
+    // Uint8Array<ArrayBufferLike> inference.
+    const file = new File([bytes.buffer as ArrayBuffer], fileName, {
+      type: mimeType || "application/octet-stream",
+    });
+    const ok = domAttachFile(el, file);
+    if (ok) highlight(el);
+    return { ok };
+  };
+
   const watch = (cb: () => void) => watchPage(doc, cb);
 
-  return { scan, fill, capture, watch };
+  return { scan, fill, capture, attachFile, watch };
 }
 
 export interface EngineContext {
@@ -102,6 +136,9 @@ export function registerEngine(doc: Document, ctx: EngineContext): Engine {
     if (isEngineScanRequest(msg)) return engine.scan();
     if (isEngineFillRequest(msg)) return engine.fill(msg.values);
     if (isEngineCaptureJdRequest(msg)) return Promise.resolve(engine.capture());
+    if (isEngineAttachFileRequest(msg)) {
+      return engine.attachFile(msg.fieldId, msg.fileName, msg.mimeType, msg.bytesBase64);
+    }
     return undefined;
   };
   browser.runtime.onMessage.addListener(listener);

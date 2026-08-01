@@ -31,6 +31,13 @@ export type FillTaskBundle = {
   resumeText: string | null;
   coverLetterText: string | null;
   jdSummary: string | null;
+  /** Which stored résumé file to attach to the ATS's file input: the AI-tailored
+   *  PDF export, or the user's original uploaded file (`resumeId` below). */
+  attachResume: "tailored" | "original";
+  /** The application's effective résumé id — present so the panel can fetch the
+   *  original stored file via `fetchResumeFile` when `attachResume` is "original".
+   *  Undefined when the account has no résumés at all. */
+  resumeId?: string;
 };
 
 /** Mirrors apps/web's `Application` structurally, trimmed to what the panel needs. */
@@ -95,6 +102,67 @@ const json = (method: string, payload: unknown): RequestInit => ({
   method,
   body: JSON.stringify(payload),
 });
+
+/** A raw file fetch (résumé bytes / rendered PDF) — not the JSON envelope,
+ *  since these routes stream bytes on success. A non-2xx response (including
+ *  a 404 "nothing to attach") collapses to `{ ok: false }`, same as `call`'s
+ *  network-error/malformed-response cases — never throws to the caller. */
+export type FileFetchResult =
+  | { ok: true; bytes: ArrayBuffer; fileName: string; mimeType: string }
+  | { ok: false };
+
+/** Content-Disposition filename: prefers the RFC 5987 UTF-8 form (matches
+ *  non-ASCII names like "Résumé.pdf"), falls back to the ASCII `filename="…"`. */
+function parseFilename(header: string | null): string | null {
+  if (!header) return null;
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8?.[1]) {
+    try {
+      return decodeURIComponent(utf8[1]);
+    } catch {
+      // fall through to the ASCII form
+    }
+  }
+  const ascii = /filename="([^"]*)"/i.exec(header);
+  return ascii?.[1] ?? null;
+}
+
+async function fetchFile(path: string, fetchImpl: typeof fetch): Promise<FileFetchResult> {
+  const base = await settings.webApiBase.getValue();
+  let response: Response;
+  try {
+    response = await fetchImpl(`${base}/api/v1${path}`);
+  } catch {
+    return { ok: false };
+  }
+  if (!response.ok) return { ok: false };
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await response.arrayBuffer();
+  } catch {
+    return { ok: false };
+  }
+  const fileName = parseFilename(response.headers.get("content-disposition")) ?? "file";
+  const mimeType = response.headers.get("content-type") ?? "application/octet-stream";
+  return { ok: true, bytes, fileName, mimeType };
+}
+
+/** Fetch a stored résumé's original bytes (`attachResume: "original"`). */
+export function fetchResumeFile(
+  resumeId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<FileFetchResult> {
+  return fetchFile(`/resumes/${resumeId}/file`, fetchImpl);
+}
+
+/** Fetch a task's rendered artifact PDF — the tailored résumé, or the cover letter. */
+export function fetchArtifactPdf(
+  taskId: string,
+  kind: "resume" | "cover-letter",
+  fetchImpl: typeof fetch = fetch,
+): Promise<FileFetchResult> {
+  return fetchFile(`/agent/tasks/${taskId}/artifacts/${kind}/pdf`, fetchImpl);
+}
 
 export function getPending(fetchImpl: typeof fetch = fetch): Promise<ApiResult<FillTicket[]>> {
   return call<FillTicket[]>("/agent/fill/pending", undefined, fetchImpl);

@@ -42,11 +42,27 @@ export interface EngineFillRequest {
 export interface EngineCaptureJdRequest {
   kind: "OFFEROS_ENGINE_CAPTURE_JD";
 }
+export interface EngineAttachFileRequest {
+  kind: "OFFEROS_ENGINE_ATTACH_FILE";
+  fieldId: string;
+  fileName: string;
+  mimeType: string;
+  /** The file's bytes, base64-encoded — see base64.ts for why. */
+  bytesBase64: string;
+}
 export interface EnginePageChangedMessage {
   kind: "OFFEROS_ENGINE_PAGE_CHANGED";
 }
 
-export type EngineRequest = EngineScanRequest | EngineFillRequest | EngineCaptureJdRequest;
+export interface AttachFileResponse {
+  ok: boolean;
+}
+
+export type EngineRequest =
+  | EngineScanRequest
+  | EngineFillRequest
+  | EngineCaptureJdRequest
+  | EngineAttachFileRequest;
 
 function hasKind(m: unknown, kind: string): boolean {
   return typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === kind;
@@ -61,8 +77,21 @@ export function isEngineFillRequest(m: unknown): m is EngineFillRequest {
 export function isEngineCaptureJdRequest(m: unknown): m is EngineCaptureJdRequest {
   return hasKind(m, "OFFEROS_ENGINE_CAPTURE_JD");
 }
+export function isEngineAttachFileRequest(m: unknown): m is EngineAttachFileRequest {
+  return (
+    hasKind(m, "OFFEROS_ENGINE_ATTACH_FILE") &&
+    typeof (m as EngineAttachFileRequest).fieldId === "string" &&
+    typeof (m as EngineAttachFileRequest).fileName === "string" &&
+    typeof (m as EngineAttachFileRequest).bytesBase64 === "string"
+  );
+}
 export function isEngineRequest(m: unknown): m is EngineRequest {
-  return isEngineScanRequest(m) || isEngineFillRequest(m) || isEngineCaptureJdRequest(m);
+  return (
+    isEngineScanRequest(m) ||
+    isEngineFillRequest(m) ||
+    isEngineCaptureJdRequest(m) ||
+    isEngineAttachFileRequest(m)
+  );
 }
 export function isEnginePageChanged(m: unknown): m is EnginePageChangedMessage {
   return hasKind(m, "OFFEROS_ENGINE_PAGE_CHANGED");
@@ -76,6 +105,21 @@ export async function sendEngineFill(tabId: number, values: FillValue[]): Promis
 }
 export async function sendEngineCaptureJd(tabId: number): Promise<CaptureJdResponse> {
   return (await browser.tabs.sendMessage(tabId, { kind: "OFFEROS_ENGINE_CAPTURE_JD" } satisfies EngineCaptureJdRequest)) as CaptureJdResponse;
+}
+export async function sendEngineAttachFile(
+  tabId: number,
+  fieldId: string,
+  fileName: string,
+  mimeType: string,
+  bytesBase64: string,
+): Promise<AttachFileResponse> {
+  return (await browser.tabs.sendMessage(tabId, {
+    kind: "OFFEROS_ENGINE_ATTACH_FILE",
+    fieldId,
+    fileName,
+    mimeType,
+    bytesBase64,
+  } satisfies EngineAttachFileRequest)) as AttachFileResponse;
 }
 export function sendEnginePageChanged(): void {
   void browser.runtime

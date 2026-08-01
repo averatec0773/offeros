@@ -5,6 +5,7 @@ import { Button } from "../../src/components/ui/button";
 import { matchAts } from "../../src/lib/autofill/recipes";
 import {
   isEnginePageChanged,
+  sendEngineAttachFile,
   sendEngineCaptureJd,
   sendEngineFill,
   sendEngineScan,
@@ -12,6 +13,8 @@ import {
 import {
   claim,
   createTaskFromJd,
+  fetchArtifactPdf,
+  fetchResumeFile,
   findApplicationsByJobUrl,
   generateAnswer,
   getPending,
@@ -37,6 +40,8 @@ const api = {
   generateAnswer,
   findApplicationsByJobUrl,
   createTaskFromJd,
+  fetchResumeFile,
+  fetchArtifactPdf,
 };
 
 export default function App() {
@@ -88,6 +93,11 @@ export default function App() {
   const scan = useCallback(() => sendEngineScan(tabId), [tabId]);
   const fill = useCallback((values: Parameters<typeof sendEngineFill>[1]) => sendEngineFill(tabId, values), [tabId]);
   const capture = useCallback(() => sendEngineCaptureJd(tabId), [tabId]);
+  const attachFile = useCallback(
+    (fieldId: string, file: { fileName: string; mimeType: string; bytesBase64: string }) =>
+      sendEngineAttachFile(tabId, fieldId, file.fileName, file.mimeType, file.bytesBase64),
+    [tabId],
+  );
   const openWebApp = useMemo(() => () => void browser.tabs.create({ url: apiBase || undefined }), [apiBase]);
   const openApplication = useCallback(
     (applicationId: string) => void browser.tabs.create({ url: `${apiBase}/applications/${applicationId}` }),
@@ -132,6 +142,7 @@ export default function App() {
             scan={scan}
             fill={fill}
             capture={capture}
+            attachFile={attachFile}
             api={api}
             rescanNonce={rescanNonce}
             openWebApp={openWebApp}

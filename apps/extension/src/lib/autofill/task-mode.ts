@@ -14,7 +14,18 @@ export type FieldReportSource =
   | "skills"
   | "ai-generated"
   | "cover-letter"
+  | "resume-file"
+  | "cover-letter-file"
   | "none";
+
+/** A file field the panel manages (résumé/cover-letter) but a fetch 404'd —
+ *  no stored file to attach, whether from a stale attachResume preference or
+ *  an out-of-band deletion. Distinct from CUSTOM_UPLOADER_REASON below. */
+export const NO_FILE_REASON = "No file available to attach — attach it manually.";
+
+/** A file field whose programmatic attach didn't verify (the site ignored or
+ *  cleared the assignment), or any file field OfferOS never attempts to manage. */
+export const CUSTOM_UPLOADER_REASON = "This site uses a custom uploader — attach the file manually.";
 
 const CLOSED: ReadonlySet<FillTicket["status"]> = new Set(["completed", "cancelled"]);
 
@@ -125,15 +136,24 @@ function traceSource(t: FieldTrace): FieldReportSource {
  * A DOM write outcome for one field. The bare string form covers classified/
  * personal fields (the engine already knows their value & source); the object
  * form carries the value and an explicit source for task-mode-only writes
- * (AI-generated answers, cover-letter verbatim) the engine trace can't describe.
+ * (AI-generated answers, cover-letter verbatim, file attaches) the engine
+ * trace can't describe. `outcome: "needs-user"` + `reason` lets a file-attach
+ * attempt that didn't pan out (no file to fetch, or a failed DOM verify)
+ * override the trace's default classify-time reason with the exact
+ * NO_FILE_REASON / CUSTOM_UPLOADER_REASON text.
  */
 export type WriteOutcome =
   | "filled"
   | "failed"
-  | { outcome: "filled" | "failed"; value?: string; source?: FieldReportSource };
+  | {
+      outcome: "filled" | "failed" | "needs-user";
+      value?: string;
+      source?: FieldReportSource;
+      reason?: string;
+    };
 
 function normalize(w: WriteOutcome | undefined):
-  | { outcome: "filled" | "failed"; value?: string; source?: FieldReportSource }
+  | { outcome: "filled" | "failed" | "needs-user"; value?: string; source?: FieldReportSource; reason?: string }
   | undefined {
   if (w === undefined) return undefined;
   return typeof w === "string" ? { outcome: w } : w;
@@ -144,7 +164,8 @@ function normalize(w: WriteOutcome | undefined):
  * FieldReport[] the workspace consumes. Pure: outcome is derived from whether/
  * how the field was written, requiredness from `requiredIds`, and `page` tags
  * every row so the server can accumulate across wizard steps.
- *   - written filled/failed → that outcome (value/source from the write if given),
+ *   - written filled/failed/needs-user → that outcome (value/source/reason from
+ *     the write if given — a file-attach attempt overrides the reason this way),
  *   - unwritten needs-answer (file inputs, resume, ungenerated) → needs-user,
  *   - unwritten unknown/fillable → skipped.
  */
@@ -169,7 +190,7 @@ export function buildFieldReports(
       status: t.status,
       value: outcome === "filled" ? value : t.chosenValue || undefined,
       source: w?.source ?? traceSource(t),
-      reason: t.reason,
+      reason: w?.reason ?? t.reason,
       outcome,
       required: requiredIds.has(t.fieldId),
       page,

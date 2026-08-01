@@ -58,6 +58,8 @@ function personalValue(field: CanonicalField, profile: FillProfile): string {
       return normalizeLink(p.links.portfolio ?? "");
     case "resume":
       return ""; // manual upload in Plan 4
+    case "coverLetter":
+      return ""; // manual upload in Plan 4
     case "skills":
       return ""; // multi-value; carried on FillItem.values, not here
   }
@@ -194,6 +196,8 @@ function personalSourcePath(field: CanonicalField): string {
     case "portfolio":
       return "profile.personal.links.portfolio";
     case "resume":
+      return "profile (manual upload)";
+    case "coverLetter":
       return "profile (manual upload)";
     case "skills":
       return "profile.skills";

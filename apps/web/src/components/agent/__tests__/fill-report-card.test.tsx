@@ -79,4 +79,40 @@ describe("FillReportCard", () => {
     const valueLabel = screen.getByText("Visa sponsorship required?");
     expect(valueLabel.parentElement?.textContent).toBe("Visa sponsorship required?: No");
   });
+
+  it("renders resume-file and cover-letter-file sources as 'attached: <filename>'", () => {
+    const attached: FieldReport[] = [
+      {
+        fieldId: "f-resume",
+        label: "Resume/CV",
+        classifiedType: "resume",
+        status: "needs-answer",
+        value: "Jordan_Rivera_Resume.pdf",
+        source: "resume-file",
+        reason: "attached the tailored résumé PDF",
+        outcome: "filled",
+        required: true,
+      },
+      {
+        fieldId: "f-cover",
+        label: "Cover Letter",
+        classifiedType: "coverLetter",
+        status: "needs-answer",
+        value: "Cover_Letter.pdf",
+        source: "cover-letter-file",
+        reason: "attached the cover letter PDF",
+        outcome: "filled",
+        required: false,
+      },
+    ];
+    render(<FillReportCard reports={attached} />);
+
+    const resumeLabel = screen.getByText("Resume/CV");
+    expect(resumeLabel.parentElement?.textContent).toBe(
+      "Resume/CV — attached: Jordan_Rivera_Resume.pdf",
+    );
+
+    const coverLabel = screen.getByText("Cover Letter");
+    expect(coverLabel.parentElement?.textContent).toBe("Cover Letter — attached: Cover_Letter.pdf");
+  });
 });

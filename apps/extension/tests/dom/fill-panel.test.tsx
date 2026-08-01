@@ -3,9 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
-import type { ScanResponse, FillResponse, CaptureJdResponse } from "../../src/lib/autofill/autofill-messaging";
+import type {
+  ScanResponse,
+  FillResponse,
+  CaptureJdResponse,
+  AttachFileResponse,
+} from "../../src/lib/autofill/autofill-messaging";
 import type { FillValue } from "../../src/lib/autofill/dom-fill";
-import type { ApiResult, ApplicationSummary, FillTaskBundle, FillTicket } from "../../src/lib/offeros-api";
+import type {
+  ApiResult,
+  ApplicationSummary,
+  FileFetchResult,
+  FillTaskBundle,
+  FillTicket,
+} from "../../src/lib/offeros-api";
+import { NO_FILE_REASON, CUSTOM_UPLOADER_REASON } from "../../src/lib/autofill/task-mode";
 
 const scanOk: ScanResponse = {
   ok: true,
@@ -19,6 +31,35 @@ const scanOk: ScanResponse = {
   ],
 };
 
+const resumeFileDescriptor = {
+  fieldId: "r1",
+  label: "Resume/CV",
+  name: "resume",
+  autocomplete: "",
+  type: "file",
+  placeholder: "",
+  ariaLabel: "",
+};
+const coverLetterFileDescriptor = {
+  fieldId: "cl1",
+  label: "Cover Letter",
+  name: "coverLetter",
+  autocomplete: "",
+  type: "file",
+  placeholder: "",
+  ariaLabel: "",
+};
+
+const scanWithResumeFile: ScanResponse = {
+  ...scanOk,
+  descriptors: [scanOk.descriptors[0]!, resumeFileDescriptor],
+};
+
+const scanWithBothFiles: ScanResponse = {
+  ...scanOk,
+  descriptors: [scanOk.descriptors[0]!, resumeFileDescriptor, coverLetterFileDescriptor],
+};
+
 const bundle: FillTaskBundle = {
   handoffId: "h1",
   taskId: "t1",
@@ -28,6 +69,7 @@ const bundle: FillTaskBundle = {
   resumeText: null,
   coverLetterText: null,
   jdSummary: null,
+  attachResume: "tailored",
 };
 
 const ticket: FillTicket = {
@@ -48,6 +90,8 @@ const emptyApi = (): FillApi => ({
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
   createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
+  fetchResumeFile: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
+  fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
 });
 
 const captureOk: CaptureJdResponse = {
@@ -60,11 +104,17 @@ const captureOk: CaptureJdResponse = {
   structuredCompany: "Acme",
 };
 
+const okAttach = async (): Promise<AttachFileResponse> => ({ ok: true });
+
 const renderPanel = (
   over: {
     scan?: () => Promise<ScanResponse>;
     fill?: (v: FillValue[]) => Promise<FillResponse>;
     capture?: () => Promise<CaptureJdResponse>;
+    attachFile?: (
+      fieldId: string,
+      file: { fileName: string; mimeType: string; bytesBase64: string },
+    ) => Promise<AttachFileResponse>;
     api?: FillApi;
     openWebApp?: () => void;
     openApplication?: (id: string) => void;
@@ -73,6 +123,7 @@ const renderPanel = (
 ) => {
   const fill = over.fill ?? vi.fn(async (v: FillValue[]) => okFill(v));
   const capture = over.capture ?? vi.fn(async () => captureOk);
+  const attachFile = over.attachFile ?? vi.fn(okAttach);
   const api = over.api ?? emptyApi();
   const openWebApp = over.openWebApp ?? vi.fn();
   const openApplication = over.openApplication ?? vi.fn();
@@ -81,6 +132,7 @@ const renderPanel = (
       scan={over.scan ?? (async () => scanOk)}
       fill={fill}
       capture={capture}
+      attachFile={attachFile}
       api={api}
       rescanNonce={0}
       openWebApp={openWebApp}
@@ -88,7 +140,7 @@ const renderPanel = (
       webReachable={over.webReachable ?? true}
     />,
   );
-  return { fill, capture, api, openWebApp, openApplication };
+  return { fill, capture, attachFile, api, openWebApp, openApplication };
 };
 
 describe("FillPanel", () => {
@@ -167,6 +219,7 @@ describe("FillPanel", () => {
         scan={async () => scanOk}
         fill={vi.fn(async (v: FillValue[]) => okFill(v))}
         capture={vi.fn(async () => captureOk)}
+        attachFile={vi.fn(okAttach)}
         api={api}
         rescanNonce={0}
         openWebApp={vi.fn()}
@@ -199,6 +252,7 @@ describe("FillPanel", () => {
         scan={scan}
         fill={fill}
         capture={capture}
+        attachFile={vi.fn(okAttach)}
         api={api}
         rescanNonce={0}
         openWebApp={vi.fn()}
@@ -216,6 +270,7 @@ describe("FillPanel", () => {
         scan={scan}
         fill={fill}
         capture={capture}
+        attachFile={vi.fn(okAttach)}
         api={api}
         rescanNonce={1}
         openWebApp={vi.fn()}
@@ -225,6 +280,209 @@ describe("FillPanel", () => {
     );
     expect(await screen.findByRole("button", { name: "Fill 1 field" })).toBeInTheDocument();
     expect(api.claim).toHaveBeenCalledWith("h1");
+  });
+
+  describe("File attach", () => {
+    const pdfBytes = (): FileFetchResult => ({
+      ok: true,
+      bytes: new Uint8Array([37, 80, 68, 70]).buffer,
+      fileName: "Jordan_Rivera_Resume.pdf",
+      mimeType: "application/pdf",
+    });
+
+    it("attachResume: tailored → fetches the artifacts PDF route and reports filled/resume-file/filename", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        fetchArtifactPdf: vi.fn(async () => pdfBytes()),
+      };
+      const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume");
+      expect(api.fetchResumeFile).not.toHaveBeenCalled();
+      expect(attachFile).toHaveBeenCalledWith("r1", {
+        fileName: "Jordan_Rivera_Resume.pdf",
+        mimeType: "application/pdf",
+        bytesBase64: expect.any(String),
+      });
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({
+            fieldId: "r1",
+            outcome: "filled",
+            source: "resume-file",
+            value: "Jordan_Rivera_Resume.pdf",
+          }),
+        ]),
+        false,
+      );
+    });
+
+    it("attachResume: original with a resumeId → fetches the stored résumé file route, not the artifacts route", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "original" as const, resumeId: "res-9" },
+        })),
+        fetchResumeFile: vi.fn(async () => pdfBytes()),
+      };
+      renderPanel({ scan: async () => scanWithResumeFile, api });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(api.fetchResumeFile).toHaveBeenCalledWith("res-9");
+      expect(api.fetchArtifactPdf).not.toHaveBeenCalled();
+    });
+
+    it("attachResume: original with no resumeId → no fetch attempted, reports needs-user with the no-file reason", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "original" as const, resumeId: undefined },
+        })),
+      };
+      const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(api.fetchResumeFile).not.toHaveBeenCalled();
+      expect(api.fetchArtifactPdf).not.toHaveBeenCalled();
+      expect(attachFile).not.toHaveBeenCalled();
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: NO_FILE_REASON }),
+        ]),
+        false,
+      );
+    });
+
+    it("a 404 (fetch ok:false) reports needs-user with the no-file reason and never calls attachFile", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
+      };
+      const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(attachFile).not.toHaveBeenCalled();
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: NO_FILE_REASON }),
+        ]),
+        false,
+      );
+    });
+
+    it("a fetched file that fails DOM-verified attach reports needs-user with the custom-uploader reason", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        fetchArtifactPdf: vi.fn(async () => pdfBytes()),
+      };
+      renderPanel({
+        scan: async () => scanWithResumeFile,
+        api,
+        attachFile: vi.fn(async () => ({ ok: false })),
+      });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON }),
+        ]),
+        false,
+      );
+    });
+
+    it("cover-letter file field only attaches when the bundle carries a confirmed cover letter", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const, coverLetterText: null },
+        })),
+        fetchArtifactPdf: vi.fn(async () => pdfBytes()),
+      };
+      const { attachFile } = renderPanel({ scan: async () => scanWithBothFiles, api });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      // résumé attached (tailored), but the cover-letter route/attach never fired.
+      expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume");
+      expect(api.fetchArtifactPdf).not.toHaveBeenCalledWith("t1", "cover-letter");
+      expect(attachFile).toHaveBeenCalledTimes(1);
+    });
+
+    it("attaches a confirmed cover letter as a cover-letter-file PDF", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const, coverLetterText: "Dear hiring team," },
+        })),
+        fetchArtifactPdf: vi.fn(async (_taskId: string, kind: "resume" | "cover-letter") =>
+          kind === "cover-letter"
+            ? { ok: true as const, bytes: new Uint8Array([1]).buffer, fileName: "Cover_Letter.pdf", mimeType: "application/pdf" }
+            : pdfBytes(),
+        ),
+      };
+      renderPanel({ scan: async () => scanWithBothFiles, api });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "cover-letter");
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({
+            fieldId: "cl1",
+            outcome: "filled",
+            source: "cover-letter-file",
+            value: "Cover_Letter.pdf",
+          }),
+        ]),
+        false,
+      );
+    });
   });
 
   describe("Add this job", () => {
@@ -360,6 +618,7 @@ describe("FillPanel", () => {
           scan={scan}
           fill={fill}
           capture={capture}
+          attachFile={vi.fn(okAttach)}
           api={api}
           rescanNonce={nonce}
           openWebApp={vi.fn()}

@@ -54,6 +54,7 @@ const descriptors: FieldDescriptor[] = [
   d("f6", { label: "Describe your ideal team" }), // unknown
   d("f7", { label: "Why do you want to work here and what draws you to this role" }), // generatable
   d("f8", { type: "file", label: "Resume" }), // file, manual
+  d("f9", { type: "file", label: "Cover Letter" }), // file, manual, coverLetter kind
 ];
 
 describe("explainFillPlan", () => {
@@ -151,5 +152,13 @@ describe("explainFillPlan", () => {
     const resume = trace.find((t) => t.fieldId === "f8")!;
     expect(resume.status).toBe("needs-answer");
     expect(resume.reason.toLowerCase()).toContain("manual upload");
+  });
+
+  it("a cover-letter file input classifies as coverLetter and names the manual-upload branch", () => {
+    const { trace } = explainFillPlan(descriptors, profile);
+    const coverLetter = trace.find((t) => t.fieldId === "f9")!;
+    expect(coverLetter.classifiedType).toBe("coverLetter");
+    expect(coverLetter.status).toBe("needs-answer");
+    expect(coverLetter.reason.toLowerCase()).toContain("manual upload");
   });
 });

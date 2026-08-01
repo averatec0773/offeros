@@ -35,6 +35,19 @@ describe("classifyField", () => {
     expect(classifyField(d({ type: "file", label: "Resume/CV" }))).toBe("resume");
   });
 
+  it("classifies a file input labeled cover letter as coverLetter", () => {
+    expect(classifyField(d({ type: "file", label: "Cover Letter" }))).toBe("coverLetter");
+    expect(classifyField(d({ type: "file", label: "Upload your cover letter" }))).toBe(
+      "coverLetter",
+    );
+    expect(classifyField(d({ type: "file", label: "Motivation Letter" }))).toBe("coverLetter");
+  });
+
+  it("does not classify a non-file cover-letter field as coverLetter (textareas stay ungoverned by the classifier)", () => {
+    expect(classifyField(d({ type: "textarea", label: "Cover Letter" }))).toBeNull();
+    expect(classifyField(d({ type: "text", label: "Cover Letter" }))).toBeNull();
+  });
+
   it("falls back to name/id tokens when there is no label", () => {
     expect(classifyField(d({ name: "candidate_email" }))).toBe("email");
     expect(classifyField(d({ name: "first_name" }))).toBe("firstName");

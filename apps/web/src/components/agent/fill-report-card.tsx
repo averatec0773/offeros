@@ -28,6 +28,12 @@ export function FillReportCard({ reports }: { reports: FieldReport[] }) {
                   <span className="font-medium">{r.label}</span>
                   {r.source === "none" ? (
                     r.value && <span className="text-muted-foreground">: {r.value}</span>
+                  ) : r.source === "resume-file" || r.source === "cover-letter-file" ? (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      — attached
+                      {r.value ? `: ${r.value}` : ""}
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">
                       {" "}
