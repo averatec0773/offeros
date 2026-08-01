@@ -37,7 +37,7 @@ export function listApplications(db: Db): Application[] {
 function normalizeJobUrl(url: string): string {
   try {
     const u = new URL(url);
-    return u.origin + u.pathname;
+    return u.origin + u.pathname.replace(/\/$/, "");
   } catch {
     return url;
   }

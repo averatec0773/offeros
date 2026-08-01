@@ -688,7 +688,7 @@ export function FillPanel({
             clicks Apply) still has a JD to capture — Add-this-job only needs that, not
             a form. jobKeyRef is never set here (only an ok scan sets it), so key on the
             tab URL directly. */}
-        {noForm && webReachable && (
+        {noForm && !bundle && webReachable && (
           <AddJobCard key={tabUrl || "no-job"} capture={capture} api={api} openApplication={openApplication} />
         )}
       </div>

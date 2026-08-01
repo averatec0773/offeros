@@ -125,6 +125,7 @@ describe("application repo", () => {
 
     expect(listApplicationsByJobUrl(db, `${jobUrl}?gh_src=abc123`)).toEqual([match]);
     expect(listApplicationsByJobUrl(db, `${jobUrl}#apply`)).toEqual([match]);
+    expect(listApplicationsByJobUrl(db, `${jobUrl}/`)).toEqual([match]);
     expect(listApplicationsByJobUrl(db, "https://boards.greenhouse.io/acme/jobs/2")).not.toEqual([
       match,
     ]);

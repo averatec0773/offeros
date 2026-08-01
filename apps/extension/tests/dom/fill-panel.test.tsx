@@ -178,6 +178,30 @@ describe("FillPanel", () => {
     expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
   });
 
+  it("no_form scan hides Add-this-job while a claimed fill task is active (mid-task interstitial)", async () => {
+    const api = emptyApi();
+    api.getPending = vi.fn(async () => ({ ok: true as const, value: [ticket] }));
+    api.claim = vi.fn(async () => ({ ok: true as const, value: bundle }));
+    const props = {
+      fill: vi.fn(async (v: FillValue[]) => okFill(v)),
+      capture: vi.fn(async () => captureOk),
+      attachFile: vi.fn(okAttach),
+      api,
+      openWebApp: vi.fn(),
+      openApplication: vi.fn(),
+      webReachable: true,
+      tabUrl: scanOk.url,
+    };
+    const view = render(<FillPanel scan={async () => scanOk} rescanNonce={0} {...props} />);
+    // The claim lands on the ok scan; the bundle survives the rescan below.
+    await screen.findByText("Engineer · Acme");
+    view.rerender(
+      <FillPanel scan={async () => ({ ok: false, reason: "no_form" })} rescanNonce={1} {...props} />,
+    );
+    await screen.findByText("No form detected");
+    expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
+  });
+
   it("not_supported scan never renders Add-this-job", async () => {
     renderPanel({ scan: async () => ({ ok: false, reason: "not_supported" }) });
     await screen.findByText("Not an application form");

@@ -6,10 +6,9 @@ SQLite database and is where you build your profile, track applications, and run
 the AI workspace. `apps/extension` (a Chrome **Side Panel**) is the **fill arm**:
 on a supported ATS page it fills the form for you from the web app's data. You
 always review and submit every application yourself — OfferOS never submits for
-you, only ever attaches your own OfferOS-managed files (the tailored résumé
-PDF, your stored original résumé, or the confirmed cover-letter PDF) to file
-inputs — it never reads files from the page — and never uploads page HTML
-anywhere.
+you and never uploads page HTML anywhere. The only files it ever attaches to a
+form are your own: the tailored résumé PDF, your stored original résumé, or the
+confirmed cover-letter PDF. It never reads files from the page.
 
 Status: pre-alpha.
 
