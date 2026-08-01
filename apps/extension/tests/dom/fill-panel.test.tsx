@@ -317,5 +317,71 @@ describe("FillPanel", () => {
       await userEvent.click(openBtn);
       expect(openApplication).toHaveBeenCalledWith("a9");
     });
+
+    it("the dedup card's Back control dismisses it back to the initial Add-this-job state", async () => {
+      const existing: ApplicationSummary = { id: "existing-1", jobInfo: { jobTitle: "Backend Engineer", companyName: "Acme", applyLink: captureOk.url } };
+      const api: FillApi = {
+        ...emptyApi(),
+        findApplicationsByJobUrl: vi.fn(async () => ({ ok: true as const, value: [existing] })),
+      };
+      renderPanel({ api });
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+      await screen.findByLabelText("Job title");
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+      await screen.findByText("Already tracked.");
+
+      await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+      expect(await screen.findByRole("button", { name: "Add this job" })).toBeInTheDocument();
+      expect(screen.queryByText("Already tracked.")).not.toBeInTheDocument();
+    });
+
+    it("the success card's Done control dismisses it back to the initial Add-this-job state", async () => {
+      renderPanel();
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+      await screen.findByLabelText("Job title");
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+      await screen.findByText("Added — tracked in OfferOS.");
+
+      await userEvent.click(screen.getByRole("button", { name: "Done" }));
+
+      expect(await screen.findByRole("button", { name: "Add this job" })).toBeInTheDocument();
+      expect(screen.queryByText("Added — tracked in OfferOS.")).not.toBeInTheDocument();
+    });
+
+    it("resets to the initial Add-this-job state when the tab navigates to a different job", async () => {
+      let scanResp: ScanResponse = scanOk;
+      const scan = async () => scanResp;
+      const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+      const capture = vi.fn(async () => captureOk);
+      const api = emptyApi();
+      const renderProps = (nonce: number) => (
+        <FillPanel
+          scan={scan}
+          fill={fill}
+          capture={capture}
+          api={api}
+          rescanNonce={nonce}
+          openWebApp={vi.fn()}
+          openApplication={vi.fn()}
+          webReachable
+        />
+      );
+      const { rerender } = render(renderProps(0));
+
+      // Add job A all the way to the success card.
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+      await screen.findByLabelText("Job title");
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+      await screen.findByText("Added — tracked in OfferOS.");
+
+      // Same tab navigates to a different Greenhouse job (new job id) → rescan.
+      scanResp = { ...scanOk, url: "https://boards.greenhouse.io/acme/jobs/2", title: "Other Role" };
+      rerender(renderProps(1));
+
+      // The stale "Added" card must not survive into the new job.
+      expect(await screen.findByRole("button", { name: "Add this job" })).toBeInTheDocument();
+      expect(screen.queryByText("Added — tracked in OfferOS.")).not.toBeInTheDocument();
+    });
   });
 });

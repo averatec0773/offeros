@@ -65,8 +65,11 @@ export interface FillApi {
  * One-click "Add this job": capture the JD off the active tab, let the user
  * confirm/edit title + company, dedup by job URL, then create the
  * application + task in one call. Only rendered when there's no active fill
- * task for this tab (see the `!bundle` gate at the call site) — it owns no
- * state outside itself, so switching tabs/jobs just remounts it fresh.
+ * task for this tab (see the `!bundle` gate at the call site). Owns no state
+ * outside itself — the call site keys it on the job identity (`jobKeyRef`,
+ * the same signal that drives `resetTaskMode()` on a job change) so
+ * navigating the same tab to a different job remounts it fresh instead of
+ * leaving a stale "Added"/"Already tracked" card showing forever.
  */
 function AddJobCard({
   capture,
@@ -139,13 +142,18 @@ function AddJobCard({
     return (
       <div className="mt-3 rounded-xl bg-bg-base p-3">
         <p className="text-caption text-success">Added — tracked in OfferOS.</p>
-        <Button
-          variant="primary"
-          className="mt-2 rounded-full"
-          onClick={() => openApplication(createdApplicationId)}
-        >
-          Open in OfferOS
-        </Button>
+        <div className="mt-2 flex gap-2">
+          <Button
+            variant="primary"
+            className="rounded-full"
+            onClick={() => openApplication(createdApplicationId)}
+          >
+            Open in OfferOS
+          </Button>
+          <Button className="rounded-full" onClick={onCancel}>
+            Done
+          </Button>
+        </div>
       </div>
     );
   }
@@ -166,6 +174,9 @@ function AddJobCard({
             Create anyway
           </Button>
         </div>
+        <Button className="mt-2 rounded-full" onClick={onCancel}>
+          Back
+        </Button>
       </div>
     );
   }
@@ -570,7 +581,15 @@ export function FillPanel({
           </div>
         )}
         {!bundle && webReachable && (
-          <AddJobCard capture={capture} api={api} openApplication={openApplication} />
+          // Keyed on job identity: a job change (see `jobChanged` above, the same
+          // signal that resets task mode) must remount this card, not leave a
+          // stale "Added"/"Already tracked" state showing for the new job.
+          <AddJobCard
+            key={jobKeyRef.current ?? "no-job"}
+            capture={capture}
+            api={api}
+            openApplication={openApplication}
+          />
         )}
         {drift && (
           <p className="mb-2 text-caption text-warning">
