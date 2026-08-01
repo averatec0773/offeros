@@ -108,6 +108,27 @@ describe("application repo", () => {
     expect(listApplicationsByJobUrl(db, jobUrl)).toEqual([match]);
     expect(listApplicationsByJobUrl(db, "https://nomatch.example.com")).toEqual([]);
   });
+
+  it("dedups the same posting despite a tracking query string / trailing hash, but not a different path", () => {
+    const jobUrl = "https://boards.greenhouse.io/acme/jobs/1";
+    const match = createApplication(db, {
+      jobInfo: { jobId: "j1", jobTitle: "T", companyName: "C", applyLink: jobUrl },
+    });
+    createApplication(db, {
+      jobInfo: {
+        jobId: "j2",
+        jobTitle: "T2",
+        companyName: "C2",
+        applyLink: "https://boards.greenhouse.io/acme/jobs/2",
+      },
+    });
+
+    expect(listApplicationsByJobUrl(db, `${jobUrl}?gh_src=abc123`)).toEqual([match]);
+    expect(listApplicationsByJobUrl(db, `${jobUrl}#apply`)).toEqual([match]);
+    expect(listApplicationsByJobUrl(db, "https://boards.greenhouse.io/acme/jobs/2")).not.toEqual([
+      match,
+    ]);
+  });
 });
 
 describe("agent task repo", () => {

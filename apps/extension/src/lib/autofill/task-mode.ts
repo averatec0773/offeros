@@ -1,4 +1,4 @@
-import type { FieldDescriptor, FieldTrace } from "@offeros/autofill";
+import { isCoverLetterLabel, type FieldDescriptor, type FieldTrace } from "@offeros/autofill";
 import type { FieldReport, FieldReportOutcome, FillTicket } from "../offeros-api";
 
 /**
@@ -22,6 +22,12 @@ export type FieldReportSource =
  *  no stored file to attach, whether from a stale attachResume preference or
  *  an out-of-band deletion. Distinct from CUSTOM_UPLOADER_REASON below. */
 export const NO_FILE_REASON = "No file available to attach — attach it manually.";
+
+/** A file field the panel manages, but the fetch came back 400 — the artifact
+ *  exists but failed to render into a PDF. Distinct from NO_FILE_REASON (404,
+ *  nothing stored at all): this tells the user to go check the artifact
+ *  instead of implying there's simply nothing to attach. */
+export const RENDER_FAILED_REASON = "Couldn't generate the file to attach — check the artifact in OfferOS.";
 
 /** A file field whose programmatic attach didn't verify (the site ignored or
  *  cleared the assignment), or any file field OfferOS never attempts to manage. */
@@ -81,11 +87,12 @@ export function matchHandoff(
   return open.length === 1 ? open[0]! : null;
 }
 
-/** True when a field label reads like a cover-/motivation-letter free-text box. */
-export function isCoverLetterField(label: string): boolean {
-  const t = label.toLowerCase();
-  return t.includes("cover letter") || t.includes("motivation letter") || t.includes("cover note");
-}
+/** True when a field label reads like a cover-/motivation-letter free-text box.
+ *  Delegates to @offeros/autofill's isCoverLetterLabel — the same norm()-based
+ *  matcher the classifier uses for the cover-letter file kind, so the two
+ *  paths never disagree on punctuation (they used to: "Cover-Letter" matched
+ *  only one of the two before this shared). */
+export const isCoverLetterField = isCoverLetterLabel;
 
 // descriptor.type values scanFields (dom-fill.ts describe()) produces for a
 // control a human answers with free-form prose: the plain text-ish <input>

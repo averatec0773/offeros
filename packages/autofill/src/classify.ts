@@ -97,9 +97,17 @@ const LABEL_RULES: { test: (t: string) => boolean; field: CanonicalField }[] = [
   { test: (t) => /\bskills?\b/.test(t), field: "skills" },
 ];
 
-// mirrors task-mode.ts's isCoverLetterField phrase set; duplicated (not
-// imported) because this package must stay DOM-free and extension-independent.
 const COVER_LETTER_PHRASES = ["cover letter", "motivation letter", "cover note"];
+
+/** True when a field label reads like a cover-/motivation-letter free-text box
+ *  or file upload. norm()-based (lowercases, collapses non-alphanumerics to a
+ *  single space) so "Cover-Letter", "Cover_Letter", and "cover letter" all
+ *  match alike — the single source of truth for both this classifier's
+ *  cover-letter file kind and the extension's task-mode textarea detection. */
+export function isCoverLetterLabel(label: string): boolean {
+  const t = norm(label);
+  return COVER_LETTER_PHRASES.some((phrase) => t.includes(phrase));
+}
 
 // autocomplete may be compound ("section-x shipping home tel") — the field
 // token sits at the end, so scan tokens right-to-left for a mapped one.
@@ -121,7 +129,7 @@ export function classifyField(desc: FieldDescriptor): CanonicalField | null {
   // cover-letter file kind: guarded to type "file" only, exactly like resume
   // above — a cover-letter *textarea* stays ungoverned by the classifier
   // (task-mode.ts's isCoverLetterField + the paste-verbatim flow own that case).
-  if (desc.type === "file" && COVER_LETTER_PHRASES.some((phrase) => label.includes(phrase))) {
+  if (desc.type === "file" && isCoverLetterLabel(label)) {
     return "coverLetter";
   }
   // long question-like labels ("We would like to contact you via SMS…") must not

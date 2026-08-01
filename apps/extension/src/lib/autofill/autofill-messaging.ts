@@ -20,8 +20,11 @@ export interface FillResponse {
 export interface CaptureJdResponse {
   jd: string;
   source: string;
-  company: string;
-  title: string;
+  /** Raw page-meta heuristic guesses (h1/doc title, og:site_name/hostname) — sanitized,
+   *  but a different trust level than the sanitized structured pair below. Prefill fallback
+   *  only; never treated as verified. */
+  metaCompany: string;
+  metaTitle: string;
   url: string;
   /** JSON-LD-only structured fields from jd-capture (sanitized); undefined on DOM fallback. */
   structuredTitle?: string;

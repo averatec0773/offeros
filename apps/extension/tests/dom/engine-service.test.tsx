@@ -176,17 +176,28 @@ describe("engine CAPTURE_JD handler", () => {
     })) as CaptureJdResponse;
     expect(res.jd).toContain("staff engineer");
     expect(res.source).toBe("dom");
-    expect(res.title).toBe("Staff Engineer");
-    expect(res.company).toBe("acme");
+    expect(res.metaTitle).toBe("Staff Engineer");
+    expect(res.metaCompany).toBe("acme");
     expect(res.url).toBe(greenhouseUrl);
     expect(res).toHaveProperty("jd");
     expect(res).toHaveProperty("source");
-    expect(res).toHaveProperty("company");
-    expect(res).toHaveProperty("title");
+    expect(res).toHaveProperty("metaCompany");
+    expect(res).toHaveProperty("metaTitle");
     expect(res).toHaveProperty("url");
     // No JSON-LD on this fixture — structured fields carry through as undefined.
     expect(res.structuredTitle).toBeUndefined();
     expect(res.structuredCompany).toBeUndefined();
+  });
+
+  it("sanitizes the page-meta title (control chars flattened) the same way jd-capture sanitizes structured fields", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    document.body.innerHTML = `<main><h1>Staff\tEngineer\nRole</h1><p>${"We are hiring a staff engineer to build the platform. ".repeat(6)}</p></main>`;
+    registerEngine(document, ctx());
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_CAPTURE_JD",
+    })) as CaptureJdResponse;
+    expect(res.metaTitle).not.toMatch(/[\t\n]/);
+    expect(res.metaTitle).toBe("Staff Engineer Role");
   });
 
   it("carries jd-capture's structured title/company through when JSON-LD is present", async () => {

@@ -263,6 +263,13 @@ describe("isCoverLetterField", () => {
     expect(isCoverLetterField("Additional information")).toBe(false);
     expect(isCoverLetterField("")).toBe(false);
   });
+  // isCoverLetterField delegates to @offeros/autofill's isCoverLetterLabel — the same
+  // matcher classifyField's file-kind detection uses — so a hyphenated label now
+  // matches through both paths (they used to disagree: this used a raw substring
+  // check that "cover-letter" never contained).
+  it("detects a hyphenated label, matching classifyField's file-kind detection", () => {
+    expect(isCoverLetterField("Cover-Letter")).toBe(true);
+  });
 });
 
 describe("isTextAnswerTarget", () => {

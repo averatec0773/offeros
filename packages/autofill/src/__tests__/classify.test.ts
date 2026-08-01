@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyField, type FieldDescriptor } from "../classify";
+import { classifyField, isCoverLetterLabel, type FieldDescriptor } from "../classify";
 
 const d = (partial: Partial<FieldDescriptor>): FieldDescriptor => ({
   fieldId: "f1",
@@ -48,6 +48,10 @@ describe("classifyField", () => {
     expect(classifyField(d({ type: "text", label: "Cover Letter" }))).toBeNull();
   });
 
+  it("classifies a hyphenated cover-letter file label (isCoverLetterLabel is the shared matcher with task-mode)", () => {
+    expect(classifyField(d({ type: "file", label: "Cover-Letter" }))).toBe("coverLetter");
+  });
+
   it("falls back to name/id tokens when there is no label", () => {
     expect(classifyField(d({ name: "candidate_email" }))).toBe("email");
     expect(classifyField(d({ name: "first_name" }))).toBe("firstName");
@@ -71,6 +75,20 @@ describe("classifyField", () => {
   it("ignores autocomplete values with no mapped token", () => {
     expect(classifyField(d({ autocomplete: "off" }))).toBeNull();
     expect(classifyField(d({ autocomplete: "on", label: "Email" }))).toBe("email");
+  });
+});
+
+describe("isCoverLetterLabel", () => {
+  it("matches regardless of hyphenation/punctuation — the single source of truth shared with task-mode's isCoverLetterField", () => {
+    expect(isCoverLetterLabel("Cover Letter")).toBe(true);
+    expect(isCoverLetterLabel("Cover-Letter")).toBe(true);
+    expect(isCoverLetterLabel("Cover_Letter")).toBe(true);
+    expect(isCoverLetterLabel("Motivation Letter")).toBe(true);
+  });
+
+  it("rejects unrelated labels", () => {
+    expect(isCoverLetterLabel("Why do you want this role?")).toBe(false);
+    expect(isCoverLetterLabel("")).toBe(false);
   });
 });
 

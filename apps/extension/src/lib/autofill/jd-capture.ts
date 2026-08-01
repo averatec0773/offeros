@@ -20,7 +20,7 @@ const stripHtml = (html: string): string => {
 const CONTROL_CHARS_RE = /[\x00-\x1F\x7F]+/g;
 const MAX_LABEL_LEN = 200;
 
-function sanitizeLabel(s: string): string {
+export function sanitizeLabel(s: string): string {
   return s.replace(CONTROL_CHARS_RE, " ").replace(/\s+/g, " ").trim().slice(0, MAX_LABEL_LEN);
 }
 
@@ -71,10 +71,12 @@ function fromDom(root: ParentNode): string {
   return ((main as HTMLElement).textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
+const MAX_JD_LEN = 12000;
+
 export function captureJd(root: ParentNode, minChars = 120): JdCaptureResult {
   const ld = fromJsonLd(root);
-  if (ld) return { text: ld.text, source: "jsonld", title: ld.title, company: ld.company };
+  if (ld) return { text: ld.text.slice(0, MAX_JD_LEN), source: "jsonld", title: ld.title, company: ld.company };
   const dom = fromDom(root);
-  if (dom.length >= minChars) return { text: dom.slice(0, 12000), source: "dom" };
+  if (dom.length >= minChars) return { text: dom.slice(0, MAX_JD_LEN), source: "dom" };
   return { text: "", source: "none" };
 }

@@ -7,7 +7,7 @@ import {
   highlight,
   type FillValue,
 } from "../autofill/dom-fill";
-import { captureJd } from "../autofill/jd-capture";
+import { captureJd, sanitizeLabel } from "../autofill/jd-capture";
 import { base64ToBytes } from "../autofill/base64";
 import { effectiveDocOf, watchPage } from "../overlay/page-watcher";
 import {
@@ -81,8 +81,8 @@ export function createEngine(doc: Document): Engine {
     return {
       jd: r.text,
       source: r.source,
-      company: meta.company || "",
-      title: meta.title || "",
+      metaCompany: sanitizeLabel(meta.company || ""),
+      metaTitle: sanitizeLabel(meta.title || ""),
       structuredTitle: r.title,
       structuredCompany: r.company,
       url: url(),

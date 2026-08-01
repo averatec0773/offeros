@@ -180,7 +180,13 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
     resumeText: currentVersionContent(getArtifact(db, handoff.taskId, "resume")),
     coverLetterText: coverLetter,
     jdSummary: jdAnalysis?.summary ?? null,
-    attachResume: application?.attachResume ?? "tailored",
+    // A stale "original" preference on a résumé that no longer has a stored file (or
+    // never had one) would otherwise send the extension straight at a guaranteed 404 —
+    // degrade to "tailored" instead of trusting the preference blindly.
+    attachResume:
+      application?.attachResume === "original" && effectiveResume?.hasFile
+        ? "original"
+        : "tailored",
     resumeId: effectiveResume?.id,
   };
 

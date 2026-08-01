@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { PIPELINE_STEPS, type Artifact, type FieldReport, type Profile } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import {
@@ -15,7 +16,7 @@ import { upsertArtifact } from "../../repositories/artifact-repo";
 import { saveJdAnalysis } from "../../repositories/jd-analysis-repo";
 import { getFillHandoff } from "../../repositories/fill-handoff-repo";
 import { uploadResume } from "../resume-service";
-import { answers } from "../../db/schema";
+import { answers, resumes } from "../../db/schema";
 import {
   createHandoffForTask,
   claimHandoff,
@@ -104,6 +105,12 @@ function seedResume(over: { name: string; isPrimary?: boolean }) {
     },
     { storageDir: join(dir, "resumes") },
   );
+}
+
+/** Simulates a legacy row / out-of-band deletion: a résumé that's still the
+ *  application's effective selection but has no stored file on disk. */
+function clearResumeFile(id: string): void {
+  db.update(resumes).set({ filePath: null }).where(eq(resumes.id, id)).run();
 }
 
 function report(over: Partial<FieldReport> & Pick<FieldReport, "fieldId">): FieldReport {
@@ -241,8 +248,9 @@ describe("claimHandoff — attachResume + resumeId", () => {
     expect(bundle.resumeId).toBe(selected.id);
   });
 
-  it("carries an explicit attachResume choice from the application", () => {
+  it("carries an explicit attachResume choice from the application when the effective résumé has a stored file", () => {
     const { taskId, applicationId } = seedTaskAtFillForm();
+    seedResume({ name: "Primary.pdf", isPrimary: true });
     updateApplication(db, applicationId, { attachResume: "original" });
     const handoff = createHandoffForTask(db, taskId);
     const bundle = claimHandoff(db, handoff.id);
@@ -254,6 +262,24 @@ describe("claimHandoff — attachResume + resumeId", () => {
     const handoff = createHandoffForTask(db, taskId);
     const bundle = claimHandoff(db, handoff.id);
     expect(bundle.resumeId).toBeUndefined();
+  });
+
+  it("degrades a stale attachResume:'original' preference to 'tailored' when the effective résumé has no stored file (never a guaranteed 404)", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    const primary = seedResume({ name: "Primary.pdf", isPrimary: true });
+    clearResumeFile(primary.id);
+    updateApplication(db, applicationId, { attachResume: "original" });
+    const handoff = createHandoffForTask(db, taskId);
+    const bundle = claimHandoff(db, handoff.id);
+    expect(bundle.attachResume).toBe("tailored");
+  });
+
+  it("degrades a stale attachResume:'original' preference to 'tailored' when there is no résumé at all", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    updateApplication(db, applicationId, { attachResume: "original" });
+    const handoff = createHandoffForTask(db, taskId);
+    const bundle = claimHandoff(db, handoff.id);
+    expect(bundle.attachResume).toBe("tailored");
   });
 });
 

@@ -30,9 +30,26 @@ export function listApplications(db: Db): Application[] {
   return db.select().from(applications).orderBy(desc(applications.updatedAt)).all().map(toDomain);
 }
 
-/** Dedup lookup for "Add this job": exact-match applications tracking this job URL (jobInfo.applyLink). */
+/** `origin + pathname` — drops query string and hash so tracking params
+ *  (`?gh_src=…`) and a trailing `#` don't defeat the dedup match. Falls back
+ *  to the raw string on an unparsable URL, so a malformed applyLink still
+ *  compares (exactly, as before) instead of throwing. */
+function normalizeJobUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch {
+    return url;
+  }
+}
+
+/** Dedup lookup for "Add this job": applications tracking the same job URL
+ *  (jobInfo.applyLink), compared with query string/hash normalized away. */
 export function listApplicationsByJobUrl(db: Db, jobUrl: string): Application[] {
-  return listApplications(db).filter((a) => a.jobInfo.applyLink === jobUrl);
+  const target = normalizeJobUrl(jobUrl);
+  return listApplications(db).filter(
+    (a) => a.jobInfo.applyLink !== undefined && normalizeJobUrl(a.jobInfo.applyLink) === target,
+  );
 }
 
 export function getApplication(db: Db, id: string): Application | null {

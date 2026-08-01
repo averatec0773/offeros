@@ -113,12 +113,14 @@ const json = (method: string, payload: unknown): RequestInit => ({
 });
 
 /** A raw file fetch (résumé bytes / rendered PDF) — not the JSON envelope,
- *  since these routes stream bytes on success. A non-2xx response (including
- *  a 404 "nothing to attach") collapses to `{ ok: false }`, same as `call`'s
- *  network-error/malformed-response cases — never throws to the caller. */
+ *  since these routes stream bytes on success. A non-2xx response collapses to
+ *  `{ ok: false, status }` (network error / malformed response omit `status`),
+ *  never throws to the caller. `status` lets callers tell a 404 (nothing
+ *  stored to attach) apart from a 400 (the artifact exists but failed to
+ *  render) so they can surface a different, honest reason for each. */
 export type FileFetchResult =
   | { ok: true; bytes: ArrayBuffer; fileName: string; mimeType: string }
-  | { ok: false };
+  | { ok: false; status?: number };
 
 /** Content-Disposition filename: prefers the RFC 5987 UTF-8 form (matches
  *  non-ASCII names like "Résumé.pdf"), falls back to the ASCII `filename="…"`. */
@@ -144,7 +146,7 @@ async function fetchFile(path: string, fetchImpl: typeof fetch): Promise<FileFet
   } catch {
     return { ok: false };
   }
-  if (!response.ok) return { ok: false };
+  if (!response.ok) return { ok: false, status: response.status };
   let bytes: ArrayBuffer;
   try {
     bytes = await response.arrayBuffer();

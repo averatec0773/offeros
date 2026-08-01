@@ -18,7 +18,7 @@ import type {
   FillTaskBundle,
   FillTicket,
 } from "../../src/lib/offeros-api";
-import { NO_FILE_REASON, CUSTOM_UPLOADER_REASON } from "../../src/lib/autofill/task-mode";
+import { NO_FILE_REASON, CUSTOM_UPLOADER_REASON, RENDER_FAILED_REASON } from "../../src/lib/autofill/task-mode";
 
 const scanOk: ScanResponse = {
   ok: true,
@@ -107,8 +107,8 @@ const emptyApi = (): FillApi => ({
 const captureOk: CaptureJdResponse = {
   jd: "We are hiring a senior engineer to build reliable backend services.",
   source: "jsonld",
-  company: "Acme",
-  title: "Backend Engineer",
+  metaCompany: "Acme",
+  metaTitle: "Backend Engineer",
   url: scanOk.url,
   structuredTitle: "Backend Engineer",
   structuredCompany: "Acme",
@@ -129,6 +129,7 @@ const renderPanel = (
     openWebApp?: () => void;
     openApplication?: (id: string) => void;
     webReachable?: boolean;
+    tabUrl?: string;
   } = {},
 ) => {
   const fill = over.fill ?? vi.fn(async (v: FillValue[]) => okFill(v));
@@ -148,6 +149,7 @@ const renderPanel = (
       openWebApp={openWebApp}
       openApplication={openApplication}
       webReachable={over.webReachable ?? true}
+      tabUrl={over.tabUrl ?? scanOk.url}
     />,
   );
   return { fill, capture, attachFile, api, openWebApp, openApplication };
@@ -162,6 +164,24 @@ describe("FillPanel", () => {
   it("no_form scan shows a small message", async () => {
     renderPanel({ scan: async () => ({ ok: false, reason: "no_form" }) });
     expect(await screen.findByText("No form detected")).toBeInTheDocument();
+  });
+
+  it("no_form scan still renders Add-this-job — a posting page (Lever/Ashby/Workday) with no form yet still has a JD to capture", async () => {
+    renderPanel({ scan: async () => ({ ok: false, reason: "no_form" }) });
+    await screen.findByText("No form detected");
+    expect(await screen.findByRole("button", { name: "Add this job" })).toBeInTheDocument();
+  });
+
+  it("no_form scan hides Add-this-job when the web app is unreachable", async () => {
+    renderPanel({ scan: async () => ({ ok: false, reason: "no_form" }), webReachable: false });
+    await screen.findByText("No form detected");
+    expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
+  });
+
+  it("not_supported scan never renders Add-this-job", async () => {
+    renderPanel({ scan: async () => ({ ok: false, reason: "not_supported" }) });
+    await screen.findByText("Not an application form");
+    expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
   });
 
   it("with no claimable task shows the no-task hint and opens the web app", async () => {
@@ -242,7 +262,7 @@ describe("FillPanel", () => {
       expect(api.listAnswers).toHaveBeenCalledTimes(1);
       expect(api.createAnswer).toHaveBeenCalledWith({ question: answerLabel, answer: generatedAnswer });
       expect(api.updateAnswer).not.toHaveBeenCalled();
-      expect(await screen.findByText("Saved to your answers.")).toBeInTheDocument();
+      expect(await screen.findByText("Saved — reused next time this question appears.")).toBeInTheDocument();
     });
 
     it("accept when a normalized match exists updates that entry instead of creating one", async () => {
@@ -267,7 +287,7 @@ describe("FillPanel", () => {
       // multi-pattern regression test below for why).
       expect(api.updateAnswer).toHaveBeenCalledWith("ans-1", { answer: generatedAnswer });
       expect(api.createAnswer).not.toHaveBeenCalled();
-      expect(await screen.findByText("Saved to your answers.")).toBeInTheDocument();
+      expect(await screen.findByText("Saved — reused next time this question appears.")).toBeInTheDocument();
     });
 
     it("a matched curated entry with multiple patterns is never clobbered: update carries no questionPatterns", async () => {
@@ -329,7 +349,7 @@ describe("FillPanel", () => {
       });
 
       expect(api.createAnswer).toHaveBeenCalledTimes(1);
-      expect(screen.queryByText("Saved to your answers.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Saved — reused next time this question appears.")).not.toBeInTheDocument();
     });
 
     it("regenerate never calls the answer-bank APIs", async () => {
@@ -410,6 +430,7 @@ describe("FillPanel", () => {
         openWebApp={vi.fn()}
         openApplication={vi.fn()}
         webReachable
+        tabUrl={scanOk.url}
       />,
     );
     const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
@@ -443,6 +464,7 @@ describe("FillPanel", () => {
         openWebApp={vi.fn()}
         openApplication={vi.fn()}
         webReachable
+        tabUrl={scanOk.url}
       />,
     );
     await screen.findByText("No fill task for this page. Start one from the OfferOS workspace.");
@@ -461,6 +483,7 @@ describe("FillPanel", () => {
         openWebApp={vi.fn()}
         openApplication={vi.fn()}
         webReachable
+        tabUrl={scanOk.url}
       />,
     );
     expect(await screen.findByRole("button", { name: "Fill 1 field" })).toBeInTheDocument();
@@ -610,6 +633,59 @@ describe("FillPanel", () => {
       );
     });
 
+    it("a 400 (artifact exists but failed to render) reports needs-user with the render-failed reason, distinct from a 404", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false, status: 400 })),
+      };
+      const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(attachFile).not.toHaveBeenCalled();
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: RENDER_FAILED_REASON }),
+        ]),
+        false,
+      );
+    });
+
+    it("a content-script send that rejects (torn-down/invalidated context) reports needs-user with the custom-uploader reason and still posts the report", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        fetchArtifactPdf: vi.fn(async () => pdfBytes()),
+      };
+      renderPanel({
+        scan: async () => scanWithResumeFile,
+        api,
+        attachFile: vi.fn(async () => {
+          throw new Error("Could not establish connection. Receiving end does not exist.");
+        }),
+      });
+
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON }),
+        ]),
+        false,
+      );
+    });
+
     it("cover-letter file field only attaches when the bundle carries a confirmed cover letter", async () => {
       const api: FillApi = {
         ...emptyApi(),
@@ -703,9 +779,33 @@ describe("FillPanel", () => {
       expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
     });
 
-    it("leaves the inputs blank when there are no structured fields (DOM fallback)", async () => {
+    it("falls back to the sanitized page-meta guess when there are no structured fields (DOM fallback)", async () => {
       renderPanel({
-        capture: vi.fn(async () => ({ ...captureOk, source: "dom", structuredTitle: undefined, structuredCompany: undefined })),
+        capture: vi.fn(async () => ({
+          ...captureOk,
+          source: "dom",
+          structuredTitle: undefined,
+          structuredCompany: undefined,
+          metaTitle: "Backend Engineer — Acme Careers",
+          metaCompany: "Acme Corp",
+        })),
+      });
+      await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
+
+      expect(await screen.findByLabelText("Job title")).toHaveValue("Backend Engineer — Acme Careers");
+      expect(screen.getByLabelText("Company")).toHaveValue("Acme Corp");
+    });
+
+    it("leaves the inputs blank when neither structured nor meta fields are present", async () => {
+      renderPanel({
+        capture: vi.fn(async () => ({
+          ...captureOk,
+          source: "dom",
+          structuredTitle: undefined,
+          structuredCompany: undefined,
+          metaTitle: "",
+          metaCompany: "",
+        })),
       });
       await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
 
@@ -794,6 +894,7 @@ describe("FillPanel", () => {
 
     it("resets to the initial Add-this-job state when the tab navigates to a different job", async () => {
       let scanResp: ScanResponse = scanOk;
+      let tabUrl = scanOk.url;
       const scan = async () => scanResp;
       const fill = vi.fn(async (v: FillValue[]) => okFill(v));
       const capture = vi.fn(async () => captureOk);
@@ -809,6 +910,7 @@ describe("FillPanel", () => {
           openWebApp={vi.fn()}
           openApplication={vi.fn()}
           webReachable
+          tabUrl={tabUrl}
         />
       );
       const { rerender } = render(renderProps(0));
@@ -820,7 +922,8 @@ describe("FillPanel", () => {
       await screen.findByText("Added — tracked in OfferOS.");
 
       // Same tab navigates to a different Greenhouse job (new job id) → rescan.
-      scanResp = { ...scanOk, url: "https://boards.greenhouse.io/acme/jobs/2", title: "Other Role" };
+      tabUrl = "https://boards.greenhouse.io/acme/jobs/2";
+      scanResp = { ...scanOk, url: tabUrl, title: "Other Role" };
       rerender(renderProps(1));
 
       // The stale "Added" card must not survive into the new job.

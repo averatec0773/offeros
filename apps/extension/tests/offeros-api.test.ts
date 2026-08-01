@@ -137,10 +137,10 @@ describe("fetchResumeFile", () => {
     expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/resumes/r1/file");
   });
 
-  it("returns ok:false on a 404 (no stored file — the honest fallback trigger)", async () => {
+  it("returns ok:false with status 404 (no stored file — the honest fallback trigger)", async () => {
     const f = fakeRawFetch(404, new Uint8Array());
     const r = await fetchResumeFile("missing", f.fn);
-    expect(r).toEqual({ ok: false });
+    expect(r).toEqual({ ok: false, status: 404 });
   });
 
   it("returns ok:false on a network throw", async () => {
@@ -171,10 +171,16 @@ describe("fetchArtifactPdf", () => {
     expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/artifacts/cover-letter/pdf");
   });
 
-  it("returns ok:false on a 404 (render failed / artifact absent)", async () => {
+  it("returns ok:false with status 404 (artifact absent)", async () => {
     const f = fakeRawFetch(404, new Uint8Array());
     const r = await fetchArtifactPdf("t1", "resume", f.fn);
-    expect(r).toEqual({ ok: false });
+    expect(r).toEqual({ ok: false, status: 404 });
+  });
+
+  it("returns ok:false with status 400 (artifact exists but failed to render)", async () => {
+    const f = fakeRawFetch(400, new Uint8Array());
+    const r = await fetchArtifactPdf("t1", "resume", f.fn);
+    expect(r).toEqual({ ok: false, status: 400 });
   });
 });
 

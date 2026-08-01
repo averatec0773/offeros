@@ -36,6 +36,7 @@ import {
   matchHandoff,
   CUSTOM_UPLOADER_REASON,
   NO_FILE_REASON,
+  RENDER_FAILED_REASON,
   type FieldReportSource,
   type WriteOutcome,
 } from "../lib/autofill/task-mode";
@@ -113,14 +114,22 @@ function AddJobCard({
   const [busy, setBusy] = useState(false);
   const [dedupMatches, setDedupMatches] = useState<ApplicationSummary[] | null>(null);
   const [createdApplicationId, setCreatedApplicationId] = useState<string | null>(null);
+  // Guards the mutating create call (both entry points funnel through doCreate) against
+  // a double-click firing it twice before the `busy`-driven disabled state re-renders —
+  // mirrors the parent panel's pendingRef idiom.
+  const pendingRef = useRef(false);
 
   const onAddThisJob = async () => {
     setBusy(true);
     try {
       const res = await capture();
       setCaptured(res);
-      setTitle(res.structuredTitle ?? "");
-      setCompany(res.structuredCompany ?? "");
+      // Prefer the sanitized structured (JSON-LD) fields; fall back to the engine's
+      // sanitized page-meta guess (h1/doc title, og:site_name/hostname) rather than
+      // leaving the form blank on a DOM-only capture — still just a starting point,
+      // the user reviews/edits before Create.
+      setTitle(res.structuredTitle ?? res.metaTitle ?? "");
+      setCompany(res.structuredCompany ?? res.metaCompany ?? "");
       setDedupMatches(null);
       setCreatedApplicationId(null);
     } finally {
@@ -129,7 +138,8 @@ function AddJobCard({
   };
 
   const doCreate = async () => {
-    if (!captured) return;
+    if (!captured || pendingRef.current) return;
+    pendingRef.current = true;
     setBusy(true);
     try {
       const created = await api.createTaskFromJd({
@@ -140,6 +150,7 @@ function AddJobCard({
       });
       if (created.ok) setCreatedApplicationId(created.value.applicationId);
     } finally {
+      pendingRef.current = false;
       setBusy(false);
     }
   };
@@ -321,6 +332,7 @@ export function FillPanel({
   openWebApp,
   openApplication,
   webReachable,
+  tabUrl,
 }: {
   scan: () => Promise<ScanResponse>;
   fill: (values: FillValue[]) => Promise<FillResponse>;
@@ -336,6 +348,9 @@ export function FillPanel({
   openWebApp: () => void;
   openApplication: (applicationId: string) => void;
   webReachable: boolean;
+  /** The active tab's URL — used to key AddJobCard on the no-form branch below,
+   *  where jobKeyRef is never set (it's only populated by an ok scan). */
+  tabUrl: string;
 }) {
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [scanNonce, setScanNonce] = useState(0);
@@ -385,8 +400,9 @@ export function FillPanel({
 
   // Fetch bytes for one OfferOS-managed file kind, then drive the content-script
   // attach + DOM verify over the messaging boundary. A 404 (nothing stored, or a
-  // stale attachResume preference) and a failed DOM verify both fall back to an
-  // honest needs-user reason — never a crash, never a false "filled".
+  // stale attachResume preference), a 400 (the artifact exists but failed to
+  // render), and a failed DOM verify all fall back to an honest needs-user
+  // reason — never a crash, never a false "filled".
   const attachManagedFile = async (
     fieldId: string,
     fetched: FileFetchResult,
@@ -394,13 +410,23 @@ export function FillPanel({
   ): Promise<WriteOutcome> => {
     const source = FILE_KIND_SOURCE[kind];
     if (!fetched.ok) {
-      return { outcome: "needs-user", reason: NO_FILE_REASON, source };
+      const reason = fetched.status === 400 ? RENDER_FAILED_REASON : NO_FILE_REASON;
+      return { outcome: "needs-user", reason, source };
     }
-    const res = await attachFile(fieldId, {
-      fileName: fetched.fileName,
-      mimeType: fetched.mimeType,
-      bytesBase64: bytesToBase64(fetched.bytes),
-    });
+    // The content-script call crosses the messaging boundary (tabs.sendMessage) —
+    // a torn-down/invalidated extension context can reject it outright. Caught here
+    // so that failure degrades to the same honest custom-uploader reason instead of
+    // throwing out of taskFillPage and killing the rest of the page's cumulative report.
+    let res: AttachFileResponse;
+    try {
+      res = await attachFile(fieldId, {
+        fileName: fetched.fileName,
+        mimeType: fetched.mimeType,
+        bytesBase64: bytesToBase64(fetched.bytes),
+      });
+    } catch {
+      return { outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON, source };
+    }
     if (res.ok) {
       return { outcome: "filled", value: fetched.fileName, source };
     }
@@ -552,7 +578,9 @@ export function FillPanel({
       }
       await api.postReport(b.taskId, allReports(), false);
     }
-
+    // Intentional fallthrough: the bank save below runs even when the DOM write just
+    // failed. The accepted text is worth keeping in the answer bank for a future
+    // application even if this particular page rejected the write.
     const list = await api.listAnswers();
     if (!list.ok) return;
     const normalized = normalizeQuestion(entry.label);
@@ -656,6 +684,13 @@ export function FillPanel({
             ? "Open the application step of this job to fill it."
             : "This page isn't a supported application form."}
         </p>
+        {/* A posting page with no form yet (Lever/Ashby/Workday before the applicant
+            clicks Apply) still has a JD to capture — Add-this-job only needs that, not
+            a form. jobKeyRef is never set here (only an ok scan sets it), so key on the
+            tab URL directly. */}
+        {noForm && webReachable && (
+          <AddJobCard key={tabUrl || "no-job"} capture={capture} api={api} openApplication={openApplication} />
+        )}
       </div>
     );
   }
@@ -774,7 +809,9 @@ export function FillPanel({
                       Accept
                     </button>
                     {savedFieldIds.has(a.fieldId) && (
-                      <span className="text-caption text-success">Saved to your answers.</span>
+                      <span className="text-caption text-success">
+                        Saved — reused next time this question appears.
+                      </span>
                     )}
                   </div>
                 </li>

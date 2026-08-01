@@ -37,6 +37,10 @@ localhost-only, single-user trust model, including:
   authorize.
 - Path traversal or arbitrary file write/read through résumé or template
   uploads.
+- Any path that causes the extension to attach a file other than the three
+  OfferOS-managed artifacts (tailored résumé PDF, stored original résumé,
+  confirmed cover-letter PDF), or to read a file from the page. File bytes
+  are fetched only from the configured local web-app API base.
 
 ## Accepted risks (out of scope)
 

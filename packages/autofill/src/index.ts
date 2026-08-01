@@ -19,7 +19,7 @@ export { pickSkillMatch, skillCandidates } from "./skill-match";
 export { normalizeQuestion, matchAnswer } from "./answer-match";
 
 export type { FieldDescriptor, CanonicalField } from "./classify";
-export { classifyField } from "./classify";
+export { classifyField, isCoverLetterLabel } from "./classify";
 
 export type { FillStatus, FillItem, Coverage, FieldTrace } from "./fill-plan";
 export { buildFillPlan, classifiedRatio, fillCoverage, explainFillPlan } from "./fill-plan";

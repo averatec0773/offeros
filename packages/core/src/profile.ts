@@ -60,6 +60,8 @@ export const resumeSchema = z.object({
   targetRole: z.string().optional(),
   note: z.string().optional(),
   text: z.string().optional(),
+  /** A hint, not a guarantee — the underlying file may still be missing (e.g. an
+   *  out-of-band deletion). The file route's 404 is the real, authoritative check. */
   hasFile: z.boolean().default(false),
   createdAt: z.number(),
 });

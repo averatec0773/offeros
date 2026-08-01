@@ -154,6 +154,7 @@ export default function App() {
             openWebApp={openWebApp}
             openApplication={openApplication}
             webReachable={webReachable}
+            tabUrl={activeTab?.url ?? ""}
           />
         ) : (
           <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
