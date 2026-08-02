@@ -711,6 +711,40 @@ describe("WorkspaceClient — attach résumé toggle", () => {
   });
 });
 
+describe("WorkspaceClient — timeline poll cadence", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("re-fetches events on mount and again on every poll tick, riding the same cadence as syncFull", async () => {
+    vi.mocked(api.applications.events).mockClear();
+    vi.mocked(api.agentTasks.get).mockClear();
+    vi.useFakeTimers();
+    const task = baseTask({ status: "running" });
+
+    render(
+      <WorkspaceClient
+        application={application}
+        initialTask={task}
+        initialJdAnalysis={null}
+        initialArtifacts={[]}
+        initialFit={null}
+      />,
+    );
+
+    // Mount fetch — before any poll tick has fired.
+    expect(api.applications.events).toHaveBeenCalledTimes(1);
+    expect(api.applications.events).toHaveBeenCalledWith("app-1");
+
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(api.agentTasks.get).toHaveBeenCalledTimes(1);
+    expect(api.applications.events).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(api.applications.events).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe("shouldPoll", () => {
   it("polls while the task is running", () => {
     expect(shouldPoll(baseTask({ status: "running" }))).toBe(true);

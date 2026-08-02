@@ -139,21 +139,22 @@ export function WorkspaceClient({
     };
   }, []);
 
-  // The timeline's history; failing to load it simply leaves the card empty.
-  useEffect(() => {
-    let active = true;
-    api.applications
-      .events(application.id)
-      .then((list) => {
-        if (active) setEvents(list);
-      })
-      .catch(() => {
-        // Non-critical — the card just stays empty.
-      });
-    return () => {
-      active = false;
-    };
+  // The timeline's history. Fetched on mount and re-fetched on every
+  // `syncFull` (see below) so it rides the same cadence as the step
+  // timeline/artifacts — including the poll while the pipeline is mid-run or
+  // stalled at the fill-form gate. A failed fetch never breaks the sync; the
+  // card just keeps its last known state.
+  const fetchEvents = useCallback(async () => {
+    try {
+      setEvents(await api.applications.events(application.id));
+    } catch {
+      // Non-critical — the card just keeps its last known state.
+    }
   }, [application.id]);
+
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents]);
 
   async function handleResumeChange(nextId: string) {
     const prev = resumeId;
@@ -177,12 +178,16 @@ export function WorkspaceClient({
     }
   }
 
-  const syncFull = useCallback(async (id: string) => {
-    const data = await api.agentTasks.get(id);
-    setTask(data.task);
-    setJdAnalysis(data.jdAnalysis);
-    setArtifacts(data.artifacts);
-  }, []);
+  const syncFull = useCallback(
+    async (id: string) => {
+      const data = await api.agentTasks.get(id);
+      setTask(data.task);
+      setJdAnalysis(data.jdAnalysis);
+      setArtifacts(data.artifacts);
+      await fetchEvents();
+    },
+    [fetchEvents],
+  );
 
   // Poll while the pipeline is mid-run: `start`/`advance`/`choice` each block
   // server-side until the next gate, but the DB is written to incrementally

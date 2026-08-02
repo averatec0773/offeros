@@ -107,7 +107,7 @@ export function TimelineCard({
           <ul className="mt-3 space-y-2">
             {ordered.map((event) => (
               <li key={event.id} className="flex items-baseline justify-between gap-3 text-body">
-                <span className="text-foreground">{describeEvent(event)}</span>
+                <span className="min-w-0 break-words text-foreground">{describeEvent(event)}</span>
                 <span className="shrink-0 text-caption text-muted-foreground">
                   {new Date(event.at).toLocaleString()}
                 </span>

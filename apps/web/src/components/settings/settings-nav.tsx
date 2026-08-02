@@ -11,7 +11,7 @@ const LINKS = [
   { href: "/settings/templates", label: "Templates" },
 ];
 
-/** Sub-nav shared by the three settings pages. Active link is derived from the current path. */
+/** Sub-nav shared by the settings pages. Active link is derived from the current path. */
 export function SettingsNav() {
   const pathname = usePathname();
 

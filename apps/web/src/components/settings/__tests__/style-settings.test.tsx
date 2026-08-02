@@ -61,6 +61,24 @@ describe("StyleSettings", () => {
     expect(screen.queryByText(/Learned from 0 approvals/)).toBeNull();
   });
 
+  it("shows 'Edited manually' (not 'Learned from 0 approvals') when notes were saved by hand", async () => {
+    mockLoad([
+      {
+        kind: "resume",
+        notes: "- Keep it short.",
+        enabled: true,
+        sourceCount: 0,
+        updatedAt: new Date("2026-07-15T00:00:00Z").getTime(),
+      },
+      baseSettings[1]!,
+    ]);
+    render(<StyleSettings />);
+    await screen.findByDisplayValue("- Keep it short.");
+
+    expect(screen.getByText(/^Edited manually · updated/)).toBeTruthy();
+    expect(screen.queryByText(/Learned from 0 approvals/)).toBeNull();
+  });
+
   it("shows the privacy explainer", async () => {
     mockLoad();
     render(<StyleSettings />);
