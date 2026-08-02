@@ -60,6 +60,7 @@ export async function tweakArtifact(
       jdSummary: jdAnalysis?.summary,
       instruction,
       previousContent,
+      styleNotes: ctx.repos.getStyleNotes("cover-letter") ?? undefined,
     };
     const output = (await ctx.runLlm("cover-letter", input)) as CoverLetterOutput;
     content = output.content;
@@ -72,6 +73,7 @@ export async function tweakArtifact(
       jdText: application.jdText ?? "",
       instruction,
       previousContent,
+      styleNotes: ctx.repos.getStyleNotes("resume") ?? undefined,
     };
     const output = (await ctx.runLlm("resume-tailor", input)) as ResumeTailorOutput;
     content = serializeResume(output.structured, buildResumeHeader(profile));

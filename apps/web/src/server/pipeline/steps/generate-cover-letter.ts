@@ -33,6 +33,7 @@ export async function run(ctx: PipelineContext, task: AgentTask): Promise<void> 
     groundingFacts: buildGroundingFacts(profile, resumeText),
     jdSummary: jdAnalysis?.summary,
     templateHints: template?.scaffoldHints || undefined,
+    styleNotes: ctx.repos.getStyleNotes("cover-letter") ?? undefined,
   };
   const output = (await ctx.runLlm("cover-letter", input)) as CoverLetterOutput;
 

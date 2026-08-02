@@ -14,6 +14,7 @@ import { createApplication, updateApplication } from "../../repositories/applica
 import { createAgentTask } from "../../repositories/agent-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { getFit } from "../../repositories/fit-repo";
+import { upsertStyleMemory } from "../../repositories/style-memory-repo";
 import { uploadResume } from "../../services/resume-service";
 import { makePipelineContext } from "../context";
 import { advance, choose } from "../runner";
@@ -185,6 +186,41 @@ describe("tailor-resume step", () => {
   });
 });
 
+describe("tailor-resume step — style notes wiring", () => {
+  it("passes undefined styleNotes when no style memory is stored", async () => {
+    const { task } = seed();
+    let capturedStyleNotes: unknown = "unset";
+    const ctx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId, input) => {
+        if (taskId === "resume-tailor")
+          capturedStyleNotes = (input as { styleNotes?: string }).styleNotes;
+        return fakeRunLlm(taskId, input);
+      },
+    });
+
+    await tailorResumeRun(ctx, task);
+
+    expect(capturedStyleNotes).toBeUndefined();
+  });
+
+  it("passes the stored style notes through to the resume-tailor input when enabled", async () => {
+    const { task } = seed();
+    upsertStyleMemory(db, "resume", { notes: "- Prefers active voice.", sourceCount: 2 });
+    let capturedStyleNotes: unknown;
+    const ctx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId, input) => {
+        if (taskId === "resume-tailor")
+          capturedStyleNotes = (input as { styleNotes?: string }).styleNotes;
+        return fakeRunLlm(taskId, input);
+      },
+    });
+
+    await tailorResumeRun(ctx, task);
+
+    expect(capturedStyleNotes).toBe("- Prefers active voice.");
+  });
+});
+
 describe("analyze-site step", () => {
   it("saves a jd-analysis with gaps and sets the task's coverLetterRequirement", async () => {
     const { applicationId, task } = seed();
@@ -263,6 +299,49 @@ describe("generate-cover-letter step", () => {
     expect(second?.versions[0]!.id).toBe(first?.versions[0]!.id);
     expect(second?.currentVersionId).toBe(second?.versions[1]!.id);
     expect(second?.currentVersionId).not.toBe(first?.versions[0]!.id);
+  });
+});
+
+describe("generate-cover-letter step — style notes wiring", () => {
+  it("passes undefined styleNotes when no style memory is stored", async () => {
+    const { task } = seed();
+    const ctx = makePipelineContext(db, task.id, { runLlm: fakeRunLlm });
+    await tailorResumeRun(ctx, task);
+    await analyzeSiteRun(ctx, task);
+
+    let capturedStyleNotes: unknown = "unset";
+    const capturingCtx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId, input) => {
+        if (taskId === "cover-letter")
+          capturedStyleNotes = (input as { styleNotes?: string }).styleNotes;
+        return fakeRunLlm(taskId, input);
+      },
+    });
+
+    await generateCoverLetterRun(capturingCtx, task);
+
+    expect(capturedStyleNotes).toBeUndefined();
+  });
+
+  it("passes the stored style notes through to the cover-letter input when enabled", async () => {
+    const { task } = seed();
+    const ctx = makePipelineContext(db, task.id, { runLlm: fakeRunLlm });
+    await tailorResumeRun(ctx, task);
+    await analyzeSiteRun(ctx, task);
+    upsertStyleMemory(db, "cover-letter", { notes: "- Warm, confident tone.", sourceCount: 1 });
+
+    let capturedStyleNotes: unknown;
+    const capturingCtx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId, input) => {
+        if (taskId === "cover-letter")
+          capturedStyleNotes = (input as { styleNotes?: string }).styleNotes;
+        return fakeRunLlm(taskId, input);
+      },
+    });
+
+    await generateCoverLetterRun(capturingCtx, task);
+
+    expect(capturedStyleNotes).toBe("- Warm, confident tone.");
   });
 });
 

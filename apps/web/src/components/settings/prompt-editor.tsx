@@ -11,6 +11,7 @@ const TASKS: { id: TaskId; label: string }[] = [
   { id: "question-answer", label: "Question answer" },
   { id: "resume-parse", label: "Résumé parsing" },
   { id: "fit-analysis", label: "Fit analysis" },
+  { id: "style-distill", label: "Style memory distillation" },
 ];
 
 // Strips empty-string entries so an emptied field clears the override instead

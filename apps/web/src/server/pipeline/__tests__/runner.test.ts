@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,12 +8,15 @@ import { createDb, type Db } from "../../db/client";
 import { createApplication, getApplication } from "../../repositories/application-repo";
 import { createAgentTask, getAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
 import { listEvents } from "../../repositories/application-event-repo";
+import { upsertArtifact } from "../../repositories/artifact-repo";
+import { getStyleMemory } from "../../repositories/style-memory-repo";
 import { makePipelineContext } from "../context";
 import { advance, choose, failureReasonFor, startTask } from "../runner";
 import type { PipelineStep } from "../types";
 
 const FILL_FORM_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
 const SUBMIT_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "submit");
+const CONFIRM_RESUME_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "confirm-resume");
 
 let db: Db;
 let dir: string;
@@ -67,6 +70,37 @@ function seedTask(): string {
     jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
   });
   return createAgentTask(db, { applicationId: app.id }).id;
+}
+
+/** Seeds a `resume` artifact parked at the confirm-resume gate, ready to
+ *  approve. `withInstruction: true` gives it a 2-version history where the
+ *  second version carries a tweak `instruction` — the signal the style-
+ *  distill trigger looks for. */
+function seedResumeAtConfirmGate(taskId: string, opts: { withInstruction: boolean }): void {
+  const now = Date.now();
+  const v1 = { id: "v1", content: "First draft content.", rationale: "r1", createdAt: now };
+  const versions = opts.withInstruction
+    ? [
+        v1,
+        {
+          id: "v2",
+          content: "Tweaked content.",
+          rationale: "r2",
+          createdAt: now + 1,
+          instruction: "Make it punchier.",
+        },
+      ]
+    : [v1];
+  upsertArtifact(db, {
+    id: "art-resume-1",
+    taskId,
+    kind: "resume",
+    versions,
+    currentVersionId: versions.at(-1)!.id,
+    createdAt: now,
+    updatedAt: now,
+  });
+  updateAgentTask(db, taskId, { step: CONFIRM_RESUME_STEP, status: "awaiting_user" });
 }
 
 describe("pipeline runner", () => {
@@ -389,6 +423,92 @@ describe("pipeline runner — application events", () => {
       "artifact-approved", // résumé approved
       "step-completed", // analyze-site
     ]);
+  });
+});
+
+describe("pipeline runner — style memory distill trigger", () => {
+  it("approving a tweaked artifact fires distill asynchronously and appends a style-distilled event on success", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    seedResumeAtConfirmGate(taskId, { withInstruction: true });
+
+    let capturedInput: unknown;
+    const ctx = makePipelineContext(db, taskId, {
+      steps: makeSteps({ requirement: "optional" }),
+      runLlm: async (llmTaskId, input) => {
+        if (llmTaskId === "style-distill") {
+          capturedInput = input;
+          return { notes: "- Prefers punchier phrasing." };
+        }
+        throw new Error(`unexpected task id ${llmTaskId}`);
+      },
+    });
+
+    const task = await advance(ctx); // approve — response must return before distill settles
+    expect(task.status).toBe("awaiting_user"); // approve latency/response unaffected
+
+    await vi.waitFor(() => {
+      const events = listEvents(db, applicationId);
+      expect(events.some((e) => e.kind === "style-distilled")).toBe(true);
+    });
+
+    expect(capturedInput).toMatchObject({
+      instructions: ["Make it punchier."],
+      firstContent: "First draft content.",
+      approvedContent: "Tweaked content.",
+    });
+    expect(getStyleMemory(db, "resume")?.notes).toBe("- Prefers punchier phrasing.");
+
+    const events = listEvents(db, applicationId);
+    const distilled = events.find((e) => e.kind === "style-distilled");
+    expect(distilled?.payload).toEqual({ kind: "resume" });
+  });
+
+  it("approving an untweaked (single-version) artifact does not fire distill", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    seedResumeAtConfirmGate(taskId, { withInstruction: false });
+
+    const ctx = makePipelineContext(db, taskId, {
+      steps: makeSteps({ requirement: "optional" }),
+      runLlm: async (llmTaskId) => {
+        throw new Error(`style-distill must not be called: got ${llmTaskId}`);
+      },
+    });
+
+    await advance(ctx);
+
+    const events = listEvents(db, applicationId);
+    expect(events.some((e) => e.kind === "style-distilled")).toBe(false);
+    expect(getStyleMemory(db, "resume")).toBeNull();
+  });
+
+  it("a distill rejection is silent: the approve response is unaffected and no style-distilled event is written", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    seedResumeAtConfirmGate(taskId, { withInstruction: true });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const ctx = makePipelineContext(db, taskId, {
+      steps: makeSteps({ requirement: "optional" }),
+      runLlm: async (llmTaskId) => {
+        if (llmTaskId === "style-distill") throw new Error("distill boom");
+        throw new Error(`unexpected task id ${llmTaskId}`);
+      },
+    });
+
+    const task = await advance(ctx);
+    expect(task.status).toBe("awaiting_user"); // approve did not throw / was not delayed
+
+    await vi.waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
+    const events = listEvents(db, applicationId);
+    expect(events.some((e) => e.kind === "style-distilled")).toBe(false);
+    expect(getStyleMemory(db, "resume")).toBeNull();
+
+    consoleErrorSpy.mockRestore();
   });
 });
 

@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS fill_handoffs (
 CREATE TABLE IF NOT EXISTS application_events (
   id TEXT PRIMARY KEY, application_id TEXT NOT NULL, kind TEXT NOT NULL,
   at INTEGER NOT NULL, payload TEXT);
+CREATE TABLE IF NOT EXISTS style_memories (
+  kind TEXT PRIMARY KEY, notes TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1, source_count INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_agent_tasks_application ON agent_tasks(application_id);
 CREATE INDEX IF NOT EXISTS idx_jd_analyses_application ON jd_analyses(application_id);

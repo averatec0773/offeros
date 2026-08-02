@@ -121,6 +121,17 @@ export const applicationEvents = sqliteTable("application_events", {
   payload: text("payload", { mode: "json" }).$type<Record<string, unknown>>(),
 });
 
+/** One row per style-memory kind ("resume" | "cover-letter"), keyed by `kind`.
+ *  Owned by `style-memory-repo.ts`; see `server/memory/style-memory.ts` for
+ *  the pluggable contract this backs. */
+export const styleMemories = sqliteTable("style_memories", {
+  kind: text("kind").primaryKey(),
+  notes: text("notes").notNull().default(""),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  sourceCount: integer("source_count").notNull().default(0),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const schema = {
   profiles,
   answers,
@@ -134,4 +145,5 @@ export const schema = {
   templates,
   fillHandoffs,
   applicationEvents,
+  styleMemories,
 };

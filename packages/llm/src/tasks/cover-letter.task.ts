@@ -2,6 +2,7 @@ import type { JobInfo } from "@offeros/core";
 import { z } from "zod";
 import { extractJson } from "../parse-json";
 import type { LlmTask } from "../task";
+import { STYLE_NOTES_LABEL } from "../style-notes";
 
 export interface CoverLetterInput {
   jobInfo: JobInfo;
@@ -11,6 +12,8 @@ export interface CoverLetterInput {
   previousContent?: string;
   /** scaffoldHints from the user's default cover-letter template, when one exists. */
   templateHints?: string;
+  /** The applicant's distilled style preferences, when style memory has any. */
+  styleNotes?: string;
 }
 
 export interface CoverLetterOutput {
@@ -70,6 +73,7 @@ export const coverLetterTask: LlmTask<CoverLetterInput, CoverLetterOutput> = {
       "",
       "Grounding facts (the only source of truth for claims):",
       i.groundingFacts,
+      i.styleNotes ? `${STYLE_NOTES_LABEL}\n${i.styleNotes}` : "",
       "",
       i.jdSummary ? `Job description summary:\n${i.jdSummary}` : "",
       i.previousContent ? `Previous letter draft:\n---\n${i.previousContent}\n---` : "",

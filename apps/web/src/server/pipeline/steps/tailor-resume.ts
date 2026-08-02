@@ -21,6 +21,7 @@ export async function run(ctx: PipelineContext, task: AgentTask): Promise<void> 
     resumeText: resolveResumeText(application, resumes, profile),
     jobInfo: application.jobInfo,
     jdText: application.jdText ?? "",
+    styleNotes: ctx.repos.getStyleNotes("resume") ?? undefined,
   };
   const output = (await ctx.runLlm("resume-tailor", input)) as ResumeTailorOutput;
   const content = serializeResume(output.structured, buildResumeHeader(profile));

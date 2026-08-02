@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { LlmProvider, ProviderCallArgs } from "@offeros/llm";
 import { createDb, type Db } from "../../db/client";
 import { getSettings, saveSettings } from "../../repositories/settings-repo";
+import { upsertStyleMemory } from "../../repositories/style-memory-repo";
 import { makePipelineContext } from "../context";
 
 let db: Db;
@@ -94,5 +95,20 @@ describe("apiKeyFor — settings-first key resolution", () => {
     await ctx.runLlm("cover-letter", INPUT);
 
     expect(recorded[0]!.key).toBe("");
+  });
+});
+
+describe("repos.getStyleNotes — style-memory registry binding", () => {
+  it("returns null when no style memory exists for the kind", () => {
+    const ctx = makePipelineContext(db, "task-1");
+    expect(ctx.repos.getStyleNotes("resume")).toBeNull();
+    expect(ctx.repos.getStyleNotes("cover-letter")).toBeNull();
+  });
+
+  it("returns the stored notes for the kind once distilled/saved", () => {
+    upsertStyleMemory(db, "resume", { notes: "- Prefers active voice.", sourceCount: 1 });
+    const ctx = makePipelineContext(db, "task-1");
+    expect(ctx.repos.getStyleNotes("resume")).toBe("- Prefers active voice.");
+    expect(ctx.repos.getStyleNotes("cover-letter")).toBeNull();
   });
 });

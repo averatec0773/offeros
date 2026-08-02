@@ -229,3 +229,53 @@ describe("coverLetterTask", () => {
     expect(() => coverLetterTask.parse(malformed)).toThrow();
   });
 });
+
+// Captured verbatim from coverLetterTask.buildUserPrompt BEFORE the styleNotes
+// change was made (same fixed input as below), per the Phase 10 Task 2 byte-
+// identity regression: with styleNotes absent, today's exact output must never
+// change shape.
+const STYLE_NOTES_REGRESSION_INPUT = {
+  jobInfo,
+  groundingFacts: "Name: Jordan Rivera. Led the widget pipeline rollout.",
+  jdSummary: "Looking for a GenAI engineer to own LLM pipelines.",
+};
+const STYLE_NOTES_REGRESSION_EXPECTED =
+  'Role: "GenAI Engineer" at "Evolver".\n\n' +
+  "Grounding facts (the only source of truth for claims):\n\n" +
+  "Name: Jordan Rivera. Led the widget pipeline rollout.\n\n" +
+  "Job description summary:\nLooking for a GenAI engineer to own LLM pipelines.";
+
+describe("coverLetterTask styleNotes injection (Phase 10 Task 2)", () => {
+  it("BYTE-IDENTITY: buildUserPrompt is unchanged when styleNotes is absent", () => {
+    expect(coverLetterTask.buildUserPrompt(STYLE_NOTES_REGRESSION_INPUT)).toBe(
+      STYLE_NOTES_REGRESSION_EXPECTED,
+    );
+  });
+
+  it("BYTE-IDENTITY: buildUserPrompt is unchanged when styleNotes is explicitly undefined", () => {
+    expect(
+      coverLetterTask.buildUserPrompt({ ...STYLE_NOTES_REGRESSION_INPUT, styleNotes: undefined }),
+    ).toBe(STYLE_NOTES_REGRESSION_EXPECTED);
+  });
+
+  it("BYTE-IDENTITY: buildUserPrompt is unchanged when styleNotes is an empty string", () => {
+    expect(
+      coverLetterTask.buildUserPrompt({ ...STYLE_NOTES_REGRESSION_INPUT, styleNotes: "" }),
+    ).toBe(STYLE_NOTES_REGRESSION_EXPECTED);
+  });
+
+  it("injects the labeled style-notes block only when styleNotes is set, alongside the grounding facts", () => {
+    const prompt = coverLetterTask.buildUserPrompt({
+      ...STYLE_NOTES_REGRESSION_INPUT,
+      styleNotes: "- Prefers a warm, confident tone.",
+    });
+    expect(prompt).not.toBe(STYLE_NOTES_REGRESSION_EXPECTED);
+    expect(prompt).toContain(
+      "The applicant's standing style preferences (from their own past edits) — follow unless the instruction says otherwise:",
+    );
+    expect(prompt).toContain("- Prefers a warm, confident tone.");
+    expect(prompt.indexOf("The applicant's standing style preferences")).toBeGreaterThan(
+      prompt.indexOf("Grounding facts"),
+    );
+  });
+});

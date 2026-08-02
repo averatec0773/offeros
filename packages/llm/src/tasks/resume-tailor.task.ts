@@ -4,6 +4,7 @@ import { LlmError } from "../errors";
 import { extractJson } from "../parse-json";
 import type { LlmTask } from "../task";
 import { fenceUntrusted, neutralizeFenceTokens } from "../untrusted";
+import { STYLE_NOTES_LABEL } from "../style-notes";
 
 export interface ResumeTailorInput {
   resumeText: string;
@@ -12,6 +13,8 @@ export interface ResumeTailorInput {
   /** Present on a tweak re-run: apply this instruction to `previousContent`. */
   instruction?: string;
   previousContent?: string;
+  /** The applicant's distilled style preferences, when style memory has any. */
+  styleNotes?: string;
 }
 
 // Field names deliberately mirror @offeros/core's structuredResumeSchema
@@ -133,6 +136,7 @@ export const resumeTailorTask: LlmTask<ResumeTailorInput, ResumeTailorOutput> = 
       "---",
       i.resumeText,
       "---",
+      i.styleNotes ? `\n${STYLE_NOTES_LABEL}\n${i.styleNotes}` : "",
       "",
       "Job description:",
       fenceUntrusted(neutralizeFenceTokens(i.jdText)),

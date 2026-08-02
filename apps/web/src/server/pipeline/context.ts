@@ -27,6 +27,7 @@ import { getProfile, saveProfile } from "../repositories/profile-repo";
 import { getSettings, saveSettings } from "../repositories/settings-repo";
 import { getDefaultTemplate } from "../repositories/template-repo";
 import { listResumes } from "../services/resume-service";
+import { styleMemory, type StyleMemoryKind } from "../memory/style-memory";
 import { STEPS } from "./steps";
 import type { PipelineContext, PipelineStep } from "./types";
 
@@ -70,6 +71,8 @@ export function makeRepos(db: Db) {
     saveSettings: (next: Parameters<typeof saveSettings>[1]) => saveSettings(db, next),
 
     getDefaultTemplate: (kind: string) => getDefaultTemplate(db, kind),
+
+    getStyleNotes: (kind: StyleMemoryKind) => styleMemory.retrieve(db, kind),
   };
 }
 

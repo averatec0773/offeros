@@ -9,6 +9,7 @@ import { createAgentTask } from "../../repositories/agent-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { uploadResume } from "../../services/resume-service";
 import { listEvents } from "../../repositories/application-event-repo";
+import { upsertStyleMemory } from "../../repositories/style-memory-repo";
 import { makePipelineContext } from "../context";
 import { tweakArtifact } from "../tweak";
 import { run as tailorResumeRun } from "../steps/tailor-resume";
@@ -156,5 +157,73 @@ describe("tweakArtifact (resume)", () => {
       applicationId,
       payload: { kind: "resume", instruction: "Add a metrics line." },
     });
+  });
+
+  it("passes the stored resume style notes through to the tweak's resume-tailor call", async () => {
+    const { task } = seed();
+    upsertStyleMemory(db, "resume", { notes: "- Prefers active voice.", sourceCount: 1 });
+
+    const ctx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId) => {
+        if (taskId === "resume-tailor") return RESUME_OUTPUT;
+        throw new Error(`unexpected task id ${taskId}`);
+      },
+    });
+    await tailorResumeRun(ctx, task);
+
+    let capturedStyleNotes: unknown;
+    const tweakCtx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId, input) => {
+        if (taskId === "resume-tailor") {
+          capturedStyleNotes = (input as { styleNotes?: string }).styleNotes;
+          return RESUME_TWEAK_OUTPUT;
+        }
+        throw new Error(`unexpected task id ${taskId}`);
+      },
+    });
+    await tweakArtifact(tweakCtx, "resume", "Add a metrics line.");
+
+    expect(capturedStyleNotes).toBe("- Prefers active voice.");
+  });
+});
+
+describe("tweakArtifact (cover-letter) — style notes wiring", () => {
+  it("passes the stored cover-letter style notes through to the tweak's cover-letter call", async () => {
+    const { task } = seed();
+    upsertStyleMemory(db, "cover-letter", { notes: "- Warm, confident tone.", sourceCount: 1 });
+
+    const ctx = makePipelineContext(db, task.id, {
+      runLlm: async () => ({ content: "x", rationale: "" }),
+    });
+    ctx.repos.upsertArtifact({
+      id: "cl-1",
+      taskId: task.id,
+      kind: "cover-letter",
+      versions: [
+        {
+          id: "v1",
+          content: "Dear Hiring Team,\n\nFirst draft.",
+          rationale: "r",
+          createdAt: Date.now(),
+        },
+      ],
+      currentVersionId: "v1",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    let capturedStyleNotes: unknown;
+    const tweakCtx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId, input) => {
+        if (taskId === "cover-letter") {
+          capturedStyleNotes = (input as { styleNotes?: string }).styleNotes;
+          return { content: "Dear Hiring Team,\n\nRevised.", rationale: "Applied the tweak." };
+        }
+        throw new Error(`unexpected task id ${taskId}`);
+      },
+    });
+    await tweakArtifact(tweakCtx, "cover-letter", "Make it warmer.");
+
+    expect(capturedStyleNotes).toBe("- Warm, confident tone.");
   });
 });

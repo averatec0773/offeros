@@ -12,3 +12,5 @@ export * from "./tasks/cover-letter.task";
 export * from "./tasks/question-answer.task";
 export * from "./tasks/resume-parse.task";
 export * from "./tasks/fit-analysis.task";
+export * from "./tasks/style-distill.task";
+export * from "./style-notes";

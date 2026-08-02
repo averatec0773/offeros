@@ -61,7 +61,7 @@ AGENTS.md
 CLAUDE.md
 .claude/
 .codex/
-memory/
+/memory/
 loop/
 .superpowers/
 .agents/

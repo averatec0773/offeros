@@ -4,7 +4,8 @@ export type TaskId =
   | "cover-letter"
   | "question-answer"
   | "resume-parse"
-  | "fit-analysis";
+  | "fit-analysis"
+  | "style-distill";
 
 export interface LlmTask<Input = unknown, Output = unknown> {
   id: TaskId;
