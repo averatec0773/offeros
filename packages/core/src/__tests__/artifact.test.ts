@@ -45,4 +45,23 @@ describe("artifactVersionSchema", () => {
       skills: [],
     });
   });
+
+  it("parses a version with no instruction (old-shape compat)", () => {
+    const parsed = artifactVersionSchema.parse({
+      id: "v4",
+      content: "plain text resume",
+      createdAt: 1,
+    });
+    expect(parsed.instruction).toBeUndefined();
+  });
+
+  it("round-trips a persisted tweak instruction", () => {
+    const parsed = artifactVersionSchema.parse({
+      id: "v5",
+      content: "revised resume",
+      createdAt: 1,
+      instruction: "Add a metrics line to the Acme bullet.",
+    });
+    expect(parsed.instruction).toBe("Add a metrics line to the Acme bullet.");
+  });
 });

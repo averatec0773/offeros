@@ -13,6 +13,7 @@ import type {
   ResumeTailorOutput,
 } from "@offeros/llm";
 import { diffLines, type LineDiff } from "@/lib/diff";
+import { appendEvent } from "../repositories/application-event-repo";
 import type { PipelineContext } from "./types";
 import { buildGroundingFacts, resolveResumeText } from "./steps/grounding";
 
@@ -88,6 +89,7 @@ export async function tweakArtifact(
     changedLines,
     resumeData,
     createdAt: now,
+    instruction,
   };
   const updated: Artifact = {
     ...existing,
@@ -96,6 +98,11 @@ export async function tweakArtifact(
     updatedAt: now,
   };
   ctx.repos.upsertArtifact(updated);
+  appendEvent(ctx.db, {
+    applicationId: task.applicationId,
+    kind: "artifact-tweaked",
+    payload: { kind, instruction },
+  });
 
   return { version: newVersion, diff: diffLines(previousContent, content) };
 }

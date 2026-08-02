@@ -41,12 +41,16 @@ CREATE TABLE IF NOT EXISTS fill_handoffs (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL, application_id TEXT NOT NULL,
   apply_link TEXT, status TEXT NOT NULL,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS application_events (
+  id TEXT PRIMARY KEY, application_id TEXT NOT NULL, kind TEXT NOT NULL,
+  at INTEGER NOT NULL, payload TEXT);
 CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_agent_tasks_application ON agent_tasks(application_id);
 CREATE INDEX IF NOT EXISTS idx_jd_analyses_application ON jd_analyses(application_id);
 CREATE INDEX IF NOT EXISTS idx_fit_analyses_application ON fit_analyses(application_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_task ON artifacts(task_id);
 CREATE INDEX IF NOT EXISTS idx_fill_handoffs_task ON fill_handoffs(task_id);
+CREATE INDEX IF NOT EXISTS idx_application_events_application ON application_events(application_id);
 `;
 
 /** SQLite errors on `ALTER TABLE ADD COLUMN` if the column already exists, so

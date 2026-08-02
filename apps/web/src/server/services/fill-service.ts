@@ -17,6 +17,7 @@ import { getApplication, updateApplication } from "../repositories/application-r
 import { getArtifact } from "../repositories/artifact-repo";
 import { getJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getProfile } from "../repositories/profile-repo";
+import { appendEvent } from "../repositories/application-event-repo";
 import { buildProfileFacts, resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { listResumes } from "./resume-service";
 import {
@@ -215,23 +216,38 @@ export function applyFillReport(
   const merged = mergeFieldReports(task.fieldReports ?? [], reports);
   const applicationInfo = deriveApplicationInfo(merged);
 
+  let result: AgentTask;
   if (!complete) {
-    return persist(db, taskId, { fieldReports: merged, applicationInfo });
+    result = persist(db, taskId, { fieldReports: merged, applicationInfo });
+  } else {
+    closeOpenHandoffsForTask(db, taskId);
+
+    if (applicationInfo?.status === 1) {
+      result = persist(db, taskId, {
+        fieldReports: merged,
+        applicationInfo,
+        step: stepIndex("submit"),
+        status: "awaiting_user",
+      });
+    } else {
+      // status 2 (or no reports): hold at fill-form as Action Required.
+      result = persist(db, taskId, {
+        fieldReports: merged,
+        applicationInfo,
+        status: "awaiting_user",
+      });
+    }
   }
 
-  closeOpenHandoffsForTask(db, taskId);
+  const filled = merged.filter((r) => r.outcome === "filled").length;
+  const needsUser = merged.filter((r) => r.outcome === "needs-user").length;
+  appendEvent(db, {
+    applicationId: task.applicationId,
+    kind: "fill-reported",
+    payload: { filled, needsUser },
+  });
 
-  if (applicationInfo?.status === 1) {
-    return persist(db, taskId, {
-      fieldReports: merged,
-      applicationInfo,
-      step: stepIndex("submit"),
-      status: "awaiting_user",
-    });
-  }
-
-  // status 2 (or no reports): hold at fill-form as Action Required.
-  return persist(db, taskId, { fieldReports: merged, applicationInfo, status: "awaiting_user" });
+  return result;
 }
 
 /**
@@ -261,7 +277,9 @@ export function resolveFill(
     }
     closeOpenHandoffsForTask(db, taskId);
     updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
-    return persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
+    const result = persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
+    appendEvent(db, { applicationId: task.applicationId, kind: "marked-submitted" });
+    return result;
   }
 
   // "fixed": only meaningful for an Action-Required task (status 2). The user
@@ -317,7 +335,9 @@ export function completeSubmitted(db: Db, taskId: string): AgentTask {
     throw new ServiceError("task is not at the submit gate");
   }
   updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
-  return persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
+  const result = persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
+  appendEvent(db, { applicationId: task.applicationId, kind: "marked-submitted" });
+  return result;
 }
 
 /**

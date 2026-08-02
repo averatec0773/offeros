@@ -1,5 +1,6 @@
-import type { AgentTask } from "@offeros/core";
+import type { AgentTask, ArtifactKind, PipelineStepKey } from "@offeros/core";
 import { completeSubmitted } from "../services/fill-service";
+import { appendEvent } from "../repositories/application-event-repo";
 import { resolveGate, type PipelineContext, type PipelineStep } from "./types";
 
 /**
@@ -38,6 +39,12 @@ const TERMINAL_BOUNDARY = "fill-form";
 const SUBMIT_GATE = "submit";
 /** Steps `runForward` never runs through — it parks at them with `awaiting_user`. */
 const RUN_FORWARD_BOUNDARIES = new Set<string>([TERMINAL_BOUNDARY, SUBMIT_GATE]);
+/** Which artifact kind a confirm-gate step key approves — the only two confirm
+ *  gates in the registry (see steps/index.ts's GATES). */
+const CONFIRM_ARTIFACT_KIND: Partial<Record<PipelineStepKey, ArtifactKind>> = {
+  "confirm-resume": "resume",
+  "confirm-cover-letter": "cover-letter",
+};
 
 async function persist(ctx: PipelineContext, patch: Partial<AgentTask>): Promise<AgentTask> {
   const updated = await ctx.repos.updateAgentTask(ctx.taskId, patch);
@@ -129,6 +136,11 @@ async function runForward(ctx: PipelineContext, start: AgentTask): Promise<Agent
       return failed(ctx, error);
     }
     task = await persist(ctx, { step: task.step + 1 });
+    appendEvent(ctx.db, {
+      applicationId: task.applicationId,
+      kind: "step-completed",
+      payload: { step: step.key },
+    });
     ranBody = true;
   }
 }
@@ -157,7 +169,18 @@ export async function advance(ctx: PipelineContext): Promise<AgentTask> {
     if (step.key === SUBMIT_GATE) return completeSubmitted(ctx.db, ctx.taskId);
     const gate = resolveGate(step, task);
     if (gate === "choice") return task; // a decision is required — use choose()
-    // confirm gate: pure stop, move past without running a body
+    // confirm gate: pure stop, move past without running a body. This is the
+    // one site that actually knows an approval happened (vs. a generic
+    // advance) — the confirm-resume/confirm-cover-letter step key it's
+    // parked at names the artifact kind being approved.
+    const approvedKind = CONFIRM_ARTIFACT_KIND[step.key];
+    if (approvedKind) {
+      appendEvent(ctx.db, {
+        applicationId: task.applicationId,
+        kind: "artifact-approved",
+        payload: { kind: approvedKind },
+      });
+    }
     return runForward(ctx, await persist(ctx, { step: task.step + 1 }));
   }
 
@@ -184,15 +207,29 @@ export async function choose(
   }
 
   // generate
+  let ran = false;
   try {
-    if (await step.shouldRun(ctx, task)) await runBody(ctx, step, task);
+    if (await step.shouldRun(ctx, task)) {
+      await runBody(ctx, step, task);
+      ran = true;
+    }
   } catch (error) {
     return failed(ctx, error);
   }
-  return runForward(ctx, await persist(ctx, { step: task.step + 1 }));
+  const next = await persist(ctx, { step: task.step + 1 });
+  if (ran) {
+    appendEvent(ctx.db, {
+      applicationId: next.applicationId,
+      kind: "step-completed",
+      payload: { step: step.key },
+    });
+  }
+  return runForward(ctx, next);
 }
 
 /** Begin (or resume) running a task. Equivalent to advancing from its position. */
 export async function startTask(ctx: PipelineContext): Promise<AgentTask> {
+  const task = load(ctx);
+  appendEvent(ctx.db, { applicationId: task.applicationId, kind: "task-started" });
   return advance(ctx);
 }

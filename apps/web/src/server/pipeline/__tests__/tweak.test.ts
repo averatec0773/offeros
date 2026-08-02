@@ -8,6 +8,7 @@ import { createApplication, updateApplication } from "../../repositories/applica
 import { createAgentTask } from "../../repositories/agent-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { uploadResume } from "../../services/resume-service";
+import { listEvents } from "../../repositories/application-event-repo";
 import { makePipelineContext } from "../context";
 import { tweakArtifact } from "../tweak";
 import { run as tailorResumeRun } from "../steps/tailor-resume";
@@ -125,5 +126,35 @@ describe("tweakArtifact (resume)", () => {
     );
     expect(version.resumeData).toEqual(RESUME_TWEAK_STRUCTURED);
     expect(diff.some((d) => d.op === "add")).toBe(true);
+  });
+
+  it("persists the instruction on the new version and appends an artifact-tweaked event", async () => {
+    const { applicationId, task } = seed();
+
+    const ctx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId) => {
+        if (taskId === "resume-tailor") return RESUME_OUTPUT;
+        throw new Error(`unexpected task id ${taskId}`);
+      },
+    });
+    await tailorResumeRun(ctx, task);
+
+    const tweakCtx = makePipelineContext(db, task.id, {
+      runLlm: async (taskId) => {
+        if (taskId === "resume-tailor") return RESUME_TWEAK_OUTPUT;
+        throw new Error(`unexpected task id ${taskId}`);
+      },
+    });
+    const { version } = await tweakArtifact(tweakCtx, "resume", "Add a metrics line.");
+
+    expect(version.instruction).toBe("Add a metrics line.");
+
+    const events = listEvents(db, applicationId);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: "artifact-tweaked",
+      applicationId,
+      payload: { kind: "resume", instruction: "Add a metrics line." },
+    });
   });
 });

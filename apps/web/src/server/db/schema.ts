@@ -111,6 +111,16 @@ export const fillHandoffs = sqliteTable("fill_handoffs", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/** Append-only bookkeeping log, one row per notable pipeline occurrence. See
+ *  `@offeros/core`'s `applicationEventSchema` for the shape `doc` round-trips. */
+export const applicationEvents = sqliteTable("application_events", {
+  id: text("id").primaryKey(),
+  applicationId: text("application_id").notNull(),
+  kind: text("kind").notNull(),
+  at: integer("at").notNull(),
+  payload: text("payload", { mode: "json" }).$type<Record<string, unknown>>(),
+});
+
 export const schema = {
   profiles,
   answers,
@@ -123,4 +133,5 @@ export const schema = {
   artifacts,
   templates,
   fillHandoffs,
+  applicationEvents,
 };

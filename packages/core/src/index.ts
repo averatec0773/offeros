@@ -9,3 +9,4 @@ export * from "./fill";
 export * from "./template";
 export * from "./fit";
 export * from "./resume";
+export * from "./application-event";

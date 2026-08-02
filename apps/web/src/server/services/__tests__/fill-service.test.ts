@@ -15,6 +15,7 @@ import { saveProfile } from "../../repositories/profile-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
 import { saveJdAnalysis } from "../../repositories/jd-analysis-repo";
 import { getFillHandoff } from "../../repositories/fill-handoff-repo";
+import { listEvents } from "../../repositories/application-event-repo";
 import { uploadResume } from "../resume-service";
 import { answers, resumes } from "../../db/schema";
 import {
@@ -323,6 +324,46 @@ describe("applyFillReport", () => {
     expect(task.step).toBe(FILL_FORM_STEP);
     expect(task.status).toBe("awaiting_user");
   });
+
+  it("appends a fill-reported event with the derived filled/needsUser counts", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    applyFillReport(
+      db,
+      taskId,
+      [
+        report({ fieldId: "email", outcome: "filled", required: true }),
+        report({ fieldId: "eeo", outcome: "needs-user", required: true }),
+        report({ fieldId: "phone", outcome: "filled", required: true }),
+      ],
+      false,
+    );
+    const events = listEvents(db, applicationId);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      kind: "fill-reported",
+      applicationId,
+      payload: { filled: 2, needsUser: 1 },
+    });
+  });
+
+  it("appends a fill-reported event on every call, including a complete report", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    applyFillReport(
+      db,
+      taskId,
+      [report({ fieldId: "email", outcome: "filled", required: true })],
+      false,
+    );
+    applyFillReport(
+      db,
+      taskId,
+      [report({ fieldId: "phone", outcome: "filled", required: true })],
+      true,
+    );
+    const events = listEvents(db, applicationId);
+    expect(events.map((e) => e.kind)).toEqual(["fill-reported", "fill-reported"]);
+    expect(events[1]?.payload).toEqual({ filled: 2, needsUser: 0 });
+  });
 });
 
 describe("resolveFill", () => {
@@ -455,6 +496,13 @@ describe("resolveFill", () => {
     expect(application?.appliedAt).toBeLessThanOrEqual(Date.now());
   });
 
+  it("'applied-manually' appends a marked-submitted event", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    resolveFill(db, taskId, "applied-manually");
+    const events = listEvents(db, applicationId);
+    expect(events.map((e) => e.kind)).toEqual(["marked-submitted"]);
+  });
+
   it("'fixed' completes an open claimed handoff (does not leave it open forever)", () => {
     const { taskId } = seedTaskAtFillForm();
     const handoff = createHandoffForTask(db, taskId);
@@ -504,5 +552,13 @@ describe("completeSubmitted", () => {
     expect(application?.appliedAt).toBeGreaterThanOrEqual(before);
     expect(application?.appliedAt).toBeLessThanOrEqual(Date.now());
     expect(getAgentTask(db, taskId)?.status).toBe("done");
+  });
+
+  it("appends a marked-submitted event", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    completeSubmitted(db, taskId);
+    const events = listEvents(db, applicationId);
+    expect(events.map((e) => e.kind)).toEqual(["marked-submitted"]);
   });
 });

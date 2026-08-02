@@ -7,8 +7,9 @@ import { LlmError } from "@offeros/llm";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, getApplication } from "../../repositories/application-repo";
 import { createAgentTask, getAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import { listEvents } from "../../repositories/application-event-repo";
 import { makePipelineContext } from "../context";
-import { advance, choose, failureReasonFor } from "../runner";
+import { advance, choose, failureReasonFor, startTask } from "../runner";
 import type { PipelineStep } from "../types";
 
 const FILL_FORM_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
@@ -272,6 +273,100 @@ describe("pipeline runner", () => {
     expect(task.failureReason).toBe(
       "No API key configured for anthropic. Add one in Settings → AI.",
     );
+  });
+});
+
+describe("pipeline runner — application events", () => {
+  it("startTask appends a task-started event", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
+    await startTask(ctx);
+    const events = listEvents(db, applicationId);
+    expect(events.map((e) => e.kind)).toEqual(["task-started", "step-completed"]);
+  });
+
+  it("each successful step body run appends a step-completed event with its step key", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
+    await advance(ctx); // runs tailor-resume → résumé confirm gate
+    const events = listEvents(db, applicationId);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ kind: "step-completed", payload: { step: "tailor-resume" } });
+  });
+
+  it("approving the résumé confirm gate appends an artifact-approved event for kind resume", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
+    await advance(ctx); // → résumé confirm gate
+    await advance(ctx); // approve → runs analyze-site → choice gate
+    const events = listEvents(db, applicationId);
+    expect(events.map((e) => e.kind)).toEqual([
+      "step-completed", // tailor-resume
+      "artifact-approved", // résumé approved
+      "step-completed", // analyze-site
+    ]);
+    expect(events[1]?.payload).toEqual({ kind: "resume" });
+  });
+
+  it("approving the cover-letter confirm gate appends an artifact-approved event for kind cover-letter", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "required" }) });
+    await advance(ctx); // résumé gate
+    await advance(ctx); // approve résumé → analyze → auto-generate cover letter → confirm-cover-letter gate
+    await advance(ctx); // approve cover letter → fill-form boundary
+    const events = listEvents(db, applicationId);
+    const approved = events.filter((e) => e.kind === "artifact-approved");
+    expect(approved.map((e) => e.payload)).toEqual([{ kind: "resume" }, { kind: "cover-letter" }]);
+  });
+
+  it("choosing generate at the cover-letter choice gate appends a step-completed event", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
+    await advance(ctx); // résumé gate
+    await advance(ctx); // → choice gate
+    await choose(ctx, "generate");
+    const events = listEvents(db, applicationId);
+    expect(events.map((e) => e.kind)).toEqual([
+      "step-completed", // tailor-resume
+      "artifact-approved", // résumé approved
+      "step-completed", // analyze-site
+      "step-completed", // generate-cover-letter
+    ]);
+    expect(events.at(-1)?.payload).toEqual({ step: "generate-cover-letter" });
+  });
+
+  it("choosing skip does not append a step-completed event for the skipped step", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
+    await advance(ctx); // résumé gate
+    await advance(ctx); // → choice gate
+    await choose(ctx, "skip");
+    const events = listEvents(db, applicationId);
+    expect(
+      events.some(
+        (e) => e.kind === "step-completed" && e.payload?.step === "generate-cover-letter",
+      ),
+    ).toBe(false);
+  });
+
+  it("skipping a not-applicable cover-letter step (requirement none) does not append a step-completed event", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "none" }) });
+    await advance(ctx); // résumé gate
+    await advance(ctx); // approve → analyze (sets none) → skip cover steps → fill-form
+    const events = listEvents(db, applicationId);
+    expect(events.map((e) => e.kind)).toEqual([
+      "step-completed", // tailor-resume
+      "artifact-approved", // résumé approved
+      "step-completed", // analyze-site
+    ]);
   });
 });
 

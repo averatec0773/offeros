@@ -11,6 +11,9 @@ export const artifactVersionSchema = z.object({
   changedLines: z.array(z.string()).optional(),
   createdAt: z.number(),
   resumeData: structuredResumeSchema.optional(),
+  /** Free-text instruction that produced this version via a tweak; absent for
+   *  versions produced by the pipeline's own generation steps. */
+  instruction: z.string().optional(),
 });
 
 export const artifactSchema = z.object({
