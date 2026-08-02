@@ -325,7 +325,7 @@ describe("applyFillReport", () => {
     expect(task.status).toBe("awaiting_user");
   });
 
-  it("appends a fill-reported event with the derived filled/needsUser counts", () => {
+  it("appends a fill-reported event with the derived filled/needsAttention counts", () => {
     const { taskId, applicationId } = seedTaskAtFillForm();
     applyFillReport(
       db,
@@ -342,8 +342,25 @@ describe("applyFillReport", () => {
     expect(events[0]).toMatchObject({
       kind: "fill-reported",
       applicationId,
-      payload: { filled: 2, needsUser: 1 },
+      payload: { filled: 2, needsAttention: 1 },
     });
+  });
+
+  it("needsAttention counts every non-filled outcome (needs-user, failed, skipped), matching fill-report-card.tsx's own 'Needs attention' bucket — not just needs-user", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    applyFillReport(
+      db,
+      taskId,
+      [
+        report({ fieldId: "email", outcome: "filled", required: true }),
+        report({ fieldId: "eeo", outcome: "needs-user", required: true }),
+        report({ fieldId: "visa", outcome: "failed", required: true }),
+        report({ fieldId: "note", outcome: "skipped", required: false }),
+      ],
+      false,
+    );
+    const events = listEvents(db, applicationId);
+    expect(events[0]?.payload).toEqual({ filled: 1, needsAttention: 3 });
   });
 
   it("appends a fill-reported event on every call, including a complete report", () => {
@@ -362,7 +379,7 @@ describe("applyFillReport", () => {
     );
     const events = listEvents(db, applicationId);
     expect(events.map((e) => e.kind)).toEqual(["fill-reported", "fill-reported"]);
-    expect(events[1]?.payload).toEqual({ filled: 2, needsUser: 0 });
+    expect(events[1]?.payload).toEqual({ filled: 2, needsAttention: 0 });
   });
 });
 

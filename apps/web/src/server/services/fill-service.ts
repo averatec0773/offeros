@@ -239,12 +239,16 @@ export function applyFillReport(
     }
   }
 
+  // Mirror fill-report-card.tsx's own bucketing: it renders everything
+  // outcome !== "filled" (needs-user, failed, or skipped) under "Needs
+  // attention" — the event payload must count the same way the card reads,
+  // not just the narrower "needs-user" outcome.
   const filled = merged.filter((r) => r.outcome === "filled").length;
-  const needsUser = merged.filter((r) => r.outcome === "needs-user").length;
+  const needsAttention = merged.filter((r) => r.outcome !== "filled").length;
   appendEvent(db, {
     applicationId: task.applicationId,
     kind: "fill-reported",
-    payload: { filled, needsUser },
+    payload: { filled, needsAttention },
   });
 
   return result;

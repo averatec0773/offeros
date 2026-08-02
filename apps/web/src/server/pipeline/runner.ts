@@ -230,6 +230,14 @@ export async function choose(
 /** Begin (or resume) running a task. Equivalent to advancing from its position. */
 export async function startTask(ctx: PipelineContext): Promise<AgentTask> {
   const task = load(ctx);
-  appendEvent(ctx.db, { applicationId: task.applicationId, kind: "task-started" });
+  // "task-started" means the task is genuinely starting for the first time —
+  // only a freshly created task sits at "queued". A repeat call (a second
+  // tab firing /start while the first is still `running`, or any later
+  // resume via startTask) reads a different status here and must not log a
+  // second start; `advance()` still runs (and its own guards decide whether
+  // that call is a no-op).
+  if (task.status === "queued") {
+    appendEvent(ctx.db, { applicationId: task.applicationId, kind: "task-started" });
+  }
   return advance(ctx);
 }

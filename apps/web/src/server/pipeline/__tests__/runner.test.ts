@@ -286,6 +286,28 @@ describe("pipeline runner — application events", () => {
     expect(events.map((e) => e.kind)).toEqual(["task-started", "step-completed"]);
   });
 
+  it("calling startTask twice yields exactly ONE task-started event (a repeat call is not a new start)", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
+    await startTask(ctx); // queued → runs tailor-resume → awaiting_user at the résumé confirm gate
+    await startTask(ctx); // not queued anymore — must not log a second start
+    const events = listEvents(db, applicationId);
+    expect(events.filter((e) => e.kind === "task-started")).toHaveLength(1);
+  });
+
+  it("a second /start while the task is still `running` (the second-tab reentrancy case) does not log a second task-started", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    updateAgentTask(db, taskId, { status: "running" }); // simulate: first /start call is already mid-flight
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
+    const task = await startTask(ctx); // advance()'s reentrancy guard no-ops this call
+    expect(task.status).toBe("running");
+    expect(ran).toEqual([]);
+    const events = listEvents(db, applicationId);
+    expect(events.filter((e) => e.kind === "task-started")).toHaveLength(0);
+  });
+
   it("each successful step body run appends a step-completed event with its step key", async () => {
     const taskId = seedTask();
     const applicationId = getAgentTask(db, taskId)!.applicationId;
