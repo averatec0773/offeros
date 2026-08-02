@@ -5,6 +5,7 @@ import {
   PIPELINE_STEPS,
   type Application,
   type AgentTask,
+  type ApplicationEvent,
   type Artifact,
   type JdAnalysis,
   type FitAnalysis,
@@ -26,6 +27,7 @@ import { FitCard } from "./fit-card";
 import { FillReportCard } from "./fill-report-card";
 import { SubmitGateCard } from "./submit-gate-card";
 import { ConnectProviderNote } from "./connect-provider-note";
+import { TimelineCard } from "./timeline-card";
 import { EmptyState } from "@/components/empty-state";
 
 const POLL_MS = 1500;
@@ -118,6 +120,7 @@ export function WorkspaceClient({
   const [attachResume, setAttachResume] = useState<"tailored" | "original">(
     application.attachResume ?? "tailored",
   );
+  const [events, setEvents] = useState<ApplicationEvent[]>([]);
   const busyRef = useRef(false);
 
   // The résumé picker's options; failing to load them simply hides the picker.
@@ -135,6 +138,22 @@ export function WorkspaceClient({
       active = false;
     };
   }, []);
+
+  // The timeline's history; failing to load it simply leaves the card empty.
+  useEffect(() => {
+    let active = true;
+    api.applications
+      .events(application.id)
+      .then((list) => {
+        if (active) setEvents(list);
+      })
+      .catch(() => {
+        // Non-critical — the card just stays empty.
+      });
+    return () => {
+      active = false;
+    };
+  }, [application.id]);
 
   async function handleResumeChange(nextId: string) {
     const prev = resumeId;
@@ -507,6 +526,8 @@ export function WorkspaceClient({
               body="Artifacts will appear here once the agent starts working."
             />
           )}
+
+          <TimelineCard applicationId={application.id} events={events} />
         </div>
       </div>
     </main>

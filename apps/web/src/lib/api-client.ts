@@ -2,6 +2,7 @@ import type {
   AnswerEntry,
   Application,
   AgentTask,
+  ApplicationEvent,
   ApplicationInfo,
   ApplicationStatus,
   Artifact,
@@ -18,6 +19,7 @@ import type {
 } from "@offeros/core";
 import type { ParsedResume } from "@offeros/llm";
 import type { FillTaskBundle } from "@/server/services/fill-service";
+import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
 import type { LineDiff } from "./diff";
 
 /** An open fill ticket plus the job header the pending list renders. */
@@ -97,6 +99,7 @@ export const api = {
         appliedAt: number;
       }>,
     ) => request<Application>(`/applications/${id}`, json("PATCH", patch)),
+    events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
   },
   agentTasks: {
     list: () => request<AgentTask[]>("/agent/tasks"),
@@ -160,6 +163,11 @@ export const api = {
       ),
     testLlm: (input: { provider: string; model?: string; key?: string }) =>
       request<{ ok: true }>("/settings/test-llm", json("POST", input)),
+    style: {
+      list: () => request<StyleMemorySetting[]>("/settings/style"),
+      update: (kind: StyleMemoryKind, patch: { notes?: string; enabled?: boolean }) =>
+        request<StyleMemorySetting[]>("/settings/style", json("PUT", { kind, ...patch })),
+    },
   },
   resumes: {
     list: () => request<ResumeSummary[]>("/resumes"),

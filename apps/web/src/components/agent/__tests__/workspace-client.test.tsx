@@ -31,6 +31,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
       },
       applications: {
         update: vi.fn(),
+        events: vi.fn(),
       },
       resumes: {
         list: vi.fn(),
@@ -95,6 +96,7 @@ beforeEach(() => {
     baseTask({ status: "done", step: PIPELINE_STEPS.length }),
   );
   vi.mocked(api.resumes.list).mockResolvedValue([]);
+  vi.mocked(api.applications.events).mockResolvedValue([]);
   vi.spyOn(window, "open").mockImplementation(() => null);
 });
 
