@@ -51,7 +51,7 @@ const DEFAULT_SYSTEM = [
 export const styleDistillTask: LlmTask<StyleDistillInput, StyleDistillOutput> = {
   id: "style-distill",
   defaultSystemPrompt: DEFAULT_SYSTEM,
-  maxTokens: 512,
+  maxTokens: 1536,
   schema: STYLE_DISTILL_SCHEMA as unknown as Record<string, unknown>,
   buildUserPrompt: (i) =>
     [

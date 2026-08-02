@@ -99,6 +99,7 @@ describe("TimelineCard", () => {
         capturedDownload = value;
       });
 
+    vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Export JSON" }));
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
@@ -106,8 +107,12 @@ describe("TimelineCard", () => {
     expect(blob.type).toContain("application/json");
     expect(capturedDownload).toBe("offeros-events-app-42.json");
     expect(clickSpy).toHaveBeenCalledTimes(1);
+    // The revoke is deferred (setTimeout 0), not synchronous with the click.
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.runAllTimers();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
 
+    vi.useRealTimers();
     clickSpy.mockRestore();
     downloadSetter.mockRestore();
     vi.unstubAllGlobals();

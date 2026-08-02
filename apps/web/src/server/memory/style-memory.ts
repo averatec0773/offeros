@@ -1,3 +1,4 @@
+import { neutralizeFenceTokens } from "@offeros/llm";
 import type { Db } from "../db/client";
 import {
   getStyleMemory,
@@ -31,8 +32,15 @@ export type RunLlm = (taskId: string, input: unknown) => Promise<unknown>;
 export interface StyleMemoryStore {
   /** The grounding block for `kind`, or `null` when disabled or empty. */
   retrieve(db: Db, kind: StyleMemoryKind): string | null;
-  /** Update the stored memory for `kind` from an approval's signals. */
-  distill(db: Db, runLlm: RunLlm, kind: StyleMemoryKind, signals: DistillSignals): Promise<void>;
+  /**
+   * Update the stored memory for `kind` from an approval's signals. Resolves
+   * to whether it actually learned something (`true`) or was a no-op
+   * (`false`) — a degraded/empty LLM response or a disabled memory never
+   * touches the stored row, so existing notes are never clobbered by a bad
+   * response. Callers use the return value to decide whether to record the
+   * distill as having happened (e.g. a timeline event).
+   */
+  distill(db: Db, runLlm: RunLlm, kind: StyleMemoryKind, signals: DistillSignals): Promise<boolean>;
 }
 
 const distilledNotesStore: StyleMemoryStore = {
@@ -43,6 +51,10 @@ const distilledNotesStore: StyleMemoryStore = {
   },
   async distill(db, runLlm, kind, signals) {
     const existing = getStyleMemory(db, kind);
+    // The store decides: a memory the user disabled stays untouched by a
+    // distill, even though the runner-side trigger has no way to know that
+    // (it only sees artifact/version state, never the enabled flag).
+    if (existing && !existing.enabled) return false;
     const input = {
       existingNotes: existing?.notes ?? "",
       instructions: signals.instructions,
@@ -50,8 +62,18 @@ const distilledNotesStore: StyleMemoryStore = {
       approvedContent: signals.approvedContent,
       maxChars: STYLE_MEMORY_MAX_CHARS,
     };
-    const output = (await runLlm("style-distill", input)) as { notes: string };
-    upsertStyleMemory(db, kind, { notes: output.notes, sourceCount: signals.instructions.length });
+    const output = (await runLlm("style-distill", input)) as { notes?: string } | undefined;
+    const notes = (output?.notes ?? "").trim();
+    // Tolerant-parse degradation (malformed/non-JSON response, or truncation
+    // against the task's maxTokens) comes back as empty notes. Treat that as
+    // a no-op rather than a write — an empty overwrite would silently wipe
+    // out real notes learned from earlier approvals.
+    if (notes === "") return false;
+    upsertStyleMemory(db, kind, {
+      notes: neutralizeFenceTokens(notes),
+      sourceCount: (existing?.sourceCount ?? 0) + signals.instructions.length,
+    });
+    return true;
   },
 };
 

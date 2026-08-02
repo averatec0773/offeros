@@ -53,41 +53,46 @@ const CONFIRM_ARTIFACT_KIND: Partial<Record<PipelineStepKey, ArtifactKind>> = {
  * plain first-shot approval carries no revision signal to learn from.
  *
  * Fire-and-forget by design: this must NEVER slow down or fail the approve
- * response. It is not awaited by the caller; the `void` here is the
- * deliberate stop point, not an oversight. Any failure (LLM error, bad
- * output, repo error) is caught and console-logged; a `style-distilled`
- * event is appended ONLY on success, so the workspace timeline reflects
- * actual outcomes, not attempts. Safe as fire-and-forget because this is a
- * local, long-running Next server process — there is no serverless request
- * lifecycle to kill the pending promise once the HTTP response is sent.
+ * response. The caller invokes it as `void maybeTriggerStyleDistill(...)` —
+ * that `void` is the deliberate stop point, not an oversight. The entire
+ * body (including the synchronous artifact lookup and version walk below)
+ * runs inside a try/catch, so a corrupt-row parse throw here can never fail
+ * the caller's `advance()` — it is caught and console-logged same as an LLM
+ * or repo error further down. A `style-distilled` event is appended ONLY
+ * when `styleMemory.distill` reports it actually learned something, so the
+ * workspace timeline reflects actual outcomes, not attempts (a disabled
+ * memory or a degraded/empty LLM response resolves to `false` and appends
+ * nothing). Safe as fire-and-forget because this is a local, long-running
+ * Next server process — there is no serverless request lifecycle to kill the
+ * pending promise once the HTTP response is sent.
  */
-function maybeTriggerStyleDistill(
+async function maybeTriggerStyleDistill(
   ctx: PipelineContext,
   applicationId: string,
   kind: ArtifactKind,
-): void {
-  const artifact = ctx.repos.getArtifact(ctx.taskId, kind);
-  if (!artifact) return;
-  const instructions = artifact.versions
-    .map((v) => v.instruction)
-    .filter((instruction): instruction is string => !!instruction);
-  if (instructions.length === 0) return;
-  const firstContent = artifact.versions[0]!.content;
-  const approvedContent =
-    artifact.versions.find((v) => v.id === artifact.currentVersionId)?.content ?? firstContent;
+): Promise<void> {
+  try {
+    const artifact = ctx.repos.getArtifact(ctx.taskId, kind);
+    if (!artifact) return;
+    const instructions = artifact.versions
+      .map((v) => v.instruction)
+      .filter((instruction): instruction is string => !!instruction);
+    if (instructions.length === 0) return;
+    const firstContent = artifact.versions[0]!.content;
+    const approvedContent =
+      artifact.versions.find((v) => v.id === artifact.currentVersionId)?.content ?? firstContent;
 
-  void styleMemory
-    .distill(ctx.db, ctx.runLlm, kind as StyleMemoryKind, {
+    const learned = await styleMemory.distill(ctx.db, ctx.runLlm, kind as StyleMemoryKind, {
       instructions,
       firstContent,
       approvedContent,
-    })
-    .then(() => {
-      appendEvent(ctx.db, { applicationId, kind: "style-distilled", payload: { kind } });
-    })
-    .catch((error) => {
-      console.error(`[pipeline] style distill failed for task ${ctx.taskId} (${kind}):`, error);
     });
+    if (learned) {
+      appendEvent(ctx.db, { applicationId, kind: "style-distilled", payload: { kind } });
+    }
+  } catch (error) {
+    console.error(`[pipeline] style distill failed for task ${ctx.taskId} (${kind}):`, error);
+  }
 }
 
 async function persist(ctx: PipelineContext, patch: Partial<AgentTask>): Promise<AgentTask> {
@@ -224,7 +229,7 @@ export async function advance(ctx: PipelineContext): Promise<AgentTask> {
         kind: "artifact-approved",
         payload: { kind: approvedKind },
       });
-      maybeTriggerStyleDistill(ctx, task.applicationId, approvedKind);
+      void maybeTriggerStyleDistill(ctx, task.applicationId, approvedKind);
     }
     return runForward(ctx, await persist(ctx, { step: task.step + 1 }));
   }

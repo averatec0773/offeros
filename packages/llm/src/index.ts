@@ -14,3 +14,4 @@ export * from "./tasks/resume-parse.task";
 export * from "./tasks/fit-analysis.task";
 export * from "./tasks/style-distill.task";
 export * from "./style-notes";
+export * from "./untrusted";

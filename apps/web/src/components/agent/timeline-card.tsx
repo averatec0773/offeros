@@ -62,7 +62,9 @@ function exportEvents(applicationId: string, events: ApplicationEvent[]) {
   anchor.href = url;
   anchor.download = `offeros-events-${applicationId}.json`;
   anchor.click();
-  URL.revokeObjectURL(url);
+  // Defer the revoke: some browsers process the download click
+  // asynchronously, and revoking the URL synchronously can race it.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function TimelineCard({

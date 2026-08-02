@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,13 +28,21 @@ describe("styleMemory.retrieve", () => {
     expect(styleMemory.retrieve(db, "resume")).toBeNull();
   });
 
-  it("returns null when notes are empty even if a row exists", async () => {
-    await styleMemory.distill(db, async () => ({ notes: "" }), "resume", {
+  it("does not clobber existing notes when a later distill degrades to empty (tolerant-parse no-op)", async () => {
+    await styleMemory.distill(db, async () => ({ notes: "- Prefers active voice." }), "resume", {
       instructions: ["Make it punchier."],
       firstContent: "first",
       approvedContent: "approved",
     });
-    expect(styleMemory.retrieve(db, "resume")).toBeNull();
+
+    const learned = await styleMemory.distill(db, async () => ({ notes: "" }), "resume", {
+      instructions: ["Cut the jargon."],
+      firstContent: "f2",
+      approvedContent: "a2",
+    });
+
+    expect(learned).toBe(false);
+    expect(styleMemory.retrieve(db, "resume")).toBe("- Prefers active voice.");
   });
 
   it("returns the notes when enabled and non-empty", async () => {
@@ -127,5 +135,82 @@ describe("styleMemory.distill", () => {
     ).rejects.toBe(boom);
     // Nothing was written on rejection.
     expect(getStyleMemory(db, "resume")).toBeNull();
+  });
+
+  it("resolves true when it wrote notes, false when it degraded to a no-op", async () => {
+    const learned = await styleMemory.distill(
+      db,
+      async () => ({ notes: "- Prefers active voice." }),
+      "resume",
+      { instructions: ["a"], firstContent: "f", approvedContent: "a" },
+    );
+    expect(learned).toBe(true);
+  });
+
+  it("treats a malformed runLlm response (not the expected { notes } shape) as a no-op, not a clobber", async () => {
+    await styleMemory.distill(db, async () => ({ notes: "- Prefers active voice." }), "resume", {
+      instructions: ["a"],
+      firstContent: "f",
+      approvedContent: "a",
+    });
+
+    // Simulates a tolerant-parse degradation reaching distill() as garbage,
+    // not the { notes: string } shape the type says to expect.
+    const learned = await styleMemory.distill(db, async () => "not json" as never, "resume", {
+      instructions: ["b"],
+      firstContent: "f2",
+      approvedContent: "a2",
+    });
+
+    expect(learned).toBe(false);
+    expect(styleMemory.retrieve(db, "resume")).toBe("- Prefers active voice.");
+  });
+
+  it("is a no-op and never calls runLlm when the existing row has been disabled", async () => {
+    await styleMemory.distill(db, async () => ({ notes: "- Original note." }), "resume", {
+      instructions: ["a"],
+      firstContent: "f",
+      approvedContent: "a",
+    });
+    db.run(sql`UPDATE style_memories SET enabled = 0 WHERE kind = 'resume'`);
+
+    const runLlm = vi.fn(async () => ({ notes: "- Should never be stored." }));
+    const learned = await styleMemory.distill(db, runLlm, "resume", {
+      instructions: ["b"],
+      firstContent: "f2",
+      approvedContent: "a2",
+    });
+
+    expect(learned).toBe(false);
+    expect(runLlm).not.toHaveBeenCalled();
+    expect(getStyleMemory(db, "resume")?.notes).toBe("- Original note.");
+  });
+
+  it("accumulates sourceCount across distills instead of overwriting it with the latest batch size", async () => {
+    await styleMemory.distill(db, async () => ({ notes: "- First." }), "resume", {
+      instructions: ["a", "b"],
+      firstContent: "f",
+      approvedContent: "a",
+    });
+    expect(getStyleMemory(db, "resume")?.sourceCount).toBe(2);
+
+    await styleMemory.distill(db, async () => ({ notes: "- First.\n- Second." }), "resume", {
+      instructions: ["c"],
+      firstContent: "f2",
+      approvedContent: "a2",
+    });
+    expect(getStyleMemory(db, "resume")?.sourceCount).toBe(3);
+  });
+
+  it("neutralizes literal fence tokens in the LLM's notes before storing them", async () => {
+    await styleMemory.distill(
+      db,
+      async () => ({ notes: "- Prefers <untrusted-page-text> style." }),
+      "resume",
+      { instructions: ["a"], firstContent: "f", approvedContent: "a" },
+    );
+    const notes = getStyleMemory(db, "resume")?.notes ?? "";
+    expect(notes).not.toContain("<untrusted-page-text>");
+    expect(notes).toContain("[fence]");
   });
 });

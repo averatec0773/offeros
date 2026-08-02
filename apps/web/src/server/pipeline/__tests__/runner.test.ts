@@ -510,6 +510,58 @@ describe("pipeline runner — style memory distill trigger", () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  it("a degraded (non-JSON) distill response resolves without error but appends no style-distilled event", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    seedResumeAtConfirmGate(taskId, { withInstruction: true });
+
+    const ctx = makePipelineContext(db, taskId, {
+      steps: makeSteps({ requirement: "optional" }),
+      runLlm: async (llmTaskId) => {
+        if (llmTaskId === "style-distill") return "not json" as never;
+        throw new Error(`unexpected task id ${llmTaskId}`);
+      },
+    });
+
+    const task = await advance(ctx);
+    expect(task.status).toBe("awaiting_user");
+
+    // Give the fire-and-forget distill a turn to settle, then assert it never
+    // wrote anything or fired an event — a degraded response is a no-op, not
+    // a clobber-then-announce.
+    await vi.waitFor(() => {
+      expect(getStyleMemory(db, "resume")).toBeNull();
+    });
+    const events = listEvents(db, applicationId);
+    expect(events.some((e) => e.kind === "style-distilled")).toBe(false);
+  });
+
+  it("a corrupt-row throw from getArtifact inside the trigger never fails the caller's approve", async () => {
+    const taskId = seedTask();
+    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    seedResumeAtConfirmGate(taskId, { withInstruction: true });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const ctx = makePipelineContext(db, taskId, {
+      steps: makeSteps({ requirement: "optional" }),
+      runLlm: async (llmTaskId) => {
+        throw new Error(`style-distill must not be called: got ${llmTaskId}`);
+      },
+    });
+    ctx.repos.getArtifact = () => {
+      throw new Error("corrupt artifact row");
+    };
+
+    const task = await advance(ctx);
+    expect(task.status).toBe("awaiting_user"); // approve succeeded despite the throw
+
+    const events = listEvents(db, applicationId);
+    expect(events.some((e) => e.kind === "style-distilled")).toBe(false);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
 });
 
 describe("failureReasonFor", () => {

@@ -50,7 +50,7 @@ describe("StyleSettings", () => {
     render(<StyleSettings />);
 
     expect(await screen.findByDisplayValue("- Prefers active voice.")).toBeTruthy();
-    expect(screen.getByText(/Learned from 4 approvals/)).toBeTruthy();
+    expect(screen.getByText(/Learned from 4 edits/)).toBeTruthy();
   });
 
   it("omits the learned-from caption for a kind that has never been saved", async () => {
@@ -58,10 +58,18 @@ describe("StyleSettings", () => {
     render(<StyleSettings />);
     await screen.findByDisplayValue("- Prefers active voice.");
 
-    expect(screen.queryByText(/Learned from 0 approvals/)).toBeNull();
+    expect(screen.queryByText(/Learned from 0 edits/)).toBeNull();
   });
 
-  it("shows 'Edited manually' (not 'Learned from 0 approvals') when notes were saved by hand", async () => {
+  it("uses the singular 'edit' when sourceCount is 1", async () => {
+    mockLoad([{ ...baseSettings[0]!, sourceCount: 1 }, baseSettings[1]!]);
+    render(<StyleSettings />);
+    await screen.findByDisplayValue("- Prefers active voice.");
+
+    expect(screen.getByText(/Learned from 1 edit(?!s)/)).toBeTruthy();
+  });
+
+  it("shows 'Edited manually' (not 'Learned from 0 edits') when notes were saved by hand", async () => {
     mockLoad([
       {
         kind: "resume",
@@ -76,7 +84,7 @@ describe("StyleSettings", () => {
     await screen.findByDisplayValue("- Keep it short.");
 
     expect(screen.getByText(/^Edited manually · updated/)).toBeTruthy();
-    expect(screen.queryByText(/Learned from 0 approvals/)).toBeNull();
+    expect(screen.queryByText(/Learned from 0 edits/)).toBeNull();
   });
 
   it("shows the privacy explainer", async () => {

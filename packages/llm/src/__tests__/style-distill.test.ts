@@ -54,6 +54,13 @@ describe("styleDistillTask hard rules", () => {
       (styleDistillTask.schema as { additionalProperties: boolean }).additionalProperties,
     ).toBe(false);
   });
+
+  it("gives the merged notes enough token headroom to avoid truncation degrading to an empty-notes no-op", () => {
+    // Notes can grow up to STYLE_MEMORY_MAX_CHARS (2000); too small a cap here
+    // makes the model's response get cut off mid-JSON, which the tolerant
+    // parse then degrades to `{ notes: "" }` — see style-memory.ts's distill.
+    expect(styleDistillTask.maxTokens).toBe(1536);
+  });
 });
 
 describe("styleDistillTask buildUserPrompt", () => {

@@ -52,7 +52,7 @@ function Section({
 
       {row.updatedAt !== null && (
         <p className="mt-1 text-caption text-muted-foreground">
-          {`${row.sourceCount > 0 ? `Learned from ${row.sourceCount} approvals` : "Edited manually"} · updated ${new Date(row.updatedAt).toLocaleString()}`}
+          {`${row.sourceCount > 0 ? `Learned from ${row.sourceCount} ${row.sourceCount === 1 ? "edit" : "edits"}` : "Edited manually"} · updated ${new Date(row.updatedAt).toLocaleString()}`}
         </p>
       )}
 
