@@ -15,9 +15,14 @@ intentionally unauthenticated — it relies on the server only ever answering
 the person sitting at that machine. Every request — page routes as well as
 `/api/v1` (the middleware matcher covers both) — is checked against a
 loopback `Host` header, and mutating requests are additionally checked
-against an `Origin` allowlist (the web app's own origin and the browser
-extension's `chrome-extension://` origin). Requests that fail either check
-are rejected with a 403 before reaching any route handler.
+against an `Origin` allowlist (the web app's own origin and any
+`chrome-extension://` origin). The allowlist accepts any extension id rather
+than one pinned id, because "Load unpacked" — the install path this project
+documents — assigns a fresh, unpredictable extension id per machine with no
+stable id to pin to; the Host check is what actually keeps the API
+localhost-only, and the Origin check on top of it is CSRF defense, not an
+identity check. Requests that fail either check are rejected with a 403
+before reaching any route handler.
 
 Running an OfferOS instance reachable from outside localhost (reverse proxy,
 port forwarding, `0.0.0.0` binding) is outside the supported deployment model

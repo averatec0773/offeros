@@ -64,7 +64,8 @@ disk on your machine, and your key is only ever sent to the provider you chose.
 
 ## One-click autofill (extension)
 
-Supported ATS: **Greenhouse · Lever · Ashby · iCIMS · Workday**.
+Supported ATS: **Greenhouse** (validated on real forms) · **Lever · Ashby ·
+iCIMS · Workday** (generic fill engine + per-site routing; hardening ongoing).
 
 The extension is a WXT + React + TypeScript MV3 **Side Panel**. It's a thin client
 of the web app's local API — no local store, no AI, no third-party sync.
@@ -105,6 +106,7 @@ npm run compile     # extension type-check (tsc --noEmit)
 npm run typecheck   # web + packages + extension type-check
 npm test            # root Vitest (packages + apps/web) + extension Vitest
 npm run test:ext    # extension Vitest only
+npm run e2e -w @offeros/extension   # headed E2E: real Chromium, built extension
 ```
 
 Requires Node 24+. The repo is an npm-workspaces monorepo: `apps/web` (the

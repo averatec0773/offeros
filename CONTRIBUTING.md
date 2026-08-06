@@ -47,6 +47,15 @@ cd apps/web && npm run build
 A handful of tests are gated on a local Chromium install and are skipped
 otherwise; run `npx playwright install chromium` once to unlock them.
 
+If your change touches the extension's fill engine, content-script messaging,
+or the side panel, also run the headed end-to-end harness once locally
+(`npm run e2e -w @offeros/extension`) — it drives the built extension against
+a real Chromium instance over the actual `runtime.onMessage` bus. It's not in
+the automated CI gate above: it requires a headed browser, and it currently
+has no built-in pass/fail assertions (it prints one `E2E <check>: <value>`
+line per check), so treat a run as a manual gate — read the output and
+confirm every line looks right before opening the PR.
+
 ## Commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`,

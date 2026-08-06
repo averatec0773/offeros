@@ -8,9 +8,6 @@ import {
   isSkillsResultMsg,
 } from "./combobox-protocol";
 
-// The extension's own overlay host — never scan into its shadow root.
-const OVERLAY_HOST = "offeros-overlay";
-
 let counter = 0;
 
 export function labelFor(el: HTMLElement): string {
@@ -71,9 +68,9 @@ export function scanFields(
 ): { descriptor: FieldDescriptor; el: HTMLElement }[] {
   const form = root.querySelector(recipe.formSelector) ?? root;
   // Workday renders inputs inside web-component shadow roots; pierce them when
-  // the recipe opts in, but never descend into the extension's own overlay.
+  // the recipe opts in.
   const raw = recipe.pierceShadow
-    ? deepQueryAll(form, recipe.fieldSelector, { skip: OVERLAY_HOST }).filter(
+    ? deepQueryAll(form, recipe.fieldSelector).filter(
         (el): el is HTMLElement => el instanceof HTMLElement,
       )
     : Array.from(form.querySelectorAll<HTMLElement>(recipe.fieldSelector));

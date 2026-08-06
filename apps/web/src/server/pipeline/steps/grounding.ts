@@ -2,9 +2,10 @@ import type { Application, Profile, ResumeSummary } from "@offeros/core";
 
 /**
  * Plain-text facts about the applicant derived from their profile: contact
- * info, experience bullets, skills, education. Used both as the "résumé"
- * input to the resume-tailor task (the pipeline does not yet consume a
- * stored raw résumé text) and as the profile summary fed to jd-analysis.
+ * info, experience bullets, skills, education. Used as the profile summary
+ * fed to jd-analysis, and as the resume-tailor task's fallback "résumé" input
+ * when there's no stored résumé text to ground on — see `resolveResumeText`,
+ * which prefers the applicant's stored résumé text and falls back to this.
  */
 export function buildProfileFacts(profile: Profile): string {
   const lines: string[] = [];

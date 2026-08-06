@@ -12,7 +12,7 @@ beforeEach(() => {
 describe("scanFields — shadow-aware (myworkday)", () => {
   const workday = matchAts("https://intel.wd1.myworkdayjobs.com/External/job/x/apply")!;
 
-  it("discovers an input inside a shadow root and prunes the extension overlay", () => {
+  it("discovers an input inside a shadow root", () => {
     // Workday's skills input lives in a web component's shadow root.
     class WdSkill extends HTMLElement {
       constructor() {
@@ -28,23 +28,17 @@ describe("scanFields — shadow-aware (myworkday)", () => {
     app.innerHTML = "<input name='email' type='email' /><wd-skill></wd-skill>";
     document.body.appendChild(app);
 
-    // the extension's own overlay, with an input in its shadow root — must be skipped
-    const overlay = document.createElement("offeros-overlay");
-    overlay.attachShadow({ mode: "open" }).innerHTML = '<input name="draft" type="text" />';
-    document.body.appendChild(overlay);
-
     const found = scanFields(document.body, workday);
     const names = found.map((f) => f.descriptor.name).sort();
     expect(names).toContain("skills"); // shadow input discovered
     expect(names).toContain("email"); // light input still found
-    expect(names).not.toContain("draft"); // overlay input pruned
   });
 
   it("leaves light-DOM ATSs unchanged (no shadow traversal for greenhouse)", () => {
     document.body.innerHTML = "";
-    const overlay = document.createElement("offeros-overlay");
-    overlay.attachShadow({ mode: "open" }).innerHTML = '<input name="draft" type="text" />';
-    document.body.appendChild(overlay);
+    const shadowHost = document.createElement("some-widget");
+    shadowHost.attachShadow({ mode: "open" }).innerHTML = '<input name="draft" type="text" />';
+    document.body.appendChild(shadowHost);
     document.body.insertAdjacentHTML("afterbegin", "<form><input name='email' type='email' /></form>");
     const found = scanFields(document.body, recipe); // greenhouse recipe, no pierceShadow
     const names = found.map((f) => f.descriptor.name);

@@ -3,8 +3,8 @@
 // inside shadow roots, where a plain document.querySelector cannot reach them.
 // deepQuery / deepQueryAll walk open shadow roots so those elements are found.
 //
-// `opts.skip` is a selector for host subtrees to prune entirely — used to keep
-// a shadow-aware page scan out of the extension's own overlay (`offeros-overlay`).
+// `opts.skip` is a selector for host subtrees (and their shadow roots) to
+// prune entirely from the walk.
 
 export interface DeepQueryOptions {
   skip?: string;

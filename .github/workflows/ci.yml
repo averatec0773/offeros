@@ -18,3 +18,5 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build -w @offeros/extension
+      - run: cd apps/web && npm run build
