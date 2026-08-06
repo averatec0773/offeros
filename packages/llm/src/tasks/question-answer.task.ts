@@ -30,8 +30,8 @@ const DEFAULT_SYSTEM = [
 ].join("\n");
 
 // The scraped question/label/context are interpolated verbatim inside their
-// own <untrusted-page-text> fence below, and the JD text — scraped page text
-// from Phase 9 on — gets its own fence too. Without neutralizing the fence
+// own <untrusted-page-text> fence below, and the JD text — which may be
+// scraped page content — gets its own fence too. Without neutralizing the fence
 // tokens themselves, a label/context/jdText containing a literal
 // "</untrusted-page-text>" would close the fence early and let the rest of
 // its content masquerade as content outside it (i.e. as instructions).

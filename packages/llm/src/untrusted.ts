@@ -1,7 +1,7 @@
 // Shared helpers for fencing untrusted, scraped page text inside a prompt.
 //
-// Any field sourced from a third-party web page (a form question/label, or —
-// from Phase 9 on — the job description text itself) is DATA, not
+// Any field sourced from a third-party web page (a form question/label, or
+// the job description text itself, whether scraped or pasted) is DATA, not
 // instructions. It gets wrapped in an <untrusted-page-text> fence with a
 // plain-language reminder, and any literal fence token inside it is
 // neutralized first so the scraped text cannot forge its own fence boundary
