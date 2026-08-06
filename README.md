@@ -28,6 +28,44 @@ Status: pre-alpha.
 The AI runs in the web app (server-side, with your key). The extension is a thin
 client — no local database, no AI of its own — it just drives the page.
 
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph browser["Browser"]
+    ui["Web app UI<br/>pipeline · profile · agent workspace"]
+    panel["Chrome Side Panel<br/>thin client: no store, no AI"]
+    engine["Content-script fill engine<br/>scan · fill · capture"]
+    ats["ATS apply page<br/>Greenhouse, Lever, Ashby, iCIMS, Workday"]
+  end
+
+  subgraph host["Your machine — localhost only"]
+    guard["Local-only request guard<br/>loopback Host + Origin allowlist"]
+    api["Next.js server<br/>page routes + /api/v1"]
+    pipeline["Agent pipeline<br/>tailor-resume · confirm-resume · analyze-site<br/>generate-cover-letter · confirm-cover-letter · fill-form"]
+    store[("SQLite ~/.offeros<br/>profile · applications · artifacts · saved key")]
+    fence["Prompt boundary<br/>scraped text fenced as data, not instructions"]
+  end
+
+  provider["LLM provider API<br/>called server-side, with your key"]
+
+  ui -->|HTTP| guard
+  panel -->|"HTTP: claim fill task, post field reports"| guard
+  guard -->|"403 unless loopback Host and allowed Origin"| api
+  api --> pipeline
+  api <--> store
+  pipeline <--> store
+  pipeline --> fence
+  fence -->|prompt| provider
+  provider -->|completion| pipeline
+  panel <-->|extension messaging| engine
+  engine -->|"set values, drive comboboxes, attach your PDFs"| ats
+  ats -.->|"field labels + job description text"| engine
+```
+
+The guard runs in Next middleware, so it applies to page routes as well as the
+API — the extension is just another local client of the same surface.
+
 ## Quickstart (web app)
 
 ```bash
@@ -86,6 +124,33 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
    it yourself**. Fields the agent couldn't answer are reported back to the
    workspace for you to resolve.
 
+## Engineering highlights
+
+- **IO-free domain packages.** `core`, `llm`, and `autofill` carry no runtime
+  dependency but zod and no `node:` or DOM imports, so the fill engine both apps
+  share is pure functions over field descriptors — `packages/autofill/src/fill-plan.ts`.
+- **Prompt-injection fencing at every scraped-text consumer.** Job-description
+  and form-label text is neutralized (so it can't forge a fence) and wrapped as
+  data before it reaches a prompt — `packages/llm/src/untrusted.ts`.
+- **The API only answers this machine.** A loopback `Host` check on every route
+  plus an `Origin` allowlist on mutating methods, in middleware before any
+  handler — `apps/web/src/proxy.ts`, `src/server/http/request-guard.ts`.
+- **Keys never reach the browser.** The settings API returns a per-provider
+  status (`saved` / `env` / `none`) and never a key value, on reads and writes
+  alike — `apps/web/src/app/api/v1/settings/llm-keys/route.ts`.
+- **Minimal subprocess environments.** PDF rendering spawns `pdflatex` and
+  headless Chromium with a hand-built env, never the parent one holding your key
+  — `apps/web/src/server/export/{latex-renderer,chromium-pdf}.ts`.
+- **Tests run against real substrates.** 1001 root + 200 extension tests: route
+  tests open a real SQLite file, fill tests drive a real DOM through the actual
+  content-script engine, and the fill engine is scored against a 12-résumé ×
+  5-form corpus plus a captured real ATS form —
+  `packages/autofill/src/__tests__/adaptation/`.
+- **Pluggable seams, not branches.** A new PDF output format is one entry in a
+  renderer registry (`apps/web/src/server/export/renderers.ts`); style memory is
+  a two-method contract behind a registry, so a different store swaps in without
+  touching callers (`apps/web/src/server/memory/style-memory.ts`).
+
 ## Privacy & safety invariants
 
 - **Never auto-submits** — you submit every application.
@@ -96,6 +161,14 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
 - **Keys stay server-side** — your LLM provider key lives only in the web app's
   environment; the browser extension never sees it.
 - **Local-first** — all your data is on your machine, in SQLite.
+
+## Security model
+
+The trust boundary is your own machine: the server is deliberately
+unauthenticated and answers loopback requests only, your provider key stays
+server-side, and a template you import runs with your local trust. The full
+model — what's in scope, which trade-offs are accepted, and how to report an
+issue privately — is in [SECURITY.md](SECURITY.md).
 
 ## Development
 
