@@ -7,8 +7,11 @@ import {
   findApplicationsByJobUrl,
   generateAnswer,
   getPending,
+  computeFit,
+  getFit,
   instantFill,
   postReport,
+  resolveFillAction,
   tailorResume,
 } from "../src/lib/offeros-api";
 
@@ -206,6 +209,33 @@ describe("createTaskFromJd", () => {
     expect(body.jobInfo.jobId.length).toBeGreaterThan(0);
     expect(body.jdText).toBe("We need a SWE.");
     expect(body.source).toBe("extension");
+  });
+});
+
+describe("fit + resolve", () => {
+  it("getFit GETs the application's fit and unwraps it", async () => {
+    const fit = { overall: 82, label: "Strong match" };
+    const f = fakeFetch(200, ok(fit));
+    const r = await getFit("a1", f.fn);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toMatchObject(fit);
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/applications/a1/fit");
+  });
+
+  it("computeFit POSTs to the same route", async () => {
+    const f = fakeFetch(200, ok({ overall: 70 }));
+    const r = await computeFit("a1", f.fn);
+    expect(r.ok).toBe(true);
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/applications/a1/fit");
+    expect(f.calls[0]!.init.method).toBe("POST");
+  });
+
+  it("resolveFillAction POSTs the action to the task's resolve route", async () => {
+    const f = fakeFetch(200, ok({}));
+    const r = await resolveFillAction("t1", "applied-manually", f.fn);
+    expect(r.ok).toBe(true);
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/fill/resolve");
+    expect(JSON.parse(String(f.calls[0]!.init.body))).toEqual({ action: "applied-manually" });
   });
 });
 

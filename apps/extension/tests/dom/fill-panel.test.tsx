@@ -17,6 +17,7 @@ import type {
   FileFetchResult,
   FillTaskBundle,
   FillTicket,
+  FitSummary,
 } from "../../src/lib/offeros-api";
 import { NO_FILE_REASON, CUSTOM_UPLOADER_REASON, RENDER_FAILED_REASON } from "../../src/lib/autofill/task-mode";
 
@@ -78,6 +79,17 @@ const ticket: FillTicket = {
   job: { title: "Engineer", company: "Acme" },
 };
 
+const FIT: FitSummary = {
+  overall: 82,
+  label: "Strong match",
+  whyMatch: "Solid overlap with the core stack.",
+  subScores: { experience: 80, skills: 85, education: 75 },
+  notAlignedSkills: [
+    { skill: "Kubernetes", advice: "Highlight infra work" },
+    { skill: "Go", advice: "Mention side projects" },
+  ],
+};
+
 const okFill = (values: FillValue[]): FillResponse => ({
   ok: true,
   filled: values.length,
@@ -93,6 +105,9 @@ const emptyApi = (): FillApi => ({
   createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
   instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   tailorResume: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
+  getFit: vi.fn(async (): Promise<ApiResult<FitSummary>> => ({ ok: false, error: "not found" })),
+  computeFit: vi.fn(async (): Promise<ApiResult<FitSummary>> => ({ ok: true, value: FIT })),
+  resolveFillAction: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   fetchResumeFile: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
@@ -127,6 +142,7 @@ const renderPanel = (
       fieldId: string,
       file: { fileName: string; mimeType: string; bytesBase64: string },
     ) => Promise<AttachFileResponse>;
+    scrollToField?: (fieldId: string) => Promise<unknown>;
     api?: FillApi;
     openWebApp?: () => void;
     openApplication?: (id: string) => void;
@@ -146,6 +162,7 @@ const renderPanel = (
       fill={fill}
       capture={capture}
       attachFile={attachFile}
+      scrollToField={over.scrollToField}
       api={api}
       rescanNonce={0}
       openWebApp={openWebApp}
@@ -250,6 +267,60 @@ describe("FillPanel", () => {
     // Ordinary task mode took over: cumulative report posted, task chip shown.
     await waitFor(() => expect(usedApi.postReport).toHaveBeenCalled());
     expect(await screen.findByText("Engineer · Acme")).toBeInTheDocument();
+  });
+
+  describe("fit signal / field jump / mark applied", () => {
+    const claimedApi = () => {
+      const api = emptyApi();
+      api.getPending = vi.fn(async () => ({ ok: true as const, value: [ticket] }));
+      api.claim = vi.fn(async () => ({ ok: true as const, value: bundle }));
+      return api;
+    };
+
+    it("shows the stored fit (score + top gaps) when one exists for the claimed application", async () => {
+      const api = claimedApi();
+      api.getFit = vi.fn(async () => ({ ok: true as const, value: FIT }));
+      renderPanel({ api });
+      expect(await screen.findByText("82%")).toBeInTheDocument();
+      expect(screen.getByText("Strong match")).toBeInTheDocument();
+      expect(screen.getByText("Gaps: Kubernetes · Go")).toBeInTheDocument();
+      expect(api.getFit).toHaveBeenCalledWith("a1");
+    });
+
+    it("offers on-demand Analyze fit when none is stored, and shows the computed result", async () => {
+      const api = claimedApi();
+      renderPanel({ api });
+      await userEvent.click(await screen.findByRole("button", { name: "Analyze fit" }));
+      expect(api.computeFit).toHaveBeenCalledWith("a1");
+      expect(await screen.findByText("82%")).toBeInTheDocument();
+    });
+
+    it("clicking a field row jumps the page to that field and carries the plan reason as tooltip", async () => {
+      const api = claimedApi();
+      const scrollToField = vi.fn(async () => ({ ok: true }));
+      renderPanel({ api, scrollToField });
+      const row = await screen.findByRole("button", { name: /Email/ });
+      expect(row.getAttribute("title")).toBeTruthy();
+      await userEvent.click(row);
+      expect(scrollToField).toHaveBeenCalledWith("f1");
+    });
+
+    it("after reporting, 'I've submitted' resolves the fill as applied-manually", async () => {
+      const api = claimedApi();
+      renderPanel({ api });
+      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      await userEvent.click(fillBtn);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Done — report to workspace" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: "I've submitted — mark as applied" }),
+      );
+      expect(api.resolveFillAction).toHaveBeenCalledWith("t1", "applied-manually");
+      expect(
+        await screen.findByText("Marked as submitted — the application is closed in OfferOS."),
+      ).toBeInTheDocument();
+    });
   });
 
   describe("in-panel tailor", () => {

@@ -34,18 +34,6 @@ export function getAgentTask(db: Db, id: string): AgentTask | null {
   return row ? toDomain(row) : null;
 }
 
-/** The application's (most recently updated) task — tasks are 1:1 per
- *  application in practice; newest wins if that ever drifts. */
-export function getAgentTaskByApplicationId(db: Db, applicationId: string): AgentTask | null {
-  const row = db
-    .select()
-    .from(agentTasks)
-    .where(eq(agentTasks.applicationId, applicationId))
-    .orderBy(desc(agentTasks.updatedAt))
-    .get();
-  return row ? toDomain(row) : null;
-}
-
 export function createAgentTask(
   db: Db,
   input: { applicationId: string; status?: AgentTask["status"]; step?: number; fillFirst?: boolean },

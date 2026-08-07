@@ -53,6 +53,10 @@ export interface EngineAttachFileRequest {
   /** The file's bytes, base64-encoded — see base64.ts for why. */
   bytesBase64: string;
 }
+export interface EngineScrollToFieldRequest {
+  kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD";
+  fieldId: string;
+}
 export interface EnginePageChangedMessage {
   kind: "OFFEROS_ENGINE_PAGE_CHANGED";
 }
@@ -61,11 +65,16 @@ export interface AttachFileResponse {
   ok: boolean;
 }
 
+export interface ScrollToFieldResponse {
+  ok: boolean;
+}
+
 export type EngineRequest =
   | EngineScanRequest
   | EngineFillRequest
   | EngineCaptureJdRequest
-  | EngineAttachFileRequest;
+  | EngineAttachFileRequest
+  | EngineScrollToFieldRequest;
 
 function hasKind(m: unknown, kind: string): boolean {
   return typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === kind;
@@ -88,12 +97,19 @@ export function isEngineAttachFileRequest(m: unknown): m is EngineAttachFileRequ
     typeof (m as EngineAttachFileRequest).bytesBase64 === "string"
   );
 }
+export function isEngineScrollToFieldRequest(m: unknown): m is EngineScrollToFieldRequest {
+  return (
+    hasKind(m, "OFFEROS_ENGINE_SCROLL_TO_FIELD") &&
+    typeof (m as EngineScrollToFieldRequest).fieldId === "string"
+  );
+}
 export function isEngineRequest(m: unknown): m is EngineRequest {
   return (
     isEngineScanRequest(m) ||
     isEngineFillRequest(m) ||
     isEngineCaptureJdRequest(m) ||
-    isEngineAttachFileRequest(m)
+    isEngineAttachFileRequest(m) ||
+    isEngineScrollToFieldRequest(m)
   );
 }
 export function isEnginePageChanged(m: unknown): m is EnginePageChangedMessage {
@@ -123,6 +139,15 @@ export async function sendEngineAttachFile(
     mimeType,
     bytesBase64,
   } satisfies EngineAttachFileRequest)) as AttachFileResponse;
+}
+export async function sendEngineScrollToField(
+  tabId: number,
+  fieldId: string,
+): Promise<ScrollToFieldResponse> {
+  return (await browser.tabs.sendMessage(tabId, {
+    kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD",
+    fieldId,
+  } satisfies EngineScrollToFieldRequest)) as ScrollToFieldResponse;
 }
 export function sendEnginePageChanged(): void {
   void browser.runtime

@@ -153,6 +153,35 @@ describe("engine ATTACH_FILE handler", () => {
   });
 });
 
+describe("engine SCROLL_TO_FIELD handler", () => {
+  it("resolves the field, applies the highlight, and returns ok", async () => {
+    seedForm();
+    registerEngine(document, ctx());
+    const scan = (await browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })) as ScanResponse;
+    expect(scan.ok).toBe(true);
+    if (!scan.ok) return;
+    const emailId = scan.descriptors.find((d) => d.name === "email")!.fieldId;
+
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD",
+      fieldId: emailId,
+    })) as { ok: boolean };
+    expect(res.ok).toBe(true);
+    const el = document.querySelector('input[name="email"]')!;
+    expect(el.classList.contains("offeros-filled")).toBe(true);
+  });
+
+  it("returns ok:false for an unknown fieldId", async () => {
+    seedForm();
+    registerEngine(document, ctx());
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD",
+      fieldId: "offeros-nope",
+    })) as { ok: boolean };
+    expect(res.ok).toBe(false);
+  });
+});
+
 describe("engine teardown", () => {
   it("stops handling messages after onInvalidated fires", async () => {
     seedForm();

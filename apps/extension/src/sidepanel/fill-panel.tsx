@@ -28,6 +28,7 @@ import type {
   FileFetchResult,
   FillTaskBundle,
   FillTicket,
+  FitSummary,
 } from "../lib/offeros-api";
 import {
   buildFieldReports,
@@ -81,6 +82,15 @@ export interface FillApi {
   }) => Promise<ApiResult<FillTaskBundle>>;
   /** In-panel tailor: run the tailor-resume step for the claimed task. */
   tailorResume: (taskId: string) => Promise<ApiResult<unknown>>;
+  /** Stored fit for the claimed application ({ok:false} when never computed). */
+  getFit: (applicationId: string) => Promise<ApiResult<FitSummary>>;
+  /** Compute/recompute the fit (an LLM call). */
+  computeFit: (applicationId: string) => Promise<ApiResult<FitSummary>>;
+  /** Terminal fill resolution from the panel ("applied-manually" = mark submitted). */
+  resolveFillAction: (
+    taskId: string,
+    action: "fixed" | "applied-manually",
+  ) => Promise<ApiResult<unknown>>;
   /** Original stored résumé bytes (`bundle.attachResume === "original"`). */
   fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
   /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
@@ -305,19 +315,38 @@ function CoverageBar({ coverage }: { coverage: Coverage }) {
   );
 }
 
-// Required / Optional checklist group. Status-only: mark + label + (filled) value.
-// An empty group is omitted so an ATS that marks nothing required renders no header.
-function FieldGroup({ title, items }: { title: string; items: FillItem[] }) {
+// Required / Optional checklist group. Each row is clickable — it scrolls the
+// page to that field and flashes the highlight — and carries the fill plan's
+// per-field reason ("why this value") as its tooltip. An empty group is
+// omitted so an ATS that marks nothing required renders no header.
+function FieldGroup({
+  title,
+  items,
+  reasonFor,
+  onJump,
+}: {
+  title: string;
+  items: FillItem[];
+  reasonFor?: (fieldId: string) => string | undefined;
+  onJump?: (fieldId: string) => void;
+}) {
   if (items.length === 0) return null;
   return (
     <div className="mt-3">
       <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">{title}</p>
-      <ul className="space-y-1.5 text-body">
+      <ul className="space-y-0.5 text-body">
         {items.map((i) => (
-          <li key={i.fieldId} className="flex items-center gap-2">
-            <StatusIcon status={i.status} />
-            <span className="flex-1 truncate text-text-primary">{i.label}</span>
-            {i.status === "fillable" && <span className="truncate text-text-tertiary">{i.value}</span>}
+          <li key={i.fieldId}>
+            <button
+              type="button"
+              title={reasonFor?.(i.fieldId)}
+              onClick={() => onJump?.(i.fieldId)}
+              className="flex w-full items-center gap-2 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-bg-base"
+            >
+              <StatusIcon status={i.status} />
+              <span className="flex-1 truncate text-text-primary">{i.label}</span>
+              {i.status === "fillable" && <span className="truncate text-text-tertiary">{i.value}</span>}
+            </button>
           </li>
         ))}
       </ul>
@@ -336,6 +365,7 @@ export function FillPanel({
   fill,
   capture,
   attachFile,
+  scrollToField,
   api,
   rescanNonce,
   openWebApp,
@@ -352,6 +382,8 @@ export function FillPanel({
     fieldId: string,
     file: { fileName: string; mimeType: string; bytesBase64: string },
   ) => Promise<AttachFileResponse>;
+  /** Bring a scanned field into view on the page (scroll + highlight flash). */
+  scrollToField?: (fieldId: string) => Promise<unknown>;
   api: FillApi;
   rescanNonce: number;
   openWebApp: () => void;
@@ -370,6 +402,11 @@ export function FillPanel({
   const [bundle, setBundle] = useState<FillTaskBundle | null>(null);
   const [instantBusy, setInstantBusy] = useState(false);
   const [instantError, setInstantError] = useState<string | null>(null);
+  const [fit, setFit] = useState<FitSummary | null>(null);
+  const [fitBusy, setFitBusy] = useState(false);
+  const [fitError, setFitError] = useState<string | null>(null);
+  const [submitState, setSubmitState] = useState<"idle" | "busy" | "done">("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [tailorBusy, setTailorBusy] = useState(false);
   const [tailorError, setTailorError] = useState<string | null>(null);
   const [tailorPdf, setTailorPdf] = useState<{ url: string; fileName: string } | null>(null);
@@ -417,8 +454,59 @@ export function FillPanel({
     setReported(false);
     setFilledOnce(false);
     setInstantError(null);
+    setFit(null);
+    setFitBusy(false);
+    setFitError(null);
+    setSubmitState("idle");
+    setSubmitError(null);
     resetTailor();
     claimTriedRef.current = false;
+  };
+
+  // Fit signal: whenever a bundle is claimed, show the stored fit if one
+  // exists. A miss (never computed, or web hiccup) just leaves the on-demand
+  // "Analyze fit" entry — never an error state on its own.
+  const claimedApplicationId = bundle?.applicationId ?? null;
+  useEffect(() => {
+    if (!claimedApplicationId) return;
+    let live = true;
+    void api.getFit(claimedApplicationId).then((res) => {
+      if (live && res.ok) setFit(res.value);
+    });
+    return () => {
+      live = false;
+    };
+  }, [api, claimedApplicationId]);
+
+  const onAnalyzeFit = async () => {
+    const b = bundleRef.current;
+    if (!b || fitBusy) return;
+    setFitBusy(true);
+    setFitError(null);
+    try {
+      const res = await api.computeFit(b.applicationId);
+      if (res.ok) setFit(res.value);
+      else setFitError(res.error);
+    } finally {
+      setFitBusy(false);
+    }
+  };
+
+  // Terminal resolution from the panel: the user states they submitted the
+  // application themselves. Valid whenever the task sits at the fill or
+  // submit gate — exactly where a reported fill leaves it.
+  const onMarkApplied = async () => {
+    const b = bundleRef.current;
+    if (!b || submitState !== "idle") return;
+    setSubmitState("busy");
+    setSubmitError(null);
+    const res = await api.resolveFillAction(b.taskId, "applied-manually");
+    if (res.ok) {
+      setSubmitState("done");
+    } else {
+      setSubmitState("idle");
+      setSubmitError(res.error);
+    }
   };
 
   // Write one value and report whether the DOM actually took it. An absent outcome
@@ -730,6 +818,14 @@ export function FillPanel({
   const unknown = plan.filter((i) => i.status === "unknown").length;
   const drift = plan.length > 0 && classifiedRatio(plan) < 0.3;
 
+  // Panel row → page glue. traceRef is written together with `plan`, so at
+  // render time the reasons match the rows being shown.
+  const reasonFor = (fieldId: string) =>
+    traceRef.current.find((t) => t.fieldId === fieldId)?.reason || undefined;
+  const jumpToField = (fieldId: string) => {
+    void scrollToField?.(fieldId)?.catch?.(() => {});
+  };
+
   const onFill = async () => {
     if (pendingRef.current || done || !scanResult.ok || !bundleRef.current) return;
     await taskFillPage(plan, scanResult, traceRef.current);
@@ -866,6 +962,41 @@ export function FillPanel({
           <span className="shrink-0 text-micro font-semibold uppercase tracking-wide text-text-tertiary">Task</span>
         </div>
       )}
+      {bundle && webReachable && (
+        <div className="rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+          {fit ? (
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 text-title font-semibold tabular-nums text-text-primary">
+                {Math.round(fit.overall)}%
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-caption font-semibold text-text-primary">
+                  {fit.label || "Fit"}
+                </p>
+                {fit.notAlignedSkills.length > 0 && (
+                  <p className="truncate text-caption text-text-secondary" title={fit.whyMatch}>
+                    Gaps: {fit.notAlignedSkills.slice(0, 2).map((s) => s.skill).join(" · ")}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 text-caption text-text-secondary">
+                Fit for this job not analyzed yet.
+              </span>
+              <Button
+                className="shrink-0 rounded-full"
+                disabled={fitBusy}
+                onClick={() => void onAnalyzeFit()}
+              >
+                {fitBusy ? "Analyzing…" : "Analyze fit"}
+              </Button>
+            </div>
+          )}
+          {fitError && <p className="mt-1.5 text-caption text-warning">{fitError}</p>}
+        </div>
+      )}
       <SectionCard title={`${scanResult.company} · ${scanResult.title}`}>
         <p className="mb-2 text-caption text-text-tertiary">
           {fillable.length} ready · {needs} unanswered · {unknown} unrecognized
@@ -926,8 +1057,18 @@ export function FillPanel({
           </p>
         )}
         {plan.length > 0 && <CoverageBar coverage={fillCoverage(plan)} />}
-        <FieldGroup title="Required" items={plan.filter((i) => i.required)} />
-        <FieldGroup title="Optional" items={plan.filter((i) => !i.required)} />
+        <FieldGroup
+          title="Required"
+          items={plan.filter((i) => i.required)}
+          reasonFor={reasonFor}
+          onJump={jumpToField}
+        />
+        <FieldGroup
+          title="Optional"
+          items={plan.filter((i) => !i.required)}
+          reasonFor={reasonFor}
+          onJump={jumpToField}
+        />
         {done && (
           <p className="mt-3 text-caption text-success">
             Filled — review the page, then report to the workspace.
@@ -1044,7 +1185,23 @@ export function FillPanel({
         )}
         {bundle &&
           (reported ? (
-            <p className="mt-3 text-caption text-success">Reported — check the workspace.</p>
+            <div className="mt-3 space-y-2">
+              <p className="text-caption text-success">Reported — check the workspace.</p>
+              {submitState === "done" ? (
+                <p className="text-caption text-success">
+                  Marked as submitted — the application is closed in OfferOS.
+                </p>
+              ) : (
+                <Button
+                  className="w-full rounded-full"
+                  disabled={submitState === "busy"}
+                  onClick={() => void onMarkApplied()}
+                >
+                  {submitState === "busy" ? "Marking…" : "I've submitted — mark as applied"}
+                </Button>
+              )}
+              {submitError && <p className="text-caption text-warning">{submitError}</p>}
+            </div>
           ) : (
             <Button
               className="mt-3 w-full rounded-full"

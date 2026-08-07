@@ -13,12 +13,8 @@ import {
 import type { AnswerEntry, FillPersonalInfo, FillProfile } from "@offeros/autofill";
 import type { Db } from "../db/client";
 import { answers } from "../db/schema";
-import {
-  createAgentTask,
-  getAgentTask,
-  getAgentTaskByApplicationId,
-  updateAgentTask,
-} from "../repositories/agent-task-repo";
+import { createAgentTask, getAgentTask, updateAgentTask } from "../repositories/agent-task-repo";
+import { getAgentTaskByApplicationId } from "../repositories/agent-task-by-application";
 import {
   createApplication,
   getApplication,

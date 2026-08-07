@@ -9,19 +9,23 @@ import {
   sendEngineCaptureJd,
   sendEngineFill,
   sendEngineScan,
+  sendEngineScrollToField,
 } from "../../src/lib/autofill/autofill-messaging";
 import {
   claim,
+  computeFit,
   createAnswer,
   createTaskFromJd,
   fetchArtifactPdf,
   fetchResumeFile,
   findApplicationsByJobUrl,
   generateAnswer,
+  getFit,
   getPending,
   instantFill,
   listAnswers,
   postReport,
+  resolveFillAction,
   tailorResume,
   updateAnswer,
 } from "../../src/lib/offeros-api";
@@ -47,6 +51,9 @@ const api = {
   createTaskFromJd,
   instantFill,
   tailorResume,
+  getFit,
+  computeFit,
+  resolveFillAction,
   fetchResumeFile,
   fetchArtifactPdf,
   listAnswers,
@@ -108,6 +115,10 @@ export default function App() {
       sendEngineAttachFile(tabId, fieldId, file.fileName, file.mimeType, file.bytesBase64),
     [tabId],
   );
+  const scrollToField = useCallback(
+    (fieldId: string) => sendEngineScrollToField(tabId, fieldId),
+    [tabId],
+  );
   const openWebApp = useMemo(() => () => void browser.tabs.create({ url: apiBase || undefined }), [apiBase]);
   const openApplication = useCallback(
     (applicationId: string) => void browser.tabs.create({ url: `${apiBase}/applications/${applicationId}` }),
@@ -153,6 +164,7 @@ export default function App() {
             fill={fill}
             capture={capture}
             attachFile={attachFile}
+            scrollToField={scrollToField}
             api={api}
             rescanNonce={rescanNonce}
             openWebApp={openWebApp}

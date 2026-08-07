@@ -280,6 +280,41 @@ export function instantFill(
   );
 }
 
+/** Mirrors apps/web's `FitAnalysis` structurally, trimmed to what the panel shows. */
+export type FitSummary = {
+  overall: number;
+  label: string;
+  whyMatch: string;
+  subScores: { experience: number; skills: number; education: number };
+  notAlignedSkills: { skill: string; advice: string }[];
+};
+
+/** The stored fit for an application; `{ ok: false }` when none has been computed yet. */
+export function getFit(
+  applicationId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<FitSummary>> {
+  return call<FitSummary>(`/applications/${applicationId}/fit`, undefined, fetchImpl);
+}
+
+/** Compute (or recompute) the fit — an LLM call; resolves with the fresh row. */
+export function computeFit(
+  applicationId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<FitSummary>> {
+  return call<FitSummary>(`/applications/${applicationId}/fit`, json("POST", {}), fetchImpl);
+}
+
+/** Resolve the fill run from the panel: the user applied manually / marked done.
+ *  Marks the task done and the application applied (server-side resolveFill). */
+export function resolveFillAction(
+  taskId: string,
+  action: "fixed" | "applied-manually",
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<unknown>> {
+  return call<unknown>(`/agent/tasks/${taskId}/fill/resolve`, json("POST", { action }), fetchImpl);
+}
+
 /** In-panel "Tailor résumé for this job": run the tailor step out of band for a
  *  task parked at the fill/submit gate. Long-running (an LLM call) — resolves
  *  when the resume artifact exists, ready for `fetchArtifactPdf` preview. */

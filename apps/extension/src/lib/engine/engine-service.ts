@@ -15,11 +15,13 @@ import {
   isEngineFillRequest,
   isEngineCaptureJdRequest,
   isEngineAttachFileRequest,
+  isEngineScrollToFieldRequest,
   sendEnginePageChanged,
   type ScanResponse,
   type FillResponse,
   type CaptureJdResponse,
   type AttachFileResponse,
+  type ScrollToFieldResponse,
 } from "../autofill/autofill-messaging";
 
 export interface Engine {
@@ -27,6 +29,7 @@ export interface Engine {
   fill(values: FillValue[]): Promise<FillResponse>;
   capture(): CaptureJdResponse;
   attachFile(fieldId: string, fileName: string, mimeType: string, bytesBase64: string): Promise<AttachFileResponse>;
+  scrollToField(fieldId: string): ScrollToFieldResponse;
   watch(cb: () => void): () => void;
 }
 
@@ -117,9 +120,20 @@ export function createEngine(doc: Document): Engine {
     return { ok };
   };
 
+  // Panel row → page glue: bring the field into view and flash the highlight
+  // so the user can see exactly which control a panel row refers to.
+  // scrollIntoView is called optionally — some test DOMs don't implement it.
+  const scrollToField = (fieldId: string): ScrollToFieldResponse => {
+    const el = resolveFieldEl(edoc(), fieldId);
+    if (!el) return { ok: false };
+    el.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    highlight(el);
+    return { ok: true };
+  };
+
   const watch = (cb: () => void) => watchPage(doc, cb);
 
-  return { scan, fill, capture, attachFile, watch };
+  return { scan, fill, capture, attachFile, scrollToField, watch };
 }
 
 export interface EngineContext {
@@ -144,6 +158,7 @@ export function registerEngine(doc: Document, ctx: EngineContext): Engine {
     if (isEngineAttachFileRequest(msg)) {
       return engine.attachFile(msg.fieldId, msg.fileName, msg.mimeType, msg.bytesBase64);
     }
+    if (isEngineScrollToFieldRequest(msg)) return Promise.resolve(engine.scrollToField(msg.fieldId));
     return undefined;
   };
   browser.runtime.onMessage.addListener(listener);
