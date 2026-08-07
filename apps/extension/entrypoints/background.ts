@@ -1,4 +1,5 @@
 import { startDevReload } from "../src/lib/dev-reload";
+import { matchAts } from "../src/lib/autofill/recipes";
 
 export default defineBackground(() => {
   // The toolbar action opens the side panel (Chrome only); with
@@ -8,6 +9,34 @@ export default defineBackground(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   }
+
+  // The panel only lives on supported ATS tabs: per-tab enablement means an
+  // open panel closes itself when the user switches to an unrelated tab and
+  // comes back on its own when they return to an apply page — instead of a
+  // stale panel following them around the whole browser.
+  const updatePanelForTab = (tabId: number, url: string | undefined) => {
+    if (!chrome.sidePanel?.setOptions) return;
+    const enabled = !!url && matchAts(url) !== null;
+    void chrome.sidePanel
+      .setOptions({ tabId, path: "sidepanel.html", enabled })
+      .catch(() => {});
+  };
+  chrome.tabs.onActivated.addListener(({ tabId }) => {
+    chrome.tabs.get(tabId, (tab) => {
+      if (!chrome.runtime.lastError) updatePanelForTab(tabId, tab?.url);
+    });
+  });
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url !== undefined || changeInfo.status === "complete") {
+      updatePanelForTab(tabId, tab.url);
+    }
+  });
+  // Initial sweep so existing tabs are correct right after install/reload
+  // (the dev auto-reload restarts this worker on every build).
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) if (tab.id !== undefined) updatePanelForTab(tab.id, tab.url);
+  });
+
   // Dev builds only (inert without a build stamp / with an update_url): reload
   // the whole extension when a fresh build lands in the unpacked directory.
   // Slightly delayed so an open side panel can refresh itself first.

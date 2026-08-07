@@ -1,6 +1,6 @@
 {
   "name": "offeros",
-  "description": "Local-first, open-source AI job-application copilot — web app + companion extension. Review and submit yourself; OfferOS never submits for you.",
+  "description": "Local-first, open-source AI job-application copilot \u2014 web app + companion extension. Review and submit yourself; OfferOS never submits for you.",
   "private": true,
   "version": "0.0.0",
   "type": "module",
