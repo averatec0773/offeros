@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Minus, RefreshCw, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Minus, RefreshCw, TriangleAlert, type LucideIcon } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SectionCard } from "../components/ui/section-card";
 import {
@@ -82,6 +82,8 @@ export interface FillApi {
   }) => Promise<ApiResult<FillTaskBundle>>;
   /** In-panel tailor: run the tailor-resume step for the claimed task. */
   tailorResume: (taskId: string) => Promise<ApiResult<unknown>>;
+  /** In-panel cover letter: run the cover-letter step for the claimed task. */
+  generateCoverLetter: (taskId: string) => Promise<ApiResult<unknown>>;
   /** Stored fit for the claimed application ({ok:false} when never computed). */
   getFit: (applicationId: string) => Promise<ApiResult<FitSummary>>;
   /** Compute/recompute the fit (an LLM call). */
@@ -296,6 +298,77 @@ function AddJobCard({
   );
 }
 
+/** Generate → preview → attach card, shared by the résumé and cover-letter
+ *  flows. Pure UI — the caller owns all state and handlers. */
+function ArtifactCard({
+  title,
+  cta,
+  busyLabel,
+  hint,
+  previewTitle,
+  attachCta,
+  busy,
+  error,
+  pdf,
+  attached,
+  onGenerate,
+  onAttach,
+}: {
+  title: string;
+  cta: string;
+  busyLabel: string;
+  hint: string;
+  previewTitle: string;
+  attachCta: string;
+  busy: boolean;
+  error: string | null;
+  pdf: { url: string; fileName: string } | null;
+  attached: boolean;
+  onGenerate: () => void;
+  onAttach: () => void;
+}) {
+  return (
+    <div className="mt-3 rounded-xl bg-bg-base p-3">
+      <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+        {title}
+      </p>
+      {!pdf ? (
+        <>
+          <Button variant="primary" className="rounded-full" disabled={busy} onClick={onGenerate}>
+            {busy ? busyLabel : cta}
+          </Button>
+          <p className="mt-1.5 text-caption leading-relaxed text-text-secondary">{hint}</p>
+        </>
+      ) : (
+        <>
+          <iframe
+            src={pdf.url}
+            title={previewTitle}
+            className="h-72 w-full rounded-xl border border-border-subtle bg-white"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <Button
+              variant="primary"
+              className="rounded-full"
+              disabled={busy || attached}
+              onClick={onAttach}
+            >
+              {attached ? "Attached" : attachCta}
+            </Button>
+            <Button className="rounded-full" disabled={busy} onClick={onGenerate}>
+              {busy ? busyLabel : "Regenerate"}
+            </Button>
+          </div>
+          {attached && (
+            <p className="mt-1.5 text-caption text-success">Attached — review it on the page.</p>
+          )}
+        </>
+      )}
+      {error && <p className="mt-1.5 text-caption text-warning">{error}</p>}
+    </div>
+  );
+}
+
 // Submit-readiness bar: required fields we have a value for / total.
 function CoverageBar({ coverage }: { coverage: Coverage }) {
   return (
@@ -421,6 +494,13 @@ export function FillPanel({
   // the attach handler never race a stale closure), and its blob URL for revoke.
   const tailorFetchedRef = useRef<Extract<FileFetchResult, { ok: true }> | null>(null);
   const tailorUrlRef = useRef<string | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  const [coverPdf, setCoverPdf] = useState<{ url: string; fileName: string } | null>(null);
+  const [coverAttached, setCoverAttached] = useState(false);
+  const coverFetchedRef = useRef<Extract<FileFetchResult, { ok: true }> | null>(null);
+  const coverUrlRef = useRef<string | null>(null);
+  const [fitExpanded, setFitExpanded] = useState(false);
   const [aiAnswers, setAiAnswers] = useState<{ fieldId: string; label: string; answer: string }[]>([]);
   const [reported, setReported] = useState(false);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
@@ -450,6 +530,24 @@ export function FillPanel({
     setTailorError(null);
     setTailorBusy(false);
     setTailorAttached(false);
+    if (coverUrlRef.current) URL.revokeObjectURL(coverUrlRef.current);
+    coverUrlRef.current = null;
+    coverFetchedRef.current = null;
+    setCoverPdf(null);
+    setCoverError(null);
+    setCoverBusy(false);
+    setCoverAttached(false);
+    setFitExpanded(false);
+  };
+
+  // A bundle can arrive carrying an earlier session's per-field reports (the
+  // panel or the whole extension reloaded mid-fill and re-claimed the same
+  // ticket) — rehydrate the cumulative report so Done and the workspace view
+  // continue where the previous session stopped.
+  const hydrateFromBundle = (b: FillTaskBundle) => {
+    reportsRef.current.clear();
+    for (const r of b.fieldReports ?? []) reportsRef.current.set(reportKey(r), r);
+    if ((b.fieldReports ?? []).some((r) => r.outcome === "filled")) setFilledOnce(true);
   };
   const resetTaskMode = () => {
     bundleRef.current = null;
@@ -780,6 +878,7 @@ export function FillPanel({
             if (!live || !claimed.ok) return;
             bundleRef.current = claimed.value;
             setBundle(claimed.value);
+            hydrateFromBundle(claimed.value);
             setScanNonce((n) => n + 1);
           } catch {
             // Web app unreachable / extension context invalidated → stay in "no task".
@@ -954,6 +1053,76 @@ export function FillPanel({
     }
   };
 
+  // In-panel cover letter: same shape as onTailor — run the step, fetch the
+  // rendered PDF, preview; attach stays a separate user-gated click.
+  const onCoverGen = async () => {
+    const b = bundleRef.current;
+    if (!b || coverBusy) return;
+    setCoverBusy(true);
+    setCoverError(null);
+    try {
+      const res = await api.generateCoverLetter(b.taskId);
+      if (!res.ok) {
+        setCoverError(res.error);
+        return;
+      }
+      const fetched = await api.fetchArtifactPdf(b.taskId, "cover-letter");
+      if (!fetched.ok) {
+        setCoverError("Written, but the PDF couldn't be rendered — check the artifact in OfferOS.");
+        return;
+      }
+      if (coverUrlRef.current) URL.revokeObjectURL(coverUrlRef.current);
+      coverFetchedRef.current = fetched;
+      const url = URL.createObjectURL(new Blob([fetched.bytes], { type: fetched.mimeType }));
+      coverUrlRef.current = url;
+      setCoverPdf({ url, fileName: fetched.fileName });
+      setCoverAttached(false);
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
+  const onAttachCover = async () => {
+    const b = bundleRef.current;
+    const fetched = coverFetchedRef.current;
+    if (!b || !fetched || pendingRef.current) return;
+    const coverField = scanResult?.ok
+      ? scanResult.descriptors.find(
+          (d) =>
+            d.type === "file" &&
+            traceRef.current.find((t) => t.fieldId === d.fieldId)?.classifiedType === "coverLetter",
+        )
+      : undefined;
+    if (!coverField) {
+      setCoverError("No cover-letter upload field on this page — attach the file manually.");
+      return;
+    }
+    setCoverBusy(true);
+    setCoverError(null);
+    try {
+      const outcome = await attachManagedFile(coverField.fieldId, fetched, "coverLetter");
+      const normalized = typeof outcome === "string" ? { outcome } : outcome;
+      if (normalized.outcome !== "filled") {
+        setCoverError(normalized.reason ?? CUSTOM_UPLOADER_REASON);
+        return;
+      }
+      setCoverAttached(true);
+      for (const [k, r] of reportsRef.current) {
+        if (r.fieldId === coverField.fieldId) {
+          reportsRef.current.set(k, {
+            ...r,
+            outcome: "filled",
+            value: fetched.fileName,
+            source: "cover-letter-file",
+          });
+        }
+      }
+      if (reportsRef.current.size > 0) await api.postReport(b.taskId, allReports(), false);
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
   // The instant lane: capture this page's JD, ask the web app to park + claim
   // a fill-gate task for it in one call, then fill immediately with the claimed
   // bundle's profile. From here on the ordinary task-mode flow owns everything
@@ -983,6 +1152,7 @@ export function FillPanel({
       }
       bundleRef.current = claimed.value;
       setBundle(claimed.value);
+      hydrateFromBundle(claimed.value);
       const { plan: newPlan, trace: newTrace } = explainFillPlan(
         scanResult.descriptors,
         claimed.value.fillProfile,
@@ -1009,21 +1179,52 @@ export function FillPanel({
       {bundle && webReachable && (
         <div className="rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
           {fit ? (
-            <div className="flex items-center gap-3">
-              <span className="shrink-0 text-title font-semibold tabular-nums text-text-primary">
-                {Math.round(fit.overall)}%
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-caption font-semibold text-text-primary">
-                  {fit.label || "Fit"}
-                </p>
-                {fit.notAlignedSkills.length > 0 && (
-                  <p className="truncate text-caption text-text-secondary" title={fit.whyMatch}>
-                    Gaps: {fit.notAlignedSkills.slice(0, 2).map((s) => s.skill).join(" · ")}
+            <>
+              <button
+                type="button"
+                onClick={() => setFitExpanded((v) => !v)}
+                aria-expanded={fitExpanded}
+                className="flex w-full items-center gap-3 text-left"
+              >
+                <span className="shrink-0 text-title font-semibold tabular-nums text-text-primary">
+                  {Math.round(fit.overall)}%
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-caption font-semibold text-text-primary">
+                    {fit.label || "Fit"}
                   </p>
-                )}
-              </div>
-            </div>
+                  {!fitExpanded && fit.notAlignedSkills.length > 0 && (
+                    <p className="truncate text-caption text-text-secondary">
+                      Gaps: {fit.notAlignedSkills.slice(0, 2).map((s) => s.skill).join(" · ")}
+                    </p>
+                  )}
+                </div>
+                <ChevronDown
+                  aria-hidden
+                  className={`h-4 w-4 shrink-0 text-text-tertiary transition-transform duration-fast ${
+                    fitExpanded ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {fitExpanded && (
+                <div className="mt-2 space-y-2 border-t border-border-subtle pt-2">
+                  {fit.whyMatch && (
+                    <p className="text-caption leading-relaxed text-text-secondary">{fit.whyMatch}</p>
+                  )}
+                  <p className="text-micro text-text-tertiary">
+                    Experience {Math.round(fit.subScores.experience)}% · Skills{" "}
+                    {Math.round(fit.subScores.skills)}% · Education{" "}
+                    {Math.round(fit.subScores.education)}%
+                  </p>
+                  {fit.notAlignedSkills.map((s) => (
+                    <p key={s.skill} className="text-caption leading-relaxed text-text-secondary">
+                      <span className="font-medium text-text-primary">{s.skill}</span>
+                      {s.advice ? ` — ${s.advice}` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 flex-1 text-caption text-text-secondary">
@@ -1123,57 +1324,36 @@ export function FillPanel({
           </p>
         )}
         {bundle && !bundle.resumeText && (
-          <div className="mt-3 rounded-xl bg-bg-base p-3">
-            <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
-              Résumé
-            </p>
-            {!tailorPdf ? (
-              <>
-                <Button
-                  variant="primary"
-                  className="rounded-full"
-                  disabled={tailorBusy}
-                  onClick={() => void onTailor()}
-                >
-                  {tailorBusy ? "Tailoring…" : "Tailor résumé for this job"}
-                </Button>
-                <p className="mt-1.5 text-caption leading-relaxed text-text-secondary">
-                  AI-tailors your résumé to this posting — preview before attaching.
-                </p>
-              </>
-            ) : (
-              <>
-                <iframe
-                  src={tailorPdf.url}
-                  title="Tailored résumé preview"
-                  className="h-72 w-full rounded-xl border border-border-subtle bg-white"
-                />
-                <div className="mt-2 flex items-center gap-2">
-                  <Button
-                    variant="primary"
-                    className="rounded-full"
-                    disabled={tailorBusy || tailorAttached}
-                    onClick={() => void onAttachTailored()}
-                  >
-                    {tailorAttached ? "Attached" : "Attach tailored PDF"}
-                  </Button>
-                  <Button
-                    className="rounded-full"
-                    disabled={tailorBusy}
-                    onClick={() => void onTailor()}
-                  >
-                    {tailorBusy ? "Tailoring…" : "Regenerate"}
-                  </Button>
-                </div>
-                {tailorAttached && (
-                  <p className="mt-1.5 text-caption text-success">
-                    Attached — review it on the page.
-                  </p>
-                )}
-              </>
-            )}
-            {tailorError && <p className="mt-1.5 text-caption text-warning">{tailorError}</p>}
-          </div>
+          <ArtifactCard
+            title="Résumé"
+            cta="Tailor résumé for this job"
+            busyLabel="Tailoring…"
+            hint="AI-tailors your résumé to this posting — preview before attaching."
+            previewTitle="Tailored résumé preview"
+            attachCta="Attach tailored PDF"
+            busy={tailorBusy}
+            error={tailorError}
+            pdf={tailorPdf}
+            attached={tailorAttached}
+            onGenerate={() => void onTailor()}
+            onAttach={() => void onAttachTailored()}
+          />
+        )}
+        {bundle && !bundle.coverLetterText && (
+          <ArtifactCard
+            title="Cover letter"
+            cta="Write cover letter"
+            busyLabel="Writing…"
+            hint="Grounded in your profile and tailored résumé — preview before attaching."
+            previewTitle="Cover letter preview"
+            attachCta="Attach cover letter PDF"
+            busy={coverBusy}
+            error={coverError}
+            pdf={coverPdf}
+            attached={coverAttached}
+            onGenerate={() => void onCoverGen()}
+            onAttach={() => void onAttachCover()}
+          />
         )}
         {bundle && aiAnswers.length > 0 && (
           <div className="mt-3">

@@ -105,6 +105,7 @@ const emptyApi = (): FillApi => ({
   createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
   instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   tailorResume: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
+  generateCoverLetter: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   getFit: vi.fn(async (): Promise<ApiResult<FitSummary>> => ({ ok: false, error: "not found" })),
   computeFit: vi.fn(async (): Promise<ApiResult<FitSummary>> => ({ ok: true, value: FIT })),
   resolveFillAction: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
@@ -438,6 +439,86 @@ describe("FillPanel", () => {
       expect(
         await screen.findByText("No résumé upload field on this page — attach the file manually."),
       ).toBeInTheDocument();
+    });
+
+    it("writes a cover letter, previews it, and attaches it to the cover-letter file field", async () => {
+      const api = claimedApi();
+      const attachFile = vi.fn(
+        async (
+          _fieldId: string,
+          _file: { fileName: string; mimeType: string; bytesBase64: string },
+        ): Promise<AttachFileResponse> => ({ ok: true }),
+      );
+      api.fetchArtifactPdf = vi.fn(
+        async (): Promise<FileFetchResult> => ({
+          ok: true,
+          bytes: new TextEncoder().encode("%PDF cover").buffer as ArrayBuffer,
+          fileName: "cover-letter.pdf",
+          mimeType: "application/pdf",
+        }),
+      );
+      renderPanel({ api, attachFile, scan: async () => scanWithBothFiles });
+      await userEvent.click(await screen.findByRole("button", { name: "Write cover letter" }));
+      expect(api.generateCoverLetter).toHaveBeenCalledWith("t1");
+      expect(await screen.findByTitle("Cover letter preview")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Attach cover letter PDF" }));
+      await waitFor(() => expect(attachFile).toHaveBeenCalled());
+      expect(attachFile.mock.calls.at(-1)![0]).toBe("cl1");
+      expect(await screen.findByText("Attached — review it on the page.")).toBeInTheDocument();
+    });
+
+    it("offers no cover-letter entry when the bundle already carries a confirmed letter", async () => {
+      const api = claimedApi();
+      api.claim = vi.fn(async () => ({
+        ok: true as const,
+        value: { ...bundle, coverLetterText: "Dear team…" },
+      }));
+      renderPanel({ api });
+      await screen.findByText("Engineer · Acme");
+      expect(screen.queryByRole("button", { name: "Write cover letter" })).not.toBeInTheDocument();
+    });
+
+    it("rehydrates a re-claimed session's reports so Done stays available", async () => {
+      const api = claimedApi();
+      api.claim = vi.fn(async () => ({
+        ok: true as const,
+        value: {
+          ...bundle,
+          fieldReports: [
+            {
+              fieldId: "f1",
+              label: "Email",
+              classifiedType: "email",
+              status: "fillable",
+              value: "a@b.com",
+              source: "personal" as const,
+              reason: "",
+              outcome: "filled" as const,
+              required: true,
+            },
+          ],
+        },
+      }));
+      renderPanel({ api });
+      await screen.findByText("Engineer · Acme");
+      // filledOnce was restored from the bundle's reports — Done is clickable
+      // without re-running the fill in this session.
+      const done = await screen.findByRole("button", { name: "Done — report to workspace" });
+      expect(done).not.toBeDisabled();
+      await userEvent.click(done);
+      const posted = (api.postReport as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+      expect(posted[2]).toBe(true);
+      expect((posted[1] as { fieldId: string }[]).map((r) => r.fieldId)).toContain("f1");
+    });
+
+    it("expands the fit strip to the full narrative and every gap", async () => {
+      const api = claimedApi();
+      api.getFit = vi.fn(async () => ({ ok: true as const, value: FIT }));
+      renderPanel({ api });
+      await userEvent.click(await screen.findByText("82%"));
+      expect(await screen.findByText("Solid overlap with the core stack.")).toBeInTheDocument();
+      expect(screen.getByText(/Highlight infra work/)).toBeInTheDocument();
+      expect(screen.getByText(/Experience 80% · Skills 85% · Education 75%/)).toBeInTheDocument();
     });
 
     it("offers no tailor entry when the bundle already carries a tailored résumé", async () => {

@@ -20,20 +20,27 @@ const STEP_STATUS_LABEL: Partial<Record<AgentTask["status"], string>> = {
 // the "Fill out application form" step is the current (action-required) step;
 // otherwise the current step is task.step (count of steps completed so far).
 // A fillFirst task (started via the extension's instant fill) never ran the
-// generation steps — they render as "skipped", never as done. The one
-// exception: a targeted in-panel tailor DID run tailor-resume, which
-// `tailoredResume` (a resume artifact exists) flips back to done.
-function deriveSteps(task: AgentTask, tailoredResume: boolean): AgentStep[] {
+// generation steps — they render as "skipped", never as done. The exception:
+// a targeted in-panel run DID execute tailor-resume / generate-cover-letter,
+// which the artifact-existence flags flip back to done.
+function deriveSteps(
+  task: AgentTask,
+  tailoredResume: boolean,
+  tailoredCoverLetter: boolean,
+): AgentStep[] {
   const actionRequired = task.applicationInfo?.status === 2 && task.status !== "done";
   const fillIndex = PIPELINE_STEPS.findIndex((s) => s.key === FILL_STEP_KEY);
   const currentIndex = actionRequired ? fillIndex : task.step;
+  const ranTargeted = (key: string) =>
+    (key === "tailor-resume" && tailoredResume) ||
+    (key === "generate-cover-letter" && tailoredCoverLetter);
 
   return PIPELINE_STEPS.map((step, i) => ({
     key: step.key,
     label: step.label,
     state:
       task.fillFirst && i < fillIndex
-        ? step.key === "tailor-resume" && tailoredResume
+        ? ranTargeted(step.key)
           ? "done"
           : "skipped"
         : i < currentIndex
@@ -72,6 +79,7 @@ function RailDot({ state }: { state: AgentStep["state"] }) {
 export function StepTimeline({
   task,
   tailoredResume = false,
+  tailoredCoverLetter = false,
   onReFill,
   onFixed,
   onApplied,
@@ -79,11 +87,13 @@ export function StepTimeline({
   task: AgentTask;
   /** A resume artifact exists for this task — marks the tailor step done on fillFirst tasks. */
   tailoredResume?: boolean;
+  /** A cover-letter artifact exists — marks the generate step done on fillFirst tasks. */
+  tailoredCoverLetter?: boolean;
   onReFill?: () => void;
   onFixed?: () => void;
   onApplied?: () => void;
 }) {
-  const steps = deriveSteps(task, tailoredResume);
+  const steps = deriveSteps(task, tailoredResume, tailoredCoverLetter);
   const actionRequired = task.applicationInfo?.status === 2 && task.status !== "done";
 
   return (

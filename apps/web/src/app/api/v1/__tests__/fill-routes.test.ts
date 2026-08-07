@@ -146,12 +146,14 @@ describe("POST /agent/fill/handoffs/[id]/claim", () => {
     expect(res.status).toBe(404);
   });
 
-  it("400s when the ticket was already claimed", async () => {
+  it("re-claiming an already-claimed ticket succeeds (panel-reload recovery)", async () => {
     const { taskId } = seedTaskAtFillForm();
     const handoff = await (await handoffRoute.POST(post(), idCtx(taskId))).json();
     await claimRoute.POST(post(), idCtx(handoff.result.id));
     const res = await claimRoute.POST(post(), idCtx(handoff.result.id));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.result.taskId).toBe(taskId);
   });
 });
 

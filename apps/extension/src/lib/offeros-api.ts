@@ -38,6 +38,9 @@ export type FillTaskBundle = {
    *  original stored file via `fetchResumeFile` when `attachResume` is "original".
    *  Undefined when the account has no résumés at all. */
   resumeId?: string;
+  /** The task's accumulated per-field reports — present so a re-claiming
+   *  panel (extension reloaded mid-fill) rehydrates instead of restarting. */
+  fieldReports?: FieldReport[];
 };
 
 /** Mirrors apps/web's `Application` structurally, trimmed to what the panel needs. */
@@ -323,6 +326,16 @@ export function tailorResume(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<unknown>> {
   return call<unknown>(`/agent/tasks/${taskId}/tailor`, json("POST", {}), fetchImpl);
+}
+
+/** In-panel "Write cover letter": run the cover-letter step out of band —
+ *  grounded on the tailored résumé artifact when one exists, else profile
+ *  facts. Same contract as `tailorResume`. */
+export function generateCoverLetter(
+  taskId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<unknown>> {
+  return call<unknown>(`/agent/tasks/${taskId}/cover-letter`, json("POST", {}), fetchImpl);
 }
 
 /** One-click "Add this job": creates the application + task from captured JD text in one call. */

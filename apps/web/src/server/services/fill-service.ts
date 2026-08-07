@@ -171,6 +171,10 @@ export type FillTaskBundle = {
    *  `GET /api/v1/resumes/[id]/file` when `attachResume` is "original".
    *  Undefined when the account has no résumés at all. */
   resumeId?: string;
+  /** The task's accumulated per-field reports — a re-claiming panel (extension
+   *  reloaded mid-fill) rehydrates its cumulative report from these instead of
+   *  restarting the session from zero. */
+  fieldReports: FieldReport[];
 };
 
 const EMPTY_PERSONAL: FillPersonalInfo = { name: "", email: "", phone: "", address: "", links: {} };
@@ -210,13 +214,16 @@ function currentVersionContent(artifact: Artifact | null): string | null {
 /**
  * Claim a pending ticket and hand the extension everything it needs to fill:
  * the job header, the flattened fill profile, and the current tailored artifacts.
- * Claiming a non-pending ticket (already claimed/completed/cancelled) throws.
+ * Re-claiming an already-claimed ticket is idempotent — this is a single-user
+ * local app, and the panel loses its in-memory bundle whenever it (or the
+ * whole extension) reloads mid-fill; the same ticket must be recoverable or
+ * the session strands as "no task". Only completed/cancelled tickets refuse.
  */
 export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
   const handoff = getFillHandoff(db, handoffId);
   if (!handoff) throw new ServiceError(`fill handoff ${handoffId} not found`);
-  if (handoff.status !== "pending") {
-    throw new ServiceError(`fill handoff ${handoffId} is not pending`);
+  if (handoff.status !== "pending" && handoff.status !== "claimed") {
+    throw new ServiceError(`fill handoff ${handoffId} is not open`);
   }
 
   const task = requireTask(db, handoff.taskId);
@@ -259,6 +266,7 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
         ? "original"
         : "tailored",
     resumeId: effectiveResume?.id,
+    fieldReports: task.fieldReports ?? [],
   };
 
   updateFillHandoff(db, handoff.id, { status: "claimed" });

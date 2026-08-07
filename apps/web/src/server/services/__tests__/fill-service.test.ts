@@ -218,11 +218,11 @@ describe("claimHandoff", () => {
     expect(bundle.coverLetterText).toBeNull();
   });
 
-  it("throws when claiming a non-pending ticket", () => {
+  it("re-claiming a claimed ticket is idempotent (panel-reload recovery); closed tickets throw", () => {
     const { taskId } = seedTaskAtFillForm();
     const handoff = createHandoffForTask(db, taskId);
     claimHandoff(db, handoff.id);
-    expect(() => claimHandoff(db, handoff.id)).toThrow(ServiceError);
+    expect(claimHandoff(db, handoff.id).taskId).toBe(taskId);
   });
 
   it("throws when the ticket does not exist", () => {
@@ -578,6 +578,61 @@ describe("completeSubmitted", () => {
     completeSubmitted(db, taskId);
     const events = listEvents(db, applicationId);
     expect(events.map((e) => e.kind)).toEqual(["marked-submitted"]);
+  });
+});
+
+describe("claimHandoff — re-claim resilience", () => {
+  it("re-claiming a claimed ticket is idempotent and carries the task's fieldReports", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    const first = claimHandoff(db, handoff.id);
+    expect(first.fieldReports).toEqual([]);
+
+    const report: FieldReport = {
+      fieldId: "f1",
+      label: "Email",
+      classifiedType: "email",
+      status: "fillable",
+      value: "a@b.com",
+      source: "personal",
+      reason: "",
+      outcome: "filled",
+      required: true,
+    };
+    applyFillReport(db, taskId, [report], false);
+
+    // The panel reloaded and claims the SAME ticket again — allowed, and the
+    // bundle now carries the accumulated reports for rehydration.
+    const second = claimHandoff(db, handoff.id);
+    expect(second.taskId).toBe(taskId);
+    expect(second.fieldReports.map((r) => r.fieldId)).toEqual(["f1"]);
+    expect(getFillHandoff(db, handoff.id)?.status).toBe("claimed");
+  });
+
+  it("still refuses completed and cancelled tickets", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    claimHandoff(db, handoff.id);
+    applyFillReport(
+      db,
+      taskId,
+      [
+        {
+          fieldId: "f1",
+          label: "Email",
+          classifiedType: "email",
+          status: "fillable",
+          value: "a@b.com",
+          source: "personal",
+          reason: "",
+          outcome: "filled",
+          required: true,
+        },
+      ],
+      true,
+    );
+    expect(getFillHandoff(db, handoff.id)?.status).toBe("completed");
+    expect(() => claimHandoff(db, handoff.id)).toThrow(ServiceError);
   });
 });
 

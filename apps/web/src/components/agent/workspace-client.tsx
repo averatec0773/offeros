@@ -439,6 +439,7 @@ export function WorkspaceClient({
             <StepTimeline
               task={task}
               tailoredResume={resumeArtifact !== null}
+              tailoredCoverLetter={coverLetterArtifact !== null}
               onReFill={handleOpenAndFill}
               onFixed={() => handleFillResolve("fixed")}
               onApplied={() => handleFillResolve("applied-manually")}

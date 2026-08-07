@@ -8,6 +8,7 @@ import {
   generateAnswer,
   getPending,
   computeFit,
+  generateCoverLetter,
   getFit,
   instantFill,
   postReport,
@@ -252,6 +253,16 @@ describe("tailorResume", () => {
     const f = fakeFetch(200, err(42000, "no key"));
     const r = await tailorResume("t1", f.fn);
     expect(r).toEqual({ ok: false, error: "no key" });
+  });
+});
+
+describe("generateCoverLetter", () => {
+  it("POSTs to the task's cover-letter route and unwraps the envelope", async () => {
+    const f = fakeFetch(200, ok({}));
+    const r = await generateCoverLetter("t1", f.fn);
+    expect(r.ok).toBe(true);
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/cover-letter");
+    expect(f.calls[0]!.init.method).toBe("POST");
   });
 });
 
