@@ -280,6 +280,16 @@ export function instantFill(
   );
 }
 
+/** In-panel "Tailor résumé for this job": run the tailor step out of band for a
+ *  task parked at the fill/submit gate. Long-running (an LLM call) — resolves
+ *  when the resume artifact exists, ready for `fetchArtifactPdf` preview. */
+export function tailorResume(
+  taskId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<unknown>> {
+  return call<unknown>(`/agent/tasks/${taskId}/tailor`, json("POST", {}), fetchImpl);
+}
+
 /** One-click "Add this job": creates the application + task from captured JD text in one call. */
 export function createTaskFromJd(
   input: { jobTitle: string; companyName: string; jobUrl: string; jdText: string },

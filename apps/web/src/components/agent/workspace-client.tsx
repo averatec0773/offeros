@@ -438,6 +438,7 @@ export function WorkspaceClient({
           {task ? (
             <StepTimeline
               task={task}
+              tailoredResume={resumeArtifact !== null}
               onReFill={handleOpenAndFill}
               onFixed={() => handleFillResolve("fixed")}
               onApplied={() => handleFillResolve("applied-manually")}

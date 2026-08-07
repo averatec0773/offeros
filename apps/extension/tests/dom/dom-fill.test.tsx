@@ -67,6 +67,16 @@ describe("scanFields", () => {
       expect(f.el.getAttribute("data-offeros-id")).toBe(f.descriptor.fieldId);
     }
   });
+
+  it("falls back to the element id as the name signal when name is absent (real Greenhouse file inputs)", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <input id="resume" type="file" />
+        <input id="cover_letter" type="file" />
+      </form></main>`;
+    const found = scanFields(document.body, recipe);
+    expect(found.map((f) => f.descriptor.name)).toEqual(["resume", "cover_letter"]);
+  });
 });
 
 describe("labelFor via scanFields", () => {

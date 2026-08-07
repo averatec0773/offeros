@@ -79,6 +79,8 @@ export interface FillApi {
     jobUrl: string;
     jdText: string;
   }) => Promise<ApiResult<FillTaskBundle>>;
+  /** In-panel tailor: run the tailor-resume step for the claimed task. */
+  tailorResume: (taskId: string) => Promise<ApiResult<unknown>>;
   /** Original stored résumé bytes (`bundle.attachResume === "original"`). */
   fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
   /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
@@ -368,6 +370,14 @@ export function FillPanel({
   const [bundle, setBundle] = useState<FillTaskBundle | null>(null);
   const [instantBusy, setInstantBusy] = useState(false);
   const [instantError, setInstantError] = useState<string | null>(null);
+  const [tailorBusy, setTailorBusy] = useState(false);
+  const [tailorError, setTailorError] = useState<string | null>(null);
+  const [tailorPdf, setTailorPdf] = useState<{ url: string; fileName: string } | null>(null);
+  const [tailorAttached, setTailorAttached] = useState(false);
+  // The fetched PDF bytes behind the current preview (refs so resetTaskMode and
+  // the attach handler never race a stale closure), and its blob URL for revoke.
+  const tailorFetchedRef = useRef<Extract<FileFetchResult, { ok: true }> | null>(null);
+  const tailorUrlRef = useRef<string | null>(null);
   const [aiAnswers, setAiAnswers] = useState<{ fieldId: string; label: string; answer: string }[]>([]);
   const [reported, setReported] = useState(false);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
@@ -389,6 +399,15 @@ export function FillPanel({
     for (const r of reports) reportsRef.current.set(reportKey(r), r);
   };
   const allReports = () => Array.from(reportsRef.current.values());
+  const resetTailor = () => {
+    if (tailorUrlRef.current) URL.revokeObjectURL(tailorUrlRef.current);
+    tailorUrlRef.current = null;
+    tailorFetchedRef.current = null;
+    setTailorPdf(null);
+    setTailorError(null);
+    setTailorBusy(false);
+    setTailorAttached(false);
+  };
   const resetTaskMode = () => {
     bundleRef.current = null;
     setBundle(null);
@@ -398,6 +417,7 @@ export function FillPanel({
     setReported(false);
     setFilledOnce(false);
     setInstantError(null);
+    resetTailor();
     claimTriedRef.current = false;
   };
 
@@ -715,6 +735,85 @@ export function FillPanel({
     await taskFillPage(plan, scanResult, traceRef.current);
   };
 
+  // In-panel tailor: run the tailor step on the claimed task (long LLM call),
+  // then fetch the rendered PDF for an inline preview. Attaching is a separate,
+  // user-gated click below. Regenerate re-runs the step (a new artifact
+  // version) and replaces the preview.
+  const onTailor = async () => {
+    const b = bundleRef.current;
+    if (!b || tailorBusy) return;
+    setTailorBusy(true);
+    setTailorError(null);
+    try {
+      const res = await api.tailorResume(b.taskId);
+      if (!res.ok) {
+        setTailorError(res.error);
+        return;
+      }
+      const fetched = await api.fetchArtifactPdf(b.taskId, "resume");
+      if (!fetched.ok) {
+        setTailorError("Tailored, but the PDF couldn't be rendered — check the artifact in OfferOS.");
+        return;
+      }
+      if (tailorUrlRef.current) URL.revokeObjectURL(tailorUrlRef.current);
+      tailorFetchedRef.current = fetched;
+      const url = URL.createObjectURL(new Blob([fetched.bytes], { type: fetched.mimeType }));
+      tailorUrlRef.current = url;
+      setTailorPdf({ url, fileName: fetched.fileName });
+      setTailorAttached(false);
+      // Future page fills (wizard steps, re-fill) should attach the tailored
+      // PDF now that one exists.
+      const next: FillTaskBundle = { ...b, attachResume: "tailored" };
+      bundleRef.current = next;
+      setBundle(next);
+    } finally {
+      setTailorBusy(false);
+    }
+  };
+
+  // Attach the previewed tailored PDF to this page's résumé file input,
+  // reusing the verified attach path, then reflect it in the cumulative report.
+  const onAttachTailored = async () => {
+    const b = bundleRef.current;
+    const fetched = tailorFetchedRef.current;
+    if (!b || !fetched || pendingRef.current) return;
+    const resumeField = scanResult?.ok
+      ? scanResult.descriptors.find(
+          (d) =>
+            d.type === "file" &&
+            traceRef.current.find((t) => t.fieldId === d.fieldId)?.classifiedType === "resume",
+        )
+      : undefined;
+    if (!resumeField) {
+      setTailorError("No résumé upload field on this page — attach the file manually.");
+      return;
+    }
+    setTailorBusy(true);
+    setTailorError(null);
+    try {
+      const outcome = await attachManagedFile(resumeField.fieldId, fetched, "resume");
+      const normalized = typeof outcome === "string" ? { outcome } : outcome;
+      if (normalized.outcome !== "filled") {
+        setTailorError(normalized.reason ?? CUSTOM_UPLOADER_REASON);
+        return;
+      }
+      setTailorAttached(true);
+      for (const [k, r] of reportsRef.current) {
+        if (r.fieldId === resumeField.fieldId) {
+          reportsRef.current.set(k, {
+            ...r,
+            outcome: "filled",
+            value: fetched.fileName,
+            source: "resume-file",
+          });
+        }
+      }
+      if (reportsRef.current.size > 0) await api.postReport(b.taskId, allReports(), false);
+    } finally {
+      setTailorBusy(false);
+    }
+  };
+
   // The instant lane: capture this page's JD, ask the web app to park + claim
   // a fill-gate task for it in one call, then fill immediately with the claimed
   // bundle's profile. From here on the ordinary task-mode flow owns everything
@@ -833,6 +932,59 @@ export function FillPanel({
           <p className="mt-3 text-caption text-success">
             Filled — review the page, then report to the workspace.
           </p>
+        )}
+        {bundle && !bundle.resumeText && (
+          <div className="mt-3 rounded-xl bg-bg-base p-3">
+            <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+              Résumé
+            </p>
+            {!tailorPdf ? (
+              <>
+                <Button
+                  variant="primary"
+                  className="rounded-full"
+                  disabled={tailorBusy}
+                  onClick={() => void onTailor()}
+                >
+                  {tailorBusy ? "Tailoring…" : "Tailor résumé for this job"}
+                </Button>
+                <p className="mt-1.5 text-caption leading-relaxed text-text-secondary">
+                  AI-tailors your résumé to this posting — preview before attaching.
+                </p>
+              </>
+            ) : (
+              <>
+                <iframe
+                  src={tailorPdf.url}
+                  title="Tailored résumé preview"
+                  className="h-72 w-full rounded-xl border border-border-subtle bg-white"
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    className="rounded-full"
+                    disabled={tailorBusy || tailorAttached}
+                    onClick={() => void onAttachTailored()}
+                  >
+                    {tailorAttached ? "Attached" : "Attach tailored PDF"}
+                  </Button>
+                  <Button
+                    className="rounded-full"
+                    disabled={tailorBusy}
+                    onClick={() => void onTailor()}
+                  >
+                    {tailorBusy ? "Tailoring…" : "Regenerate"}
+                  </Button>
+                </div>
+                {tailorAttached && (
+                  <p className="mt-1.5 text-caption text-success">
+                    Attached — review it on the page.
+                  </p>
+                )}
+              </>
+            )}
+            {tailorError && <p className="mt-1.5 text-caption text-warning">{tailorError}</p>}
+          </div>
         )}
         {bundle && aiAnswers.length > 0 && (
           <div className="mt-3">

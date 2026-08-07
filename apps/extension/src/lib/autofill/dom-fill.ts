@@ -45,7 +45,10 @@ function describe(el: HTMLElement): FieldDescriptor {
   return {
     fieldId,
     label,
-    name: el.getAttribute("name") ?? "",
+    // `id` stands in when `name` is absent — real Greenhouse job-boards file
+    // inputs carry id="resume"/id="cover_letter" with no name, and the id is
+    // the only signal that tells the two "Attach" fields apart.
+    name: el.getAttribute("name") || el.id || "",
     autocomplete: el.getAttribute("autocomplete") ?? "",
     type: (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text",
     placeholder: el.getAttribute("placeholder") ?? "",

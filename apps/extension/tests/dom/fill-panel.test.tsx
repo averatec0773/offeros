@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
@@ -92,6 +92,7 @@ const emptyApi = (): FillApi => ({
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
   createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
   instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
+  tailorResume: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   fetchResumeFile: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
@@ -249,6 +250,112 @@ describe("FillPanel", () => {
     // Ordinary task mode took over: cumulative report posted, task chip shown.
     await waitFor(() => expect(usedApi.postReport).toHaveBeenCalled());
     expect(await screen.findByText("Engineer · Acme")).toBeInTheDocument();
+  });
+
+  describe("in-panel tailor", () => {
+    // happy-dom can't fetch blob: URLs into iframes — stub the object-URL so the
+    // preview iframe gets an inert src instead of spraying NotSupportedError noise.
+    beforeEach(() => {
+      vi.spyOn(URL, "createObjectURL").mockReturnValue("about:blank");
+      vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const pdfFetched: FileFetchResult = {
+      ok: true,
+      bytes: new TextEncoder().encode("%PDF-1.4 tailored").buffer as ArrayBuffer,
+      fileName: "tailored-resume.pdf",
+      mimeType: "application/pdf",
+    };
+
+    const claimedApi = () => {
+      const api = emptyApi();
+      api.getPending = vi.fn(async () => ({ ok: true as const, value: [ticket] }));
+      api.claim = vi.fn(async () => ({ ok: true as const, value: bundle }));
+      api.fetchArtifactPdf = vi.fn(async (): Promise<FileFetchResult> => pdfFetched);
+      return api;
+    };
+
+    it("tailors, previews the PDF, and attaches it to the résumé file field with a report update", async () => {
+      const api = claimedApi();
+      const attachFile = vi.fn(
+        async (
+          _fieldId: string,
+          _file: { fileName: string; mimeType: string; bytesBase64: string },
+        ): Promise<AttachFileResponse> => ({ ok: true }),
+      );
+      renderPanel({ api, attachFile, scan: async () => scanWithResumeFile });
+      // Claimed task mode: the tailor entry is offered (bundle has no resumeText).
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Tailor résumé for this job" }),
+      );
+      expect(api.tailorResume).toHaveBeenCalledWith("t1");
+      // Preview appears from the rendered artifact PDF.
+      expect(await screen.findByTitle("Tailored résumé preview")).toBeInTheDocument();
+      // Fill first so the report map has a row for the resume field.
+      await userEvent.click(screen.getByRole("button", { name: "Fill 1 field" }));
+      await waitFor(() => expect(api.postReport).toHaveBeenCalled());
+      const callsBefore = (api.postReport as ReturnType<typeof vi.fn>).mock.calls.length;
+      await userEvent.click(screen.getByRole("button", { name: "Attach tailored PDF" }));
+      await waitFor(() => expect(attachFile).toHaveBeenCalled());
+      expect(attachFile.mock.calls[attachFile.mock.calls.length - 1]![0]).toBe("r1");
+      expect(await screen.findByText("Attached — review it on the page.")).toBeInTheDocument();
+      // The cumulative report was re-sent with the résumé field now filled.
+      await waitFor(() =>
+        expect((api.postReport as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(
+          callsBefore,
+        ),
+      );
+      const lastReports = (api.postReport as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1] as {
+        fieldId: string;
+        outcome: string;
+        value?: string;
+      }[];
+      const resumeRow = lastReports.find((r) => r.fieldId === "r1");
+      expect(resumeRow).toMatchObject({ outcome: "filled", value: "tailored-resume.pdf" });
+    });
+
+    it("surfaces a tailor failure without a preview", async () => {
+      const api = claimedApi();
+      api.tailorResume = vi.fn(async () => ({
+        ok: false as const,
+        error: "Your AI provider rejected the request — check your API key and model in Settings → AI.",
+      }));
+      renderPanel({ api, scan: async () => scanWithResumeFile });
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Tailor résumé for this job" }),
+      );
+      expect(await screen.findByText(/rejected the request/)).toBeInTheDocument();
+      expect(screen.queryByTitle("Tailored résumé preview")).not.toBeInTheDocument();
+    });
+
+    it("explains when the page has no résumé upload field", async () => {
+      const api = claimedApi();
+      renderPanel({ api, scan: async () => scanOk }); // no file descriptor
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Tailor résumé for this job" }),
+      );
+      await screen.findByTitle("Tailored résumé preview");
+      await userEvent.click(screen.getByRole("button", { name: "Attach tailored PDF" }));
+      expect(
+        await screen.findByText("No résumé upload field on this page — attach the file manually."),
+      ).toBeInTheDocument();
+    });
+
+    it("offers no tailor entry when the bundle already carries a tailored résumé", async () => {
+      const api = claimedApi();
+      api.claim = vi.fn(async () => ({
+        ok: true as const,
+        value: { ...bundle, resumeText: "already tailored" },
+      }));
+      renderPanel({ api, scan: async () => scanWithResumeFile });
+      await screen.findByText("Engineer · Acme");
+      expect(
+        screen.queryByRole("button", { name: "Tailor résumé for this job" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("instant fill surfaces a refused claim (mid-pipeline application) without entering task mode", async () => {

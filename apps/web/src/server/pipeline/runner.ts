@@ -277,6 +277,47 @@ export async function choose(
   return runForward(ctx, next);
 }
 
+/**
+ * Run one generation step's body out of band for a task parked at the
+ * extension boundary (fill-form / submit) — the instant lane's "tailor now
+ * from the panel". The task's own step and awaiting_user status are restored
+ * afterwards so the fill lane never notices; a failure rethrows (after
+ * restoring) instead of marking the task failed, because the task's real
+ * work — the fill — is still healthy.
+ */
+export async function runTargetedStep(
+  ctx: PipelineContext,
+  key: PipelineStepKey,
+): Promise<AgentTask> {
+  const task = load(ctx);
+  const parkedAt = ctx.steps[task.step]?.key;
+  if (
+    task.status !== "awaiting_user" ||
+    (parkedAt !== TERMINAL_BOUNDARY && parkedAt !== SUBMIT_GATE)
+  ) {
+    const err = new Error("task is not parked at the fill or submit gate");
+    err.name = "ServiceError";
+    throw err;
+  }
+  const step = ctx.steps.find((s) => s.key === key);
+  if (!step) {
+    const err = new Error(`unknown pipeline step ${key}`);
+    err.name = "ServiceError";
+    throw err;
+  }
+  try {
+    await runBody(ctx, step, task);
+  } finally {
+    await persist(ctx, { status: "awaiting_user" });
+  }
+  appendEvent(ctx.db, {
+    applicationId: task.applicationId,
+    kind: "step-completed",
+    payload: { step: step.key },
+  });
+  return load(ctx);
+}
+
 /** Begin (or resume) running a task. Equivalent to advancing from its position. */
 export async function startTask(ctx: PipelineContext): Promise<AgentTask> {
   const task = load(ctx);

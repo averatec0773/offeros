@@ -11,7 +11,7 @@ import { listEvents } from "../../repositories/application-event-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
 import { getStyleMemory } from "../../repositories/style-memory-repo";
 import { makePipelineContext } from "../context";
-import { advance, choose, failureReasonFor, startTask } from "../runner";
+import { advance, choose, failureReasonFor, runTargetedStep, startTask } from "../runner";
 import type { PipelineStep } from "../types";
 
 const FILL_FORM_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
@@ -561,6 +561,69 @@ describe("pipeline runner — style memory distill trigger", () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("runTargetedStep", () => {
+  function seedFillFirstTask(): string {
+    const app = createApplication(db, {
+      jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
+    });
+    return createAgentTask(db, {
+      applicationId: app.id,
+      status: "awaiting_user",
+      step: FILL_FORM_STEP,
+      fillFirst: true,
+    }).id;
+  }
+
+  it("runs the tailor step body and restores the task's fill-gate state", async () => {
+    const taskId = seedFillFirstTask();
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps() });
+    const task = await runTargetedStep(ctx, "tailor-resume");
+    expect(ran).toEqual(["tailor-resume"]);
+    expect(task.status).toBe("awaiting_user");
+    expect(task.step).toBe(FILL_FORM_STEP);
+    const app = getAgentTask(db, taskId)!;
+    const events = listEvents(db, app.applicationId).map((e) => e.kind);
+    expect(events).toContain("step-completed");
+  });
+
+  it("restores awaiting_user and rethrows when the step body fails (task never marked failed)", async () => {
+    const taskId = seedFillFirstTask();
+    const ctx = makePipelineContext(db, taskId, {
+      steps: makeSteps({ throwAt: "tailor-resume" }),
+    });
+    await expect(runTargetedStep(ctx, "tailor-resume")).rejects.toThrow("boom at tailor-resume");
+    const task = getAgentTask(db, taskId)!;
+    expect(task.status).toBe("awaiting_user");
+    expect(task.step).toBe(FILL_FORM_STEP);
+    expect(task.failureReason).toBeUndefined();
+  });
+
+  it("refuses a task that is not parked at the fill or submit gate", async () => {
+    const taskId = seedTask(); // queued at step 0
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps() });
+    await expect(runTargetedStep(ctx, "tailor-resume")).rejects.toMatchObject({
+      name: "ServiceError",
+    });
+    expect(ran).toEqual([]);
+  });
+
+  it("also runs for a workspace-lane task parked at the submit gate", async () => {
+    const app = createApplication(db, {
+      jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
+    });
+    const taskId = createAgentTask(db, {
+      applicationId: app.id,
+      status: "awaiting_user",
+      step: SUBMIT_STEP,
+    }).id;
+    const ctx = makePipelineContext(db, taskId, { steps: makeSteps() });
+    const task = await runTargetedStep(ctx, "tailor-resume");
+    expect(ran).toEqual(["tailor-resume"]);
+    expect(task.step).toBe(SUBMIT_STEP);
+    expect(task.status).toBe("awaiting_user");
   });
 });
 

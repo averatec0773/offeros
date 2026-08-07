@@ -9,6 +9,7 @@ import {
   getPending,
   instantFill,
   postReport,
+  tailorResume,
 } from "../src/lib/offeros-api";
 
 interface Call { url: string; init: RequestInit }
@@ -205,6 +206,22 @@ describe("createTaskFromJd", () => {
     expect(body.jobInfo.jobId.length).toBeGreaterThan(0);
     expect(body.jdText).toBe("We need a SWE.");
     expect(body.source).toBe("extension");
+  });
+});
+
+describe("tailorResume", () => {
+  it("POSTs to the task's tailor route and unwraps the envelope", async () => {
+    const f = fakeFetch(200, ok({}));
+    const r = await tailorResume("t1", f.fn);
+    expect(r.ok).toBe(true);
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/tailor");
+    expect(f.calls[0]!.init.method).toBe("POST");
+  });
+
+  it("maps an error envelope to { ok: false }", async () => {
+    const f = fakeFetch(200, err(42000, "no key"));
+    const r = await tailorResume("t1", f.fn);
+    expect(r).toEqual({ ok: false, error: "no key" });
   });
 });
 
