@@ -102,7 +102,7 @@ describe("EeoEditor", () => {
 
     await waitFor(() => expect(api.answers.create).toHaveBeenCalled());
     expect(api.answers.create).toHaveBeenCalledWith({
-      questionPatterns: ["Are you a veteran?"],
+      questionPatterns: ["Are you a veteran?", "veteran"],
       answer: "I am not a protected veteran",
       type: "enum",
       category: "eeo",
@@ -139,7 +139,7 @@ describe("EeoEditor", () => {
 
     await waitFor(() =>
       expect(api.answers.update).toHaveBeenCalledWith("existing1", {
-        questionPatterns: ["Are you a veteran?"],
+        questionPatterns: ["Are you a veteran?", "veteran"],
         answer: "I am not a protected veteran",
         type: "enum",
         category: "eeo",
@@ -195,7 +195,11 @@ describe("EeoEditor", () => {
 
     await waitFor(() =>
       expect(api.answers.update).toHaveBeenCalledWith("shared1", {
-        questionPatterns: ["Are you a veteran?", "Have you served in the U.S. military?"],
+        questionPatterns: [
+          "Are you a veteran?",
+          "Have you served in the U.S. military?",
+          "veteran",
+        ],
         answer: "I am not a protected veteran",
         type: "enum",
         category: "eeo",
@@ -229,11 +233,75 @@ describe("EeoEditor", () => {
 
     await waitFor(() => expect(api.answers.create).toHaveBeenCalled());
     expect(api.answers.create).toHaveBeenCalledWith({
-      questionPatterns: ["How would you identify your race?"],
+      questionPatterns: ["How would you identify your race?", "race", "ethnicity"],
       answer: "Something else entirely",
       type: "enum",
       category: "eeo",
     });
+  });
+
+  it("every preset carries short keyword patterns so terse form labels ('Gender') can match", () => {
+    // matchAnswer is whole-word containment of the pattern INSIDE the live
+    // question — a full-sentence-only pattern can never hit a bare group label.
+    for (const preset of EEO_PRESETS) {
+      expect(preset.patterns[0]).toBe(preset.pattern);
+      expect(preset.patterns.length).toBeGreaterThan(1);
+    }
+    expect(EEO_PRESETS.find((p) => p.pattern === "What is your gender?")!.patterns).toContain(
+      "gender",
+    );
+    expect(EEO_PRESETS.find((p) => p.pattern === "Are you a veteran?")!.patterns).toContain(
+      "veteran",
+    );
+  });
+
+  it("work authorization and sponsorship never get a privacy default — they need the true answer", () => {
+    const auth = EEO_PRESETS.find((p) => p.pattern === "Are you authorized to work in the US?")!;
+    const visa = EEO_PRESETS.find((p) => p.pattern.includes("require sponsorship"))!;
+    expect(auth.privacyDefault).toBeUndefined();
+    expect(visa.privacyDefault).toBeUndefined();
+    for (const p of EEO_PRESETS) {
+      if (p !== auth && p !== visa) expect(p.privacyDefault).toBeTruthy();
+    }
+  });
+
+  it("one click applies privacy defaults to every blank voluntary question, skipping existing entries", async () => {
+    // Veteran already answered — must not be overwritten.
+    vi.mocked(api.answers.list).mockResolvedValue([
+      {
+        id: "existing1",
+        questionPatterns: ["Are you a veteran?"],
+        answer: "I am not a protected veteran",
+        type: "enum",
+        category: "eeo",
+      },
+    ]);
+    vi.mocked(api.answers.create).mockImplementation(async (input) => ({
+      id: `new-${Math.random()}`,
+      questionPatterns: input.questionPatterns,
+      answer: input.answer,
+      type: input.type,
+      category: "eeo",
+    }));
+
+    render(<EeoEditor />);
+    const veteranSelect = (await screen.findByLabelText("Are you a veteran?")) as HTMLSelectElement;
+    await waitFor(() => expect(veteranSelect.value).toBe("I am not a protected veteran"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply privacy-preserving defaults" }));
+
+    // 8 presets carry a privacyDefault; veteran already has an entry → 7 creates.
+    await waitFor(() => expect(api.answers.create).toHaveBeenCalledTimes(7));
+    expect(api.answers.update).not.toHaveBeenCalled();
+    const created = vi.mocked(api.answers.create).mock.calls.map((c) => c[0]);
+    // Never invents work-auth / sponsorship answers.
+    expect(
+      created.some((c) => c.questionPatterns.some((p: string) => /authorized|sponsorship/i.test(p))),
+    ).toBe(false);
+    // Broadened patterns ride along on every seeded entry.
+    const gender = created.find((c) => c.questionPatterns.includes("gender"))!;
+    expect(gender.answer).toBe("Decline to self-identify");
+    expect(await screen.findByText("Saved 7.")).toBeTruthy();
   });
 
   it("round-trips a previously saved custom value: hydrates into Other… mode with the text preserved", async () => {

@@ -77,7 +77,13 @@ export interface FillApi {
   postReport: (taskId: string, reports: FieldReport[], complete?: boolean) => Promise<ApiResult<unknown>>;
   generateAnswer: (
     taskId: string,
-    body: { question: string; label: string; context?: string; existingAnswer?: string },
+    body: {
+      question: string;
+      label: string;
+      context?: string;
+      options?: string[];
+      existingAnswer?: string;
+    },
   ) => Promise<ApiResult<{ answer: string }>>;
   findApplicationsByJobUrl: (jobUrl: string) => Promise<ApiResult<ApplicationSummary[]>>;
   createTaskFromJd: (input: {
@@ -118,6 +124,11 @@ export interface FillApi {
 
 /** One OfferOS-managed file kind a file input can classify as — the only
  *  kinds the panel ever auto-attaches. Maps to the report source vocabulary. */
+/** Voluntary self-identification questions AI must never answer — the user
+ *  seeds these once in Profile → Equal Employment and the bank fills them. */
+const SENSITIVE_GROUP =
+  /gender|race|ethnic|veteran|disab|orientation|lgbt|pronoun|hispanic|latino/i;
+
 const FILE_KIND_SOURCE: Record<"resume" | "coverLetter", FieldReportSource> = {
   resume: "resume-file",
   coverLetter: "cover-letter-file",
@@ -540,7 +551,9 @@ export function FillPanel({
   const [writtenFields, setWrittenFields] = useState<Map<string, string>>(new Map());
   const markWritten = (fieldId: string, value: string) =>
     setWrittenFields((prev) => new Map(prev).set(fieldId, value));
-  const [aiAnswers, setAiAnswers] = useState<{ fieldId: string; label: string; answer: string }[]>([]);
+  const [aiAnswers, setAiAnswers] = useState<
+    { fieldId: string; label: string; answer: string; options?: string[] }[]
+  >([]);
   const [reported, setReported] = useState(false);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
   // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
@@ -757,7 +770,8 @@ export function FillPanel({
 
       // 3) open-ended free-text → AI answer → fill. Generation or write failure leaves
       // the field unwritten so it reports as needs-user (a human must answer).
-      const collected: { fieldId: string; label: string; answer: string }[] = [];
+      const collected: { fieldId: string; label: string; answer: string; options?: string[] }[] =
+        [];
       for (const q of planForFill.filter(
         (i) =>
           i.status === "needs-answer" &&
@@ -775,6 +789,37 @@ export function FillPanel({
           writes.set(q.fieldId, { outcome: "filled", value: ans.value.answer, source: "ai-generated" });
           markWritten(q.fieldId, ans.value.answer);
           collected.push({ fieldId: q.fieldId, label: q.label, answer: ans.value.answer });
+        }
+      }
+      // 3b) required multiple-choice groups the bank couldn't answer → AI picks
+      // exactly one of the page's own options. Voluntary self-identification
+      // questions (gender/race/veteran/…) are deliberately excluded — those are
+      // answered once from Profile → Equal Employment, never guessed by AI. An
+      // off-list AI answer simply fails the group's option-click verify and the
+      // field stays needs-user.
+      for (const g of planForFill.filter((i) => {
+        const desc = descriptorById.get(i.fieldId);
+        return (
+          i.status === "needs-answer" &&
+          i.required &&
+          desc != null &&
+          (desc.type === "radio-group" || desc.type === "checkbox-group") &&
+          (desc.options?.length ?? 0) > 0 &&
+          !SENSITIVE_GROUP.test(`${i.label} ${desc.label ?? ""}`)
+        );
+      })) {
+        const options = descriptorById.get(g.fieldId)!.options!;
+        const ans = await api.generateAnswer(b.taskId, {
+          question: g.label,
+          label: g.label,
+          context: b.jdSummary ?? undefined,
+          options,
+        });
+        if (!ans.ok) continue;
+        if (await writeOne(g.fieldId, ans.value.answer)) {
+          writes.set(g.fieldId, { outcome: "filled", value: ans.value.answer, source: "ai-generated" });
+          markWritten(g.fieldId, ans.value.answer);
+          collected.push({ fieldId: g.fieldId, label: g.label, answer: ans.value.answer, options });
         }
       }
       if (collected.length > 0) {
@@ -825,13 +870,19 @@ export function FillPanel({
 
   // Regenerate one AI answer: re-ask with the current answer as context, rewrite the
   // field, and re-send the report so the workspace sees the new value.
-  const regenerateAnswer = async (entry: { fieldId: string; label: string; answer: string }) => {
+  const regenerateAnswer = async (entry: {
+    fieldId: string;
+    label: string;
+    answer: string;
+    options?: string[];
+  }) => {
     const b = bundleRef.current;
     if (!b) return;
     const ans = await api.generateAnswer(b.taskId, {
       question: entry.label,
       label: entry.label,
       context: b.jdSummary ?? undefined,
+      options: entry.options,
       existingAnswer: entry.answer,
     });
     if (!ans.ok || !(await writeOne(entry.fieldId, ans.value.answer))) return;
@@ -1455,24 +1506,51 @@ export function FillPanel({
                       Regenerate
                     </button>
                   </div>
-                  <textarea
-                    aria-label={`Answer: ${a.label}`}
-                    rows={3}
-                    className="w-full rounded-xl border border-border-subtle bg-bg-base p-2 text-caption text-text-secondary focus:outline-none focus:ring-1 focus:ring-brand"
-                    value={a.answer}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setAiAnswers((prev) =>
-                        prev.map((x) => (x.fieldId === a.fieldId ? { ...x, answer: value } : x)),
-                      );
-                      setSavedFieldIds((prev) => {
-                        if (!prev.has(a.fieldId)) return prev;
-                        const next = new Set(prev);
-                        next.delete(a.fieldId);
-                        return next;
-                      });
-                    }}
-                  />
+                  {a.options ? (
+                    <select
+                      aria-label={`Answer: ${a.label}`}
+                      className="w-full rounded-xl border border-border-subtle bg-bg-base p-2 text-caption text-text-secondary focus:outline-none focus:ring-1 focus:ring-brand"
+                      value={a.answer}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setAiAnswers((prev) =>
+                          prev.map((x) => (x.fieldId === a.fieldId ? { ...x, answer: value } : x)),
+                        );
+                        setSavedFieldIds((prev) => {
+                          if (!prev.has(a.fieldId)) return prev;
+                          const next = new Set(prev);
+                          next.delete(a.fieldId);
+                          return next;
+                        });
+                      }}
+                    >
+                      {!a.options.includes(a.answer) && <option value={a.answer}>{a.answer}</option>}
+                      {a.options.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <textarea
+                      aria-label={`Answer: ${a.label}`}
+                      rows={3}
+                      className="w-full rounded-xl border border-border-subtle bg-bg-base p-2 text-caption text-text-secondary focus:outline-none focus:ring-1 focus:ring-brand"
+                      value={a.answer}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setAiAnswers((prev) =>
+                          prev.map((x) => (x.fieldId === a.fieldId ? { ...x, answer: value } : x)),
+                        );
+                        setSavedFieldIds((prev) => {
+                          if (!prev.has(a.fieldId)) return prev;
+                          const next = new Set(prev);
+                          next.delete(a.fieldId);
+                          return next;
+                        });
+                      }}
+                    />
+                  )}
                   <div className="flex items-center gap-2">
                     <button
                       type="button"

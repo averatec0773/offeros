@@ -57,6 +57,34 @@ describe("questionAnswerTask", () => {
     expect(prompt).toContain("I like the mission.");
   });
 
+  it("buildUserPrompt lists multiple-choice options inside the untrusted fence with a verbatim constraint", () => {
+    const prompt = questionAnswerTask.buildUserPrompt({
+      ...baseInput,
+      options: ["Yes", "No", "Prefer not to say"],
+    });
+    expect(prompt).toContain("Answer options (respond with exactly one, verbatim):");
+    expect(prompt).toContain("- Yes");
+    expect(prompt).toContain("- Prefer not to say");
+    // Options are scraped page text — they must sit inside the fence, before the profile.
+    const fenceOpen = prompt.indexOf("<untrusted-page-text>");
+    const fenceClose = prompt.indexOf("</untrusted-page-text>");
+    const optionsAt = prompt.indexOf("Answer options");
+    expect(optionsAt).toBeGreaterThan(fenceOpen);
+    expect(optionsAt).toBeLessThan(fenceClose);
+  });
+
+  it("buildUserPrompt omits the options block when options are absent or empty", () => {
+    expect(questionAnswerTask.buildUserPrompt(baseInput)).not.toContain("Answer options");
+    expect(
+      questionAnswerTask.buildUserPrompt({ ...baseInput, options: [] }),
+    ).not.toContain("Answer options");
+  });
+
+  it("defaultSystemPrompt pins the multiple-choice verbatim-option hard constraint", () => {
+    expect(questionAnswerTask.defaultSystemPrompt).toContain("MULTIPLE CHOICE (hard constraint)");
+    expect(questionAnswerTask.defaultSystemPrompt).toContain("EXACTLY one of those options");
+  });
+
   it("parse trims provider output and wraps it as { answer }", () => {
     expect(
       questionAnswerTask.parse("  I'm excited to build GenAI pipelines at Evolver.  \n"),

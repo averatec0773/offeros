@@ -14,6 +14,7 @@ const answerBodySchema = z.object({
   question: z.string().min(1),
   label: z.string(),
   context: z.string().optional(),
+  options: z.array(z.string().min(1)).max(50).optional(),
   existingAnswer: z.string().optional(),
 });
 
@@ -34,6 +35,7 @@ export async function POST(request: Request, ctx: Ctx) {
       question: body.question,
       label: body.label,
       context: body.context,
+      options: body.options,
       existingAnswer: body.existingAnswer,
     })) as QuestionAnswerOutput;
     return ok({ answer: output.answer });

@@ -262,6 +262,64 @@ describe("choice groups", () => {
     expect(item!.status).toBe("needs-answer");
   });
 
+  it("maps a decline-shaped stored answer onto the group's own decline option when wording differs", () => {
+    // Real Ashby veteran wording: no literal overlap with the OFCCP
+    // "I don't wish to answer" the bank stores — only the decline INTENT matches.
+    const veteranProfile = {
+      ...profile,
+      answerBank: [
+        {
+          id: "v1",
+          questionPatterns: ["veteran"],
+          answer: "I don't wish to answer",
+          type: "enum" as const,
+          category: "eeo" as const,
+        },
+      ],
+    };
+    const [item] = buildFillPlan(
+      [
+        desc({
+          label: "Veteran Status",
+          options: [
+            "I identify as one or more of the classifications of protected veteran listed above",
+            "I am not a protected veteran",
+            "I decline to self-identify for protected veteran status",
+          ],
+        }),
+      ],
+      veteranProfile,
+    );
+    expect(item!.status).toBe("fillable");
+    expect(item!.value).toBe("I decline to self-identify for protected veteran status");
+    expect(item!.source).toBe("answerBank");
+  });
+
+  it("never decline-falls-back a substantive stored answer onto a decline option", () => {
+    const yesProfile = {
+      ...profile,
+      answerBank: [
+        {
+          id: "v2",
+          questionPatterns: ["veteran"],
+          answer: "I am a protected veteran",
+          type: "enum" as const,
+          category: "eeo" as const,
+        },
+      ],
+    };
+    const [item] = buildFillPlan(
+      [
+        desc({
+          label: "Veteran Status",
+          options: ["Some unrelated wording A", "I decline to self-identify"],
+        }),
+      ],
+      yesProfile,
+    );
+    expect(item!.status).toBe("needs-answer");
+  });
+
   it("fills recentCompany/recentTitle from the profile", () => {
     const p2 = {
       ...profile,

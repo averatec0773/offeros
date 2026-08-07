@@ -204,7 +204,13 @@ export function postReport(
 
 export function generateAnswer(
   taskId: string,
-  body: { question: string; label: string; context?: string; existingAnswer?: string },
+  body: {
+    question: string;
+    label: string;
+    context?: string;
+    options?: string[];
+    existingAnswer?: string;
+  },
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<{ answer: string }>> {
   return call<{ answer: string }>(`/agent/tasks/${taskId}/fill/answer`, json("POST", body), fetchImpl);

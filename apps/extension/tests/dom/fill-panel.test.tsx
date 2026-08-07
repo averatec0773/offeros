@@ -643,6 +643,71 @@ describe("FillPanel", () => {
     expect(await screen.findByText("Reported — check the workspace.")).toBeInTheDocument();
   });
 
+  it("AI answers a required non-sensitive choice group with one of its own options, never a self-ID group", async () => {
+    const scanWithGroups: ScanResponse = {
+      ...scanOk,
+      descriptors: [
+        scanOk.descriptors[0]!,
+        {
+          fieldId: "g1",
+          label: "Have you used Python professionally?",
+          name: "",
+          autocomplete: "",
+          type: "radio-group",
+          placeholder: "",
+          ariaLabel: "",
+          required: true,
+          options: ["Yes", "No"],
+        },
+        {
+          fieldId: "g2",
+          label: "Gender",
+          name: "",
+          autocomplete: "",
+          type: "radio-group",
+          placeholder: "",
+          ariaLabel: "",
+          required: true,
+          options: ["Male", "Female", "Decline to self-identify"],
+        },
+      ],
+    };
+    const api: FillApi = {
+      ...emptyApi(),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+      generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "Yes" } })),
+    };
+    const { fill } = renderPanel({ api, scan: async () => scanWithGroups });
+
+    const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+    await act(async () => {
+      await userEvent.click(fillBtn);
+    });
+
+    // Exactly one AI call — the Python group, with its options; the Gender
+    // self-ID group is never AI-answered.
+    expect(api.generateAnswer).toHaveBeenCalledTimes(1);
+    expect(api.generateAnswer).toHaveBeenCalledWith("t1", {
+      question: "Have you used Python professionally?",
+      label: "Have you used Python professionally?",
+      context: undefined,
+      options: ["Yes", "No"],
+    });
+    // The chosen option is written through the normal fill path (group click).
+    expect(fill).toHaveBeenCalledWith([{ fieldId: "g1", value: "Yes" }]);
+    expect(fill).not.toHaveBeenCalledWith([{ fieldId: "g2", value: expect.anything() }]);
+
+    // Choice answers render as a select over the page's own options.
+    expect(await screen.findByText("AI answers")).toBeInTheDocument();
+    const select = screen.getByLabelText(
+      "Answer: Have you used Python professionally?",
+    ) as HTMLSelectElement;
+    expect(select.tagName).toBe("SELECT");
+    expect(select.value).toBe("Yes");
+    expect([...select.options].map((o) => o.value)).toEqual(["Yes", "No"]);
+  });
+
   describe("AI answer memory (accept → persist, deduped)", () => {
     const answerLabel = "Why do you want to work here?";
     const generatedAnswer = "Because I build compilers.";

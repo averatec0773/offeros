@@ -5,6 +5,9 @@ export interface QuestionAnswerInput {
   question: string;
   label: string;
   context?: string;
+  /** Multiple-choice questions: the visible option labels. When present, the
+   *  answer MUST be exactly one of these, returned verbatim. */
+  options?: string[];
   profileSummary: string;
   jdText: string;
   resumeText: string;
@@ -16,7 +19,9 @@ export interface QuestionAnswerOutput {
 }
 
 const DEFAULT_SYSTEM = [
-  "You answer a single free-text application question on behalf of a job applicant, in first person, as if the applicant were writing it themselves.",
+  "You answer a single application question on behalf of a job applicant, in first person, as if the applicant were writing it themselves.",
+  "",
+  "MULTIPLE CHOICE (hard constraint): when the prompt lists answer options, your entire response must be EXACTLY one of those options, copied verbatim — no explanation, no punctuation added, nothing else. Pick the option best supported by the applicant's profile and resume; when the inputs do not determine a choice, pick the most reasonable, honest middle-ground option.",
   "",
   "Answer the question directly and concisely — aim for 120 words or fewer unless the question itself demands more length (e.g. it explicitly asks for a detailed story or multiple examples).",
   "",
@@ -49,6 +54,11 @@ export const questionAnswerTask: LlmTask<QuestionAnswerInput, QuestionAnswerOutp
           `Question: "${neutralizeFenceTokens(i.question)}"`,
           `Field label: "${neutralizeFenceTokens(i.label)}"`,
           i.context ? `Context for this field: ${neutralizeFenceTokens(i.context)}` : "",
+          i.options?.length
+            ? `Answer options (respond with exactly one, verbatim):\n${i.options
+                .map((o) => `- ${neutralizeFenceTokens(o)}`)
+                .join("\n")}`
+            : "",
         ]
           .filter((l) => l !== "")
           .join("\n"),

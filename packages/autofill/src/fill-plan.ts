@@ -85,6 +85,18 @@ function matchDegreeOption(options: string[], degree: string): string | null {
   return options.find((o) => tier.option.test(o)) ?? null;
 }
 
+// Decline-to-answer wording varies per form ("I don't wish to answer",
+// "I decline to self-identify for protected veteran status", "I do not want
+// to answer", …) so a stored decline answer often has no literal option match.
+// Decline INTENT is form-independent: when the stored answer is decline-shaped
+// and nothing matched directly, pick the group's own decline-shaped option.
+const DECLINE_RE = /\bdecline\b|\bdo(?:n't| not) (?:wish|want)\b|\bprefer not\b/i;
+
+function matchDeclineOption(options: string[], answer: string): string | null {
+  if (!DECLINE_RE.test(answer)) return null;
+  return options.find((o) => DECLINE_RE.test(o)) ?? null;
+}
+
 export function buildFillPlan(
   descriptors: FieldDescriptor[],
   profile: FillProfile | null,
@@ -152,17 +164,17 @@ export function buildFillPlan(
         ? matchAnswer(desc.label || desc.ariaLabel || "", profile.answerBank)
         : null;
       const option = stored
-        ? matchOption(
+        ? (matchOption(
             desc.options.map((o) => ({ label: o, value: o })),
             stored.answer,
-          )
+          )?.label ?? matchDeclineOption(desc.options, stored.answer))
         : null;
       if (stored && option) {
         return {
           fieldId: desc.fieldId,
           label,
           status: "fillable",
-          value: String(option.label ?? ""),
+          value: String(option),
           source: "answerBank",
           required,
           answerId: stored.id,
