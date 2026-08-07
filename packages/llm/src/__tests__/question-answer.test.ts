@@ -75,9 +75,9 @@ describe("questionAnswerTask", () => {
 
   it("buildUserPrompt omits the options block when options are absent or empty", () => {
     expect(questionAnswerTask.buildUserPrompt(baseInput)).not.toContain("Answer options");
-    expect(
-      questionAnswerTask.buildUserPrompt({ ...baseInput, options: [] }),
-    ).not.toContain("Answer options");
+    expect(questionAnswerTask.buildUserPrompt({ ...baseInput, options: [] })).not.toContain(
+      "Answer options",
+    );
   });
 
   it("defaultSystemPrompt pins the multiple-choice verbatim-option hard constraint", () => {

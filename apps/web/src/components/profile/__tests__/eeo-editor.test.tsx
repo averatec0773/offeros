@@ -296,7 +296,9 @@ describe("EeoEditor", () => {
     const created = vi.mocked(api.answers.create).mock.calls.map((c) => c[0]);
     // Never invents work-auth / sponsorship answers.
     expect(
-      created.some((c) => c.questionPatterns.some((p: string) => /authorized|sponsorship/i.test(p))),
+      created.some((c) =>
+        c.questionPatterns.some((p: string) => /authorized|sponsorship/i.test(p)),
+      ),
     ).toBe(false);
     // Broadened patterns ride along on every seeded entry.
     const gender = created.find((c) => c.questionPatterns.includes("gender"))!;
