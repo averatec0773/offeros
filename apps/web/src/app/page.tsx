@@ -42,10 +42,20 @@ export default function HomePage() {
 
       {applications.length === 0 ? (
         <div className="space-y-4">
-          <EmptyState
-            title="No applications yet"
-            body="Add a job to get started — paste a posting URL or import your existing data."
-          />
+          <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+            <p className="text-title font-semibold">No applications yet</p>
+            <p className="mx-auto mt-1 max-w-[460px] text-body text-muted-foreground">
+              Add a job to get started — each one opens its own agent workspace with a tailored
+              résumé, JD analysis, and form-fill handoff.
+            </p>
+            <Link
+              href="/applications/new"
+              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground transition-colors hover:bg-primary/85"
+            >
+              <Plus className="size-4" strokeWidth={2.5} />
+              New application
+            </Link>
+          </div>
           {!hasProfile && (
             <div className="rounded-2xl border border-dashed border-border bg-card p-6 text-center">
               <p className="text-title font-semibold">Set up your profile first</p>

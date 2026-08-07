@@ -235,6 +235,11 @@ export function AiSettings() {
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-body font-semibold text-foreground">{p.label} API key</h3>
               <span
+                title={
+                  status === "env"
+                    ? "A key was found in the server environment (e.g. apps/web/.env.local). Saving a key here overrides it."
+                    : undefined
+                }
                 className={`inline-flex items-center rounded-full px-2.5 py-1 text-caption font-semibold ${
                   status === "saved"
                     ? "bg-primary text-primary-foreground"

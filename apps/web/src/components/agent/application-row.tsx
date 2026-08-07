@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { PIPELINE_STEPS, type Application, type AgentTask, type FitAnalysis } from "@offeros/core";
 import { MatchScoreRing } from "./match-score-ring";
 
@@ -78,6 +79,7 @@ export function ApplicationRow({
         {jobInfo.displayScore !== undefined ? (
           <MatchScoreRing score={jobInfo.displayScore} />
         ) : null}
+        <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
       </div>
     </Link>
   );
