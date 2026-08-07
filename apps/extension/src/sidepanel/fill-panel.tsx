@@ -535,8 +535,8 @@ export function FillPanel({
   const [fitExpanded, setFitExpanded] = useState(false);
   // fieldId → the value that verifiably landed on the page. Updated live as
   // each fill phase completes (batch → cover letter → per-question AI →
-  // attaches), so rows flip to their solid check one by one — the local
-  // equivalent of Jobright's progress tracker, minus the theater.
+  // attaches), so rows flip to their solid check one by one, each flip
+  // backed by a verified DOM write.
   const [writtenFields, setWrittenFields] = useState<Map<string, string>>(new Map());
   const markWritten = (fieldId: string, value: string) =>
     setWrittenFields((prev) => new Map(prev).set(fieldId, value));
