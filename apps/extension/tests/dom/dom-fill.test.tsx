@@ -405,3 +405,91 @@ describe("stable field ids across content-script reloads", () => {
     expect(ids2).toEqual(ids);
   });
 });
+
+describe("label fallback for unlabeled custom widgets", () => {
+  it("resolves the preceding title element (Ashby combobox: 'Location*' above an unlabeled input)", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <div>Location*</div>
+          <div><input type="text" placeholder="Start typing..." role="combobox" /></div>
+        </div>
+      </form></main>`;
+    const [f] = scanFields(document.body, recipe);
+    expect(f!.descriptor.label).toBe("Location*");
+    expect(f!.descriptor.required).toBe(true);
+  });
+
+  it("never overrides a conventional label", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <div>Some section heading</div>
+          <label for="e">Email</label><input id="e" name="email" type="email" />
+        </div>
+      </form></main>`;
+    const [f] = scanFields(document.body, recipe);
+    expect(f!.descriptor.label).toBe("Email");
+  });
+});
+
+describe("choice-group required detection", () => {
+  it("reads the asterisk convention off the group question", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <div>What is your highest level of education?*</div>
+          <div>
+            <label><input type="radio" name="edu" /><span>Bachelors</span></label>
+            <label><input type="radio" name="edu" /><span>Masters</span></label>
+          </div>
+        </div>
+      </form></main>`;
+    const [g] = scanFields(document.body, recipe);
+    expect(g!.descriptor.type).toBe("radio-group");
+    expect(g!.descriptor.required).toBe(true);
+  });
+});
+
+describe("required via title-element class (CSS-asterisk ATSes)", () => {
+  it("marks a group required when its title carries a required class", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <label class="_heading_x _required_y ashby-application-form-question-title">What is your gender?</label>
+          <div>
+            <label><input type="radio" name="g" /><span>Male</span></label>
+            <label><input type="radio" name="g" /><span>Female</span></label>
+          </div>
+        </div>
+      </form></main>`;
+    const [g] = scanFields(document.body, recipe);
+    expect(g!.descriptor.type).toBe("radio-group");
+    expect(g!.descriptor.required).toBe(true);
+  });
+
+  it("marks an unlabeled combobox required via its preceding required-classed title", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <label class="_required_f7cvd_91">Location</label>
+          <div><input type="text" placeholder="Start typing..." /></div>
+        </div>
+      </form></main>`;
+    const [f] = scanFields(document.body, recipe);
+    expect(f!.descriptor.label).toBe("Location");
+    expect(f!.descriptor.required).toBe(true);
+  });
+
+  it("a plain title without the class stays optional", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <div>Nickname</div>
+          <div><input type="text" placeholder="Type here..." /></div>
+        </div>
+      </form></main>`;
+    const [f] = scanFields(document.body, recipe);
+    expect(f!.descriptor.required).toBe(false);
+  });
+});

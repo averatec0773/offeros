@@ -70,6 +70,21 @@ function personalValue(field: CanonicalField, profile: FillProfile): string {
   }
 }
 
+// Degree tiers, most specific first — the profile's free-text degree string
+// maps to a tier, then the tier picks the option that names it.
+const DEGREE_TIERS: { mine: RegExp; option: RegExp }[] = [
+  { mine: /ph\.?\s?d|doctor/i, option: /ph\.?\s?d|doctor/i },
+  { mine: /master|m\.?s(\.|\b)|m\.?eng|mba/i, option: /master/i },
+  { mine: /bachelor|b\.?s(\.|\b)|b\.?a(\.|\b)|b\.?eng/i, option: /bachelor/i },
+  { mine: /associate/i, option: /associate/i },
+];
+
+function matchDegreeOption(options: string[], degree: string): string | null {
+  const tier = DEGREE_TIERS.find((t) => t.mine.test(degree));
+  if (!tier) return null;
+  return options.find((o) => tier.option.test(o)) ?? null;
+}
+
 export function buildFillPlan(
   descriptors: FieldDescriptor[],
   profile: FillProfile | null,
@@ -152,6 +167,24 @@ export function buildFillPlan(
           required,
           answerId: stored.id,
         };
+      }
+      // Education-level groups (Bachelors/Masters/PhD/...) answer from the
+      // profile's highest degree when the bank has nothing — keyword-gated so
+      // an unrelated group never gets a degree clicked into it, and matched by
+      // degree TIER ("M.S. in CS" → the "Masters" option), not literal text.
+      const degree = profile?.personal.highestDegree ?? "";
+      if (degree && /education|degree/i.test(desc.label || desc.ariaLabel || "")) {
+        const byDegree = matchDegreeOption(desc.options, degree);
+        if (byDegree) {
+          return {
+            fieldId: desc.fieldId,
+            label,
+            status: "fillable",
+            value: byDegree,
+            source: "personal",
+            required,
+          };
+        }
       }
       return {
         fieldId: desc.fieldId,

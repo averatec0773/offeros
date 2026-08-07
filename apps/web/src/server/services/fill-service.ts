@@ -179,6 +179,20 @@ export type FillTaskBundle = {
 
 const EMPTY_PERSONAL: FillPersonalInfo = { name: "", email: "", phone: "", address: "", links: {} };
 
+/** The highest-ranked degree string among the profile's education entries —
+ *  ranked by keyword so "M.S. in CS" still reads as a masters. */
+function pickHighestDegree(degrees: string[]): string | undefined {
+  const rank = (d: string): number => {
+    const t = d.toLowerCase();
+    if (/ph\.?d|doctor/.test(t)) return 4;
+    if (/master|m\.?s\.?|m\.?eng|mba/.test(t)) return 3;
+    if (/bachelor|b\.?s\.?|b\.?a\.?|b\.?eng/.test(t)) return 2;
+    return d.trim() ? 1 : 0;
+  };
+  const best = degrees.filter((d) => d.trim()).sort((a, b) => rank(b) - rank(a))[0];
+  return best || undefined;
+}
+
 function toFillPersonal(profile: Profile | null): FillPersonalInfo {
   if (!profile) return EMPTY_PERSONAL;
   const p = profile.personal;
@@ -186,6 +200,7 @@ function toFillPersonal(profile: Profile | null): FillPersonalInfo {
   // profile editor both keep that order) — [0] backs the ubiquitous
   // "most recent company / job title" questions.
   const recent = profile.experience?.[0];
+  const highestDegree = pickHighestDegree(profile.education?.map((e) => e.degree) ?? []);
   return {
     name: p.name,
     email: p.email,
@@ -197,6 +212,7 @@ function toFillPersonal(profile: Profile | null): FillPersonalInfo {
     postalCode: p.postalCode,
     recentCompany: recent?.company || undefined,
     recentTitle: recent?.title || undefined,
+    highestDegree,
     links: p.links,
   };
 }

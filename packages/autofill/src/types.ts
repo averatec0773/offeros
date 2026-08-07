@@ -29,6 +29,8 @@ export interface FillPersonalInfo {
   /** Most recent work experience, for "current company / job title" fields. */
   recentCompany?: string;
   recentTitle?: string;
+  /** Highest degree earned (e.g. "Masters") — answers education-level choice groups. */
+  highestDegree?: string;
   links: { linkedin?: string; github?: string; portfolio?: string };
 }
 

@@ -126,7 +126,7 @@ export function createEngine(doc: Document): Engine {
   const scrollToField = (fieldId: string): ScrollToFieldResponse => {
     const el = resolveFieldEl(edoc(), fieldId);
     if (!el) return { ok: false };
-    el.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    el.scrollIntoView?.({ behavior: "smooth", block: "start" });
     highlight(el);
     return { ok: true };
   };

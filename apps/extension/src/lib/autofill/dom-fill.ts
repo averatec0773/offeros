@@ -26,11 +26,18 @@ function stableFieldId(sig: string, used: Map<string, number>): string {
   return n === 0 ? `offeros-${base}` : `offeros-${base}-${n}`;
 }
 
-function labelFor(el: HTMLElement): string {
+/** A "required" marker carried on the TITLE element's class list — ATSes that
+ *  render the asterisk as a CSS pseudo-element (Ashby: `_required_…`) leave
+ *  nothing in textContent, so the class is the only DOM-visible signal. */
+function classSaysRequired(el: Element | null): boolean {
+  return el !== null && /(^|[^a-z])required/i.test(String(el.className ?? ""));
+}
+
+function labelInfo(el: HTMLElement): { text: string; required: boolean } {
   const id = el.getAttribute("id");
   if (id) {
     const lbl = el.ownerDocument.querySelector(`label[for="${CSS.escape(id)}"]`);
-    if (lbl?.textContent) return lbl.textContent.trim();
+    if (lbl?.textContent) return { text: lbl.textContent.trim(), required: classSaysRequired(lbl) };
   }
   const wrapping = el.closest("label");
   if (wrapping) {
@@ -39,11 +46,15 @@ function labelFor(el: HTMLElement): string {
       control.remove();
     }
     const text = clone.textContent?.replace(/\s+/g, " ").trim() ?? "";
-    if (text) return text;
+    if (text) return { text, required: classSaysRequired(wrapping) };
   }
   const aria = el.getAttribute("aria-label");
-  if (aria) return aria.trim();
-  return "";
+  if (aria) return { text: aria.trim(), required: false };
+  return { text: "", required: false };
+}
+
+function labelFor(el: HTMLElement): string {
+  return labelInfo(el).text;
 }
 
 function isRequired(el: HTMLElement, label: string): boolean {
@@ -55,7 +66,13 @@ function isRequired(el: HTMLElement, label: string): boolean {
 }
 
 function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
-  const label = labelFor(el);
+  // Conventional label first; custom widgets with no label association (Ashby
+  // comboboxes) fall back to the title element that precedes them — otherwise
+  // the panel can only show the placeholder ("Start typing...").
+  const li = labelInfo(el);
+  const fallback = li.text ? null : precedingTitle(el, []);
+  const label = li.text || fallback?.text || "";
+  const titleRequired = li.required || fallback?.required || false;
   const name = el.getAttribute("name") || el.id || "";
   const type = (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text";
   const autocomplete = el.getAttribute("autocomplete") ?? "";
@@ -72,7 +89,7 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
     type,
     placeholder: el.getAttribute("placeholder") ?? "",
     ariaLabel: el.getAttribute("aria-label") ?? "",
-    required: isRequired(el, label),
+    required: isRequired(el, label) || titleRequired,
   };
 }
 
@@ -84,20 +101,27 @@ function isScannable(el: HTMLElement): boolean {
   return true;
 }
 
-/** The question text a choice group answers: walk up from the group's first
- *  option and take the first content BEFORE the options whose text isn't one
- *  of the option labels (ATSes render "question title, then options" without
- *  fieldset/legend structure — Ashby especially). */
-function groupQuestion(first: HTMLElement, optionLabels: string[]): string {
+/** The question/title text that precedes a control: walk up from it and take
+ *  the first content BEFORE it whose text isn't one of `excludeTexts`
+ *  (option labels for groups; empty for single controls). ATSes render
+ *  "question title, then control" without label association — Ashby's choice
+ *  groups AND its custom comboboxes ("Location*" above an unlabeled
+ *  "Start typing..." input) both resolve through this. */
+function precedingTitle(
+  first: HTMLElement,
+  excludeTexts: string[],
+): { text: string; required: boolean } | null {
   let node: HTMLElement | null = first.closest("label")?.parentElement ?? first.parentElement;
   for (let depth = 0; depth < 4 && node; depth += 1, node = node.parentElement) {
     for (const child of Array.from(node.children)) {
       if (child.contains(first)) break; // only content that precedes the options
       const text = (child.textContent ?? "").replace(/\s+/g, " ").trim();
-      if (text && text.length <= 200 && !optionLabels.includes(text)) return text;
+      if (text && text.length <= 200 && !excludeTexts.includes(text)) {
+        return { text, required: classSaysRequired(child) };
+      }
     }
   }
-  return "";
+  return null;
 }
 
 /** Grouping key for one choice control: radios group by their shared `name`;
@@ -123,7 +147,8 @@ function describeGroup(
 ): FieldDescriptor {
   const first = members[0]!;
   const options = members.map((m) => labelFor(m)).filter((t) => t !== "");
-  const question = groupQuestion(first, options);
+  const title = precedingTitle(first, options);
+  const question = title?.text ?? "";
   const fieldId = stableFieldId(`group|${key}|${question}`, used);
   first.setAttribute("data-offeros-id", fieldId);
   return {
@@ -134,7 +159,10 @@ function describeGroup(
     type: key.startsWith("radio:") ? "radio-group" : "checkbox-group",
     placeholder: "",
     ariaLabel: "",
-    required: members.some((m) => (m as HTMLInputElement).required),
+    required:
+      members.some((m) => (m as HTMLInputElement).required) ||
+      /\*/.test(question) ||
+      (title?.required ?? false),
     options,
   };
 }

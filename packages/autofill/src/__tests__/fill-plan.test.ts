@@ -292,3 +292,38 @@ describe("choice groups", () => {
     ]);
   });
 });
+
+describe("education-level choice groups", () => {
+  const group = {
+    fieldId: "g-edu",
+    label: "What is your highest level of education?*",
+    name: "radio:edu",
+    autocomplete: "",
+    type: "radio-group",
+    placeholder: "",
+    ariaLabel: "",
+    options: ["Bachelors", "Masters", "PhD", "Other"],
+  };
+  const base = {
+    personal: { name: "", email: "", phone: "", address: "", links: {} },
+    skills: [],
+    answerBank: [],
+  };
+
+  it("answers from the profile's highest degree when the bank has nothing", () => {
+    const [item] = buildFillPlan([group], {
+      ...base,
+      personal: { ...base.personal, highestDegree: "M.S. in Computer Science" },
+    });
+    expect(item!.status).toBe("fillable");
+    expect(item!.value).toBe("Masters");
+  });
+
+  it("never clicks a degree into a non-education group", () => {
+    const [item] = buildFillPlan(
+      [{ ...group, label: "Which office do you prefer?", options: ["Masters", "Bachelors"] }],
+      { ...base, personal: { ...base.personal, highestDegree: "Masters" } },
+    );
+    expect(item!.status).toBe("needs-answer");
+  });
+});
