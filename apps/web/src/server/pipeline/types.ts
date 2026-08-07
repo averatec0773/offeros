@@ -1,4 +1,4 @@
-import type { AgentTask, AgentTaskStatus, PipelineStepKey } from "@offeros/core";
+import type { AgentTask, PipelineStepKey } from "@offeros/core";
 import type { Db } from "../db/client";
 import type { PipelineRepos } from "./context";
 
