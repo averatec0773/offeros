@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { companyFromUrl, jobIdFromUrl, matchAts, RECIPES } from "../src/lib/autofill/recipes";
+import { companyFromDocTitle, companyFromUrl, jobIdFromUrl, matchAts, RECIPES } from "../src/lib/autofill/recipes";
 
 describe("matchAts", () => {
   it("matches greenhouse boards and job-boards hosts", () => {
@@ -78,8 +78,29 @@ describe("companyFromUrl", () => {
     expect(companyFromUrl("https://careers-cotiviti.icims.com/jobs/18929/x")).toBe("cotiviti");
   });
 
+  it("uses ?for= on the greenhouse embedded apply route (embed is never a company)", () => {
+    expect(companyFromUrl("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=123")).toBe("acme");
+    expect(companyFromUrl("https://boards.greenhouse.io/embed/job_app?token=123")).toBe("");
+  });
+
   it("returns empty string on garbage input", () => {
     expect(companyFromUrl("not a url")).toBe("");
+  });
+});
+
+describe("companyFromDocTitle", () => {
+  it("parses the greenhouse job-application title convention", () => {
+    expect(companyFromDocTitle("Job Application for AI Engineer at Forward")).toBe("Forward");
+    expect(companyFromDocTitle("Job application for Staff Engineer at Acme Cloud")).toBe("Acme Cloud");
+  });
+
+  it("splits on the last ' at ' so job titles containing ' at ' survive", () => {
+    expect(companyFromDocTitle("Job Application for Engineer at Scale at Acme")).toBe("Acme");
+  });
+
+  it("returns empty string for titles outside the convention", () => {
+    expect(companyFromDocTitle("Careers — Acme")).toBe("");
+    expect(companyFromDocTitle("")).toBe("");
   });
 });
 
@@ -99,6 +120,17 @@ describe("jobIdFromUrl", () => {
 
   it("extracts the icims job id after the jobs segment", () => {
     expect(jobIdFromUrl("https://careers-cotiviti.icims.com/jobs/18929/x")).toBe("18929");
+  });
+
+  it("falls back to greenhouse query params (gh_jid / embed token)", () => {
+    expect(jobIdFromUrl("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=7822161003")).toBe(
+      "7822161003",
+    );
+    expect(jobIdFromUrl("https://boards.greenhouse.io/embed/job_board?for=acme&gh_jid=456")).toBe("456");
+  });
+
+  it("never trusts a token param off greenhouse hosts", () => {
+    expect(jobIdFromUrl("https://jobs.lever.co/acme?token=999")).toBe("");
   });
 
   it("returns empty string when there is no id or the url is garbage", () => {

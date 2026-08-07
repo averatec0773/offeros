@@ -189,6 +189,20 @@ describe("engine CAPTURE_JD handler", () => {
     expect(res.structuredCompany).toBeUndefined();
   });
 
+  it("derives the company from the doc-title convention when JSON-LD and og:site_name are absent", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    document.title = "Job Application for AI Engineer at Forward";
+    document.body.innerHTML = `<main><h1>AI Engineer</h1><p>${"Build AI systems for network verification at scale. ".repeat(6)}</p></main>`;
+    registerEngine(document, ctx());
+    const res = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_CAPTURE_JD",
+    })) as CaptureJdResponse;
+    expect(res.source).toBe("dom");
+    expect(res.metaCompany).toBe("Forward");
+    expect(res.metaTitle).toBe("AI Engineer");
+    document.title = "";
+  });
+
   it("sanitizes the page-meta title (control chars flattened) the same way jd-capture sanitizes structured fields", async () => {
     history.replaceState(null, "", greenhouseUrl);
     document.body.innerHTML = `<main><h1>Staff\tEngineer\nRole</h1><p>${"We are hiring a staff engineer to build the platform. ".repeat(6)}</p></main>`;

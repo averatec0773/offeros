@@ -87,13 +87,28 @@ export function companyFromUrl(url: string): string {
   try {
     const u = new URL(url);
     if (SHARED_JOB_HOSTS.has(u.hostname.toLowerCase())) {
-      return u.pathname.split("/").filter(Boolean)[0] ?? "";
+      const first = u.pathname.split("/").filter(Boolean)[0] ?? "";
+      // Greenhouse's embedded apply route (/embed/job_app?for=acme&token=…)
+      // carries the org in ?for=, not the path — "embed" is never a company.
+      if (first === "embed") return u.searchParams.get("for") ?? "";
+      return first;
     }
     const label = u.hostname.split(".")[0] ?? "";
     return label.startsWith("careers-") ? label.slice("careers-".length) : label;
   } catch {
     return "";
   }
+}
+
+/**
+ * Company from an ATS document-title convention — currently Greenhouse's
+ * "Job Application for {title} at {company}". The greedy first group splits on
+ * the LAST " at ", so a job title containing " at " stays in the title side.
+ * Empty string when the title doesn't match any known convention.
+ */
+export function companyFromDocTitle(title: string): string {
+  const m = /^Job application for (.+) at (.+)$/i.exec(title.trim());
+  return m?.[2]?.trim() ?? "";
 }
 
 const JOB_ID_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -104,10 +119,19 @@ const JOB_ID_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
  */
 export function jobIdFromUrl(url: string): string {
   try {
-    const segments = new URL(url).pathname.split("/").filter(Boolean);
+    const u = new URL(url);
+    const segments = u.pathname.split("/").filter(Boolean);
     const jobsIdx = segments.indexOf("jobs");
     if (jobsIdx !== -1 && segments[jobsIdx + 1]) return segments[jobsIdx + 1]!;
-    return segments.find((s) => JOB_ID_UUID.test(s)) ?? "";
+    const uuid = segments.find((s) => JOB_ID_UUID.test(s));
+    if (uuid) return uuid;
+    // Greenhouse embed/board routes carry the id only in the query:
+    // gh_jid on career-site embeds, token on /embed/job_app. Greenhouse-only —
+    // "token" is too generic to trust on other hosts.
+    if (u.hostname.toLowerCase().endsWith("greenhouse.io")) {
+      return u.searchParams.get("gh_jid") ?? u.searchParams.get("token") ?? "";
+    }
+    return "";
   } catch {
     return "";
   }

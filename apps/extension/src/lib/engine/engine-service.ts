@@ -1,4 +1,4 @@
-import { matchAts, companyFromUrl } from "../autofill/recipes";
+import { matchAts, companyFromDocTitle, companyFromUrl } from "../autofill/recipes";
 import {
   scanFields,
   applyFillDetailed,
@@ -45,8 +45,13 @@ export function createEngine(doc: Document): Engine {
       edoc().querySelector("h1")?.textContent?.trim() ||
       doc.querySelector("h1")?.textContent?.trim() ||
       doc.title.trim();
+    // og:site_name → doc-title convention ("Job Application for X at Y") →
+    // URL slug. Real Greenhouse job-boards pages ship neither JSON-LD nor
+    // og:site_name, so without the title parse the company degraded to the
+    // URL slug ("forwardnetworks", or "embed" on the embedded apply route).
     const company =
       doc.querySelector("meta[property='og:site_name']")?.getAttribute("content")?.trim() ||
+      companyFromDocTitle(doc.title) ||
       companyFromUrl(url());
     return { company, title };
   };
