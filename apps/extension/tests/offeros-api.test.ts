@@ -7,6 +7,7 @@ import {
   findApplicationsByJobUrl,
   generateAnswer,
   getPending,
+  instantFill,
   postReport,
 } from "../src/lib/offeros-api";
 
@@ -204,5 +205,37 @@ describe("createTaskFromJd", () => {
     expect(body.jobInfo.jobId.length).toBeGreaterThan(0);
     expect(body.jdText).toBe("We need a SWE.");
     expect(body.source).toBe("extension");
+  });
+});
+
+describe("instantFill", () => {
+  it("POSTs the jobInfo payload to the instant route and unwraps the bundle", async () => {
+    const bundle = { handoffId: "h1", taskId: "t1", applicationId: "a1" };
+    const f = fakeFetch(200, ok(bundle));
+    const r = await instantFill(
+      { jobTitle: "SWE", companyName: "Acme", jobUrl: "https://boards.greenhouse.io/acme/jobs/1", jdText: "We need a SWE." },
+      f.fn,
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toMatchObject(bundle);
+    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/fill/instant");
+    expect(f.calls[0]!.init.method).toBe("POST");
+    const body = JSON.parse(String(f.calls[0]!.init.body));
+    expect(body.jobInfo).toMatchObject({
+      jobTitle: "SWE",
+      companyName: "Acme",
+      applyLink: "https://boards.greenhouse.io/acme/jobs/1",
+    });
+    expect(typeof body.jobInfo.jobId).toBe("string");
+    expect(body.jdText).toBe("We need a SWE.");
+  });
+
+  it("maps a refused claim envelope to { ok: false } with the server's message", async () => {
+    const f = fakeFetch(200, err(40000, "already tracked in OfferOS — open the application workspace"));
+    const r = await instantFill(
+      { jobTitle: "SWE", companyName: "Acme", jobUrl: "https://x.greenhouse.io/1", jdText: "" },
+      f.fn,
+    );
+    expect(r).toEqual({ ok: false, error: "already tracked in OfferOS — open the application workspace" });
   });
 });

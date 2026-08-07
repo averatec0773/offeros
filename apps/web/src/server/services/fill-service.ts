@@ -7,13 +7,24 @@ import {
   type Artifact,
   type FieldReport,
   type FillHandoff,
+  type JobInfo,
   type Profile,
 } from "@offeros/core";
 import type { AnswerEntry, FillPersonalInfo, FillProfile } from "@offeros/autofill";
 import type { Db } from "../db/client";
 import { answers } from "../db/schema";
-import { getAgentTask, updateAgentTask } from "../repositories/agent-task-repo";
-import { getApplication, updateApplication } from "../repositories/application-repo";
+import {
+  createAgentTask,
+  getAgentTask,
+  getAgentTaskByApplicationId,
+  updateAgentTask,
+} from "../repositories/agent-task-repo";
+import {
+  createApplication,
+  getApplication,
+  listApplicationsByJobUrl,
+  updateApplication,
+} from "../repositories/application-repo";
 import { getArtifact } from "../repositories/artifact-repo";
 import { getJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getProfile } from "../repositories/profile-repo";
@@ -79,6 +90,69 @@ export function createHandoffForTask(db: Db, taskId: string): FillHandoff {
     applicationId: task.applicationId,
     applyLink: application?.jobInfo.applyLink,
   });
+}
+
+/**
+ * The extension's one-click "fill this page now" entry — the instant lane.
+ * Deterministic profile-based filling never needed the generation pipeline,
+ * so this parks a task directly at the fill-form gate and returns a claimed
+ * bundle in one call:
+ *   - no application tracks this URL → create application (attachResume
+ *     "original": no tailored artifact exists yet) + a `fillFirst` task at
+ *     the fill gate,
+ *   - the URL's application has a task already awaiting fill → reuse it
+ *     (a fresh ticket is opened and claimed — same as a workspace re-fill),
+ *   - its task is anywhere else in the pipeline → ServiceError: filling now
+ *     would fight the workspace's state gates; the panel offers "open in
+ *     OfferOS" instead.
+ * Every path lands on the SAME handoff/report machinery as the workspace
+ * lane, so reports, AI answers, and the submit gate all just work.
+ */
+export function startInstantFill(
+  db: Db,
+  input: { jobInfo: JobInfo; jdText?: string },
+): FillTaskBundle {
+  const applyLink = input.jobInfo.applyLink;
+  if (!applyLink) throw new ServiceError("instant fill needs the page URL");
+
+  const existing = listApplicationsByJobUrl(db, applyLink)[0];
+  let taskId: string;
+  let applicationId: string;
+
+  if (existing) {
+    applicationId = existing.id;
+    const task = getAgentTaskByApplicationId(db, existing.id);
+    if (task && task.status === "awaiting_user" && PIPELINE_STEPS[task.step]?.key === "fill-form") {
+      taskId = task.id;
+    } else if (task) {
+      throw new ServiceError("already tracked in OfferOS — open the application workspace");
+    } else {
+      taskId = createFillFirstTask(db, existing.id);
+    }
+  } else {
+    const application = createApplication(db, {
+      jobInfo: input.jobInfo,
+      jdText: input.jdText,
+      attachResume: "original",
+    });
+    applicationId = application.id;
+    taskId = createFillFirstTask(db, application.id);
+  }
+
+  const handoff = createFillHandoff(db, { taskId, applicationId, applyLink });
+  appendEvent(db, { applicationId, kind: "instant-fill-started" });
+  return claimHandoff(db, handoff.id);
+}
+
+/** A task born at the fill gate: `fillFirst` marks the skipped generation
+ *  steps so the timeline renders them as skipped, never as done. */
+function createFillFirstTask(db: Db, applicationId: string): string {
+  return createAgentTask(db, {
+    applicationId,
+    status: "awaiting_user",
+    step: stepIndex("fill-form"),
+    fillFirst: true,
+  }).id;
 }
 
 export type FillTaskBundle = {

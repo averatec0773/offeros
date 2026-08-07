@@ -72,6 +72,13 @@ export interface FillApi {
     jobUrl: string;
     jdText: string;
   }) => Promise<ApiResult<{ id: string; applicationId: string }>>;
+  /** One-click instant lane: park a fill-gate task for this page and claim it. */
+  instantFill: (input: {
+    jobTitle: string;
+    companyName: string;
+    jobUrl: string;
+    jdText: string;
+  }) => Promise<ApiResult<FillTaskBundle>>;
   /** Original stored résumé bytes (`bundle.attachResume === "original"`). */
   fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
   /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
@@ -359,6 +366,8 @@ export function FillPanel({
   const [pending, setPending] = useState(false);
   const [filledOnce, setFilledOnce] = useState(false);
   const [bundle, setBundle] = useState<FillTaskBundle | null>(null);
+  const [instantBusy, setInstantBusy] = useState(false);
+  const [instantError, setInstantError] = useState<string | null>(null);
   const [aiAnswers, setAiAnswers] = useState<{ fieldId: string; label: string; answer: string }[]>([]);
   const [reported, setReported] = useState(false);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
@@ -388,6 +397,7 @@ export function FillPanel({
     setSavedFieldIds(new Set());
     setReported(false);
     setFilledOnce(false);
+    setInstantError(null);
     claimTriedRef.current = false;
   };
 
@@ -705,6 +715,47 @@ export function FillPanel({
     await taskFillPage(plan, scanResult, traceRef.current);
   };
 
+  // The instant lane: capture this page's JD, ask the web app to park + claim
+  // a fill-gate task for it in one call, then fill immediately with the claimed
+  // bundle's profile. From here on the ordinary task-mode flow owns everything
+  // (cumulative reports, AI answers, Done). A refused claim (mid-pipeline
+  // application, no URL) surfaces as a caption next to the button.
+  const onInstantFill = async () => {
+    if (pendingRef.current || instantBusy || bundleRef.current !== null || !scanResult.ok) return;
+    setInstantBusy(true);
+    setInstantError(null);
+    try {
+      let cap: CaptureJdResponse;
+      try {
+        cap = await capture();
+      } catch {
+        setInstantError("Couldn't read this page — reload it and try again.");
+        return;
+      }
+      const claimed = await api.instantFill({
+        jobTitle: cap.structuredTitle || cap.metaTitle || scanResult.title,
+        companyName: cap.structuredCompany || cap.metaCompany || scanResult.company,
+        jobUrl: cap.url,
+        jdText: cap.jd,
+      });
+      if (!claimed.ok) {
+        setInstantError(claimed.error);
+        return;
+      }
+      bundleRef.current = claimed.value;
+      setBundle(claimed.value);
+      const { plan: newPlan, trace: newTrace } = explainFillPlan(
+        scanResult.descriptors,
+        claimed.value.fillProfile,
+      );
+      setPlan(newPlan);
+      traceRef.current = newTrace;
+      await taskFillPage(newPlan, scanResult, newTrace);
+    } finally {
+      setInstantBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {bundle && (
@@ -729,6 +780,26 @@ export function FillPanel({
           >
             {`Fill ${fillable.length} ${fillable.length === 1 ? "field" : "fields"}`}
           </Button>
+        ) : webReachable ? (
+          <div className="mb-3 rounded-xl bg-bg-base p-3">
+            <Button
+              variant="primary"
+              className="w-full rounded-full py-2.5 text-body font-semibold"
+              disabled={instantBusy || pending}
+              onClick={() => void onInstantFill()}
+            >
+              {instantBusy ? "Starting…" : "Fill this page with my profile"}
+            </Button>
+            {instantError && <p className="mt-2 text-caption text-warning">{instantError}</p>}
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="min-w-0 flex-1 text-caption leading-relaxed text-text-secondary">
+                Fills from your profile and tracks it in OfferOS.
+              </p>
+              <Button className="shrink-0 rounded-full" onClick={openWebApp}>
+                Open OfferOS
+              </Button>
+            </div>
+          </div>
         ) : (
           <div className="mb-3 rounded-xl bg-bg-base p-3">
             <p className="text-caption leading-relaxed text-text-secondary">

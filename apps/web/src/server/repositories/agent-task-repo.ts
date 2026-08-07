@@ -17,6 +17,7 @@ export function toDomain(row: Row): AgentTask {
     coverLetterId: row.coverLetterId ?? undefined,
     coverLetterRequirement: row.coverLetterRequirement,
     skippedCoverLetter: row.skippedCoverLetter,
+    fillFirst: row.fillFirst,
     fieldReports: row.fieldReports ?? undefined,
     failureReason: row.failureReason ?? undefined,
     createdAt: row.createdAt,
@@ -33,18 +34,34 @@ export function getAgentTask(db: Db, id: string): AgentTask | null {
   return row ? toDomain(row) : null;
 }
 
-export function createAgentTask(db: Db, input: { applicationId: string }): AgentTask {
+/** The application's (most recently updated) task — tasks are 1:1 per
+ *  application in practice; newest wins if that ever drifts. */
+export function getAgentTaskByApplicationId(db: Db, applicationId: string): AgentTask | null {
+  const row = db
+    .select()
+    .from(agentTasks)
+    .where(eq(agentTasks.applicationId, applicationId))
+    .orderBy(desc(agentTasks.updatedAt))
+    .get();
+  return row ? toDomain(row) : null;
+}
+
+export function createAgentTask(
+  db: Db,
+  input: { applicationId: string; status?: AgentTask["status"]; step?: number; fillFirst?: boolean },
+): AgentTask {
   const now = Date.now();
   const row = {
     id: randomUUID(),
     applicationId: input.applicationId,
-    status: "queued",
-    step: 0,
+    status: input.status ?? "queued",
+    step: input.step ?? 0,
     applicationInfo: null,
     resumeId: null,
     coverLetterId: null,
     coverLetterRequirement: "unknown",
     skippedCoverLetter: false,
+    fillFirst: input.fillFirst ?? false,
     fieldReports: null,
     failureReason: null,
     createdAt: now,

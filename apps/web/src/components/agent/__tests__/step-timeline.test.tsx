@@ -29,6 +29,49 @@ describe("StepTimeline", () => {
     expect(screen.queryByText("In progress")).toBeNull();
   });
 
+  it("renders generation steps as Skipped (never done) for a fillFirst task parked at the fill gate", () => {
+    const task: AgentTask = {
+      id: "t1",
+      applicationId: "app-1",
+      status: "awaiting_user",
+      coverLetterRequirement: "unknown",
+      skippedCoverLetter: false,
+      fillFirst: true,
+      step: PIPELINE_STEPS.findIndex((s) => s.key === "fill-form"),
+      fieldReports: [],
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    render(<StepTimeline task={task} />);
+
+    expect(screen.getAllByText("Skipped")).toHaveLength(5);
+    const fillRow = screen.getByText("Fill out application form").closest("li");
+    expect(fillRow?.textContent).toContain("In progress");
+    // No generation step carries a done check: the only .text-brand marks are current-step dots.
+    const resumeRow = screen.getByText("Generate Custom Resume").closest("li");
+    expect(resumeRow?.querySelector(".text-brand")).toBeNull();
+  });
+
+  it("keeps generation steps Skipped (not done) after the instant fill moves to the submit gate", () => {
+    const task: AgentTask = {
+      id: "t1",
+      applicationId: "app-1",
+      status: "awaiting_user",
+      coverLetterRequirement: "unknown",
+      skippedCoverLetter: false,
+      fillFirst: true,
+      step: PIPELINE_STEPS.findIndex((s) => s.key === "submit"),
+      fieldReports: [],
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    render(<StepTimeline task={task} />);
+
+    expect(screen.getAllByText("Skipped")).toHaveLength(5);
+    const fillRow = screen.getByText("Fill out application form").closest("li");
+    expect(fillRow?.querySelector(".text-brand")).toBeTruthy();
+  });
+
   it("marks Submit Application as current and the six before it as done when step = 6", () => {
     const task: AgentTask = {
       id: "t1",

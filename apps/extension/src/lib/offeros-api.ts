@@ -256,6 +256,30 @@ export function findApplicationsByJobUrl(
   );
 }
 
+/** One-click instant fill: create-or-reuse this page's application plus a
+ *  fill-gate task, open a ticket, and claim it in one call — the response is
+ *  the same FillTaskBundle the workspace lane hands out, so the panel's
+ *  existing task-mode flow takes over unchanged. A mid-pipeline application
+ *  comes back as an envelope error ("already tracked…"). */
+export function instantFill(
+  input: { jobTitle: string; companyName: string; jobUrl: string; jdText: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<FillTaskBundle>> {
+  return call<FillTaskBundle>(
+    "/agent/fill/instant",
+    json("POST", {
+      jobInfo: {
+        jobId: crypto.randomUUID(),
+        jobTitle: input.jobTitle,
+        companyName: input.companyName,
+        applyLink: input.jobUrl,
+      },
+      jdText: input.jdText,
+    }),
+    fetchImpl,
+  );
+}
+
 /** One-click "Add this job": creates the application + task from captured JD text in one call. */
 export function createTaskFromJd(
   input: { jobTitle: string; companyName: string; jobUrl: string; jdText: string },

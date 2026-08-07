@@ -24,6 +24,7 @@ import {
   applyFillReport,
   resolveFill,
   completeSubmitted,
+  startInstantFill,
   ServiceError,
 } from "../fill-service";
 
@@ -577,5 +578,79 @@ describe("completeSubmitted", () => {
     completeSubmitted(db, taskId);
     const events = listEvents(db, applicationId);
     expect(events.map((e) => e.kind)).toEqual(["marked-submitted"]);
+  });
+});
+
+describe("startInstantFill", () => {
+  const JOB = {
+    jobId: "j-instant",
+    jobTitle: "AI Engineer",
+    companyName: "Forward",
+    applyLink: "https://job-boards.greenhouse.io/forward/jobs/1",
+  };
+
+  it("creates the application + a fillFirst task parked at the fill gate and returns a claimed bundle", () => {
+    saveProfile(db, PROFILE);
+    const bundle = startInstantFill(db, { jobInfo: JOB, jdText: "Build AI features." });
+
+    expect(bundle.job).toMatchObject({ title: "AI Engineer", company: "Forward" });
+    expect(bundle.fillProfile.personal.email).toBe("jordan@example.com");
+
+    const task = getAgentTask(db, bundle.taskId);
+    expect(task?.fillFirst).toBe(true);
+    expect(task?.status).toBe("awaiting_user");
+    expect(PIPELINE_STEPS[task?.step ?? -1]?.key).toBe("fill-form");
+
+    const application = getApplication(db, bundle.applicationId);
+    expect(application?.jdText).toBe("Build AI features.");
+    // No tailored artifact can exist yet — the application prefers the original file.
+    expect(application?.attachResume).toBe("original");
+
+    // The ticket is real and already claimed: reports/answers flow like any fill.
+    expect(getFillHandoff(db, bundle.handoffId)?.status).toBe("claimed");
+    expect(listEvents(db, bundle.applicationId).map((e) => e.kind)).toContain(
+      "instant-fill-started",
+    );
+  });
+
+  it("reports flow into the instant task exactly like the workspace lane", () => {
+    const bundle = startInstantFill(db, { jobInfo: JOB });
+    const report: FieldReport = {
+      fieldId: "f1",
+      label: "Email",
+      classifiedType: "email",
+      status: "fillable",
+      value: "jordan@example.com",
+      source: "personal",
+      reason: "",
+      outcome: "filled",
+      required: true,
+    };
+    const task = applyFillReport(db, bundle.taskId, [report], true);
+    expect(task.applicationInfo?.status).toBe(1);
+    expect(PIPELINE_STEPS[task.step]?.key).toBe("submit");
+  });
+
+  it("reuses an existing application whose task is already awaiting fill", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    const bundle = startInstantFill(db, {
+      jobInfo: { ...JOB, applyLink: "https://apply.example.com/job/1" },
+    });
+    expect(bundle.taskId).toBe(taskId);
+    expect(bundle.applicationId).toBe(applicationId);
+  });
+
+  it("refuses a mid-pipeline application instead of fighting the workspace gates", () => {
+    const { taskId } = seedTaskAtFillForm();
+    updateAgentTask(db, taskId, { step: 1, status: "running" });
+    expect(() =>
+      startInstantFill(db, { jobInfo: { ...JOB, applyLink: "https://apply.example.com/job/1" } }),
+    ).toThrow(/already tracked/);
+  });
+
+  it("refuses when the page URL is missing", () => {
+    expect(() =>
+      startInstantFill(db, { jobInfo: { ...JOB, applyLink: undefined } }),
+    ).toThrow(/needs the page URL/);
   });
 });

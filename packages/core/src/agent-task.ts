@@ -40,6 +40,11 @@ export const agentTaskSchema = z.object({
   coverLetterId: z.string().optional(),
   coverLetterRequirement: coverLetterRequirementSchema.default("unknown"),
   skippedCoverLetter: z.boolean().default(false),
+  /** Started via the extension's instant fill: the task was parked directly at
+   *  fill-form without running the generation steps, which render as skipped
+   *  (never as done) in the timeline. Optional (absent = false) so existing
+   *  rows and constructed tasks stay valid unchanged. */
+  fillFirst: z.boolean().optional(),
   fieldReports: z.array(fieldReportSchema).default([]),
   failureReason: z.string().optional(),
   createdAt: z.number(),

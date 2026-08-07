@@ -59,7 +59,12 @@ export function getApplication(db: Db, id: string): Application | null {
 
 export function createApplication(
   db: Db,
-  input: { jobInfo: JobInfo; status?: ApplicationStatus; jdText?: string },
+  input: {
+    jobInfo: JobInfo;
+    status?: ApplicationStatus;
+    jdText?: string;
+    attachResume?: Application["attachResume"];
+  },
 ): Application {
   const now = Date.now();
   const row = {
@@ -69,7 +74,7 @@ export function createApplication(
     jdText: input.jdText ?? null,
     notes: null,
     resumeId: null,
-    attachResume: null,
+    attachResume: input.attachResume ?? null,
     appliedAt: null,
     createdAt: now,
     updatedAt: now,

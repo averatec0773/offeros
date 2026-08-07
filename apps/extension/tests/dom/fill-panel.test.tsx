@@ -91,6 +91,7 @@ const emptyApi = (): FillApi => ({
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
   createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
+  instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   fetchResumeFile: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
@@ -208,11 +209,63 @@ describe("FillPanel", () => {
     expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
   });
 
-  it("with no claimable task shows the no-task hint and opens the web app", async () => {
+  it("with no claimable task offers the instant-fill entry and opens the web app", async () => {
     const { openWebApp } = renderPanel();
-    expect(await screen.findByText("No fill task for this page. Start one from the OfferOS workspace.")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Fill this page with my profile" }),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open OfferOS" }));
     expect(openWebApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the workspace hint when the web app is unreachable (no instant entry)", async () => {
+    renderPanel({ webReachable: false });
+    expect(
+      await screen.findByText("No fill task for this page. Start one from the OfferOS workspace."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Fill this page with my profile" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("instant fill claims a parked task from the capture and fills immediately", async () => {
+    const api = emptyApi();
+    api.instantFill = vi.fn(async () => ({ ok: true as const, value: bundle }));
+    const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+    const { api: usedApi } = renderPanel({ api, fill });
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Fill this page with my profile" }),
+    );
+    await waitFor(() => expect(fill).toHaveBeenCalled());
+    // Claim request carries the captured (structured-first) job identity.
+    expect(api.instantFill).toHaveBeenCalledWith({
+      jobTitle: "Backend Engineer",
+      companyName: "Acme",
+      jobUrl: scanOk.url,
+      jdText: captureOk.jd,
+    });
+    // The claimed bundle's profile drove the fill: the email field got its value.
+    expect(fill.mock.calls.flatMap((c) => c[0])).toContainEqual({ fieldId: "f1", value: "a@b.com" });
+    // Ordinary task mode took over: cumulative report posted, task chip shown.
+    await waitFor(() => expect(usedApi.postReport).toHaveBeenCalled());
+    expect(await screen.findByText("Engineer · Acme")).toBeInTheDocument();
+  });
+
+  it("instant fill surfaces a refused claim (mid-pipeline application) without entering task mode", async () => {
+    const api = emptyApi();
+    api.instantFill = vi.fn(async () => ({
+      ok: false as const,
+      error: "already tracked in OfferOS — open the application workspace",
+    }));
+    renderPanel({ api });
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Fill this page with my profile" }),
+    );
+    expect(
+      await screen.findByText("already tracked in OfferOS — open the application workspace"),
+    ).toBeInTheDocument();
+    // Still no bundle: the instant entry stays available.
+    expect(screen.getByRole("button", { name: "Fill this page with my profile" })).toBeInTheDocument();
   });
 
   it("claims a matching handoff, fills the fillable field, generates open-ended answers, and reports", async () => {
@@ -429,7 +482,7 @@ describe("FillPanel", () => {
   it("attempts a claim only once and stays in the no-task state when nothing matches", async () => {
     const api = emptyApi();
     renderPanel({ api });
-    await screen.findByText("No fill task for this page. Start one from the OfferOS workspace.");
+    await screen.findByRole("button", { name: "Fill this page with my profile" });
     // one scan → one getPending; claim never fires without a match
     expect(api.getPending).toHaveBeenCalledTimes(1);
     expect(api.claim).not.toHaveBeenCalled();
@@ -491,7 +544,7 @@ describe("FillPanel", () => {
         tabUrl={scanOk.url}
       />,
     );
-    await screen.findByText("No fill task for this page. Start one from the OfferOS workspace.");
+    await screen.findByRole("button", { name: "Fill this page with my profile" });
     expect(api.claim).not.toHaveBeenCalled();
 
     // Web app comes back with a matching ticket + App forces a rescan (rescanNonce bump).

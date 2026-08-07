@@ -1,11 +1,11 @@
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 import { PIPELINE_STEPS, type AgentTask } from "@offeros/core";
 import { ActionRequiredCard } from "./action-required-card";
 
 type AgentStep = {
   key: string;
   label: string;
-  state: "done" | "current" | "pending";
+  state: "done" | "current" | "pending" | "skipped";
 };
 
 const FILL_STEP_KEY = "fill-form";
@@ -19,16 +19,24 @@ const STEP_STATUS_LABEL: Partial<Record<AgentTask["status"], string>> = {
 // Derive per-step state from the task. When applicationInfo needs input,
 // the "Fill out application form" step is the current (action-required) step;
 // otherwise the current step is task.step (count of steps completed so far).
+// A fillFirst task (started via the extension's instant fill) never ran the
+// generation steps — they render as "skipped", never as done.
 function deriveSteps(task: AgentTask): AgentStep[] {
   const actionRequired = task.applicationInfo?.status === 2 && task.status !== "done";
-  const currentIndex = actionRequired
-    ? PIPELINE_STEPS.findIndex((s) => s.key === FILL_STEP_KEY)
-    : task.step;
+  const fillIndex = PIPELINE_STEPS.findIndex((s) => s.key === FILL_STEP_KEY);
+  const currentIndex = actionRequired ? fillIndex : task.step;
 
   return PIPELINE_STEPS.map((step, i) => ({
     key: step.key,
     label: step.label,
-    state: i < currentIndex ? "done" : i === currentIndex ? "current" : "pending",
+    state:
+      task.fillFirst && i < fillIndex
+        ? "skipped"
+        : i < currentIndex
+          ? "done"
+          : i === currentIndex
+            ? "current"
+            : "pending",
   }));
 }
 
@@ -37,6 +45,13 @@ function RailDot({ state }: { state: AgentStep["state"] }) {
     return (
       <span className="flex size-5.5 items-center justify-center rounded-full bg-brand">
         <Check className="size-3.5 text-brand-foreground" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (state === "skipped") {
+    return (
+      <span className="flex size-5.5 items-center justify-center rounded-full border-2 border-border bg-card">
+        <Minus className="size-3 text-muted-foreground" strokeWidth={2.5} />
       </span>
     );
   }
@@ -88,7 +103,7 @@ export function StepTimeline({
                 <div className="flex items-center justify-between gap-2 pt-0.5">
                   <span
                     className={`text-body ${
-                      step.state === "pending"
+                      step.state === "pending" || step.state === "skipped"
                         ? "font-medium text-muted-foreground"
                         : "font-semibold text-foreground"
                     }`}
@@ -97,6 +112,11 @@ export function StepTimeline({
                   </span>
                   {step.state === "done" && (
                     <Check className="size-4 shrink-0 text-brand" strokeWidth={3} />
+                  )}
+                  {step.state === "skipped" && (
+                    <span className="shrink-0 text-micro font-medium text-muted-foreground">
+                      Skipped
+                    </span>
                   )}
                   {step.state === "current" && !showActionCard && (
                     <span className="shrink-0 text-micro font-semibold text-muted-foreground">
