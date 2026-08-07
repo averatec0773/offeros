@@ -1,6 +1,7 @@
 import { classifyField, type CanonicalField, type FieldDescriptor } from "./classify";
 import { splitName, normalizeLink } from "./format";
 import { matchAnswer } from "./answer-match";
+import { matchOption } from "./option-match";
 import type { FillProfile } from "./types";
 
 export type FillStatus = "fillable" | "needs-answer" | "unknown";
@@ -62,6 +63,10 @@ function personalValue(field: CanonicalField, profile: FillProfile): string {
       return ""; // manual upload in Plan 4
     case "skills":
       return ""; // multi-value; carried on FillItem.values, not here
+    case "recentCompany":
+      return p.recentCompany ?? "";
+    case "recentTitle":
+      return p.recentTitle ?? "";
   }
 }
 
@@ -120,6 +125,35 @@ export function buildFillPlan(
         status: value.trim() !== "" ? "fillable" : "needs-answer",
         value,
         source: "personal",
+        required,
+      };
+    }
+
+    // Choice groups (radio-group / checkbox-group): a stored answer counts
+    // only if it actually maps onto one of the group's options — the value
+    // carried is the OPTION's own label, so the driver can click it verbatim.
+    if ((desc.type === "radio-group" || desc.type === "checkbox-group") && desc.options?.length) {
+      const stored = profile ? matchAnswer(desc.label || desc.ariaLabel || "", profile.answerBank) : null;
+      const option = stored
+        ? matchOption(desc.options.map((o) => ({ label: o, value: o })), stored.answer)
+        : null;
+      if (stored && option) {
+        return {
+          fieldId: desc.fieldId,
+          label,
+          status: "fillable",
+          value: String(option.label ?? ""),
+          source: "answerBank",
+          required,
+          answerId: stored.id,
+        };
+      }
+      return {
+        fieldId: desc.fieldId,
+        label,
+        status: "needs-answer",
+        value: "",
+        source: "none",
         required,
       };
     }
@@ -201,6 +235,10 @@ function personalSourcePath(field: CanonicalField): string {
       return "profile (manual upload)";
     case "skills":
       return "profile.skills";
+    case "recentCompany":
+      return "profile.experience[0].company";
+    case "recentTitle":
+      return "profile.experience[0].title";
   }
 }
 

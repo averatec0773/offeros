@@ -26,6 +26,9 @@ export interface FillPersonalInfo {
   state?: string;
   country?: string;
   postalCode?: string;
+  /** Most recent work experience, for "current company / job title" fields. */
+  recentCompany?: string;
+  recentTitle?: string;
   links: { linkedin?: string; github?: string; portfolio?: string };
 }
 

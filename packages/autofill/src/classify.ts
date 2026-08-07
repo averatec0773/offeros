@@ -8,6 +8,9 @@ export interface FieldDescriptor {
   ariaLabel: string;
   /** Whether the ATS marks this field as required (attribute, aria, or "*" in the label). */
   required?: boolean;
+  /** Choice-group descriptors only ("radio-group"/"checkbox-group"): the
+   *  visible label of every option, in DOM order. */
+  options?: string[];
 }
 
 export type CanonicalField =
@@ -26,7 +29,9 @@ export type CanonicalField =
   | "portfolio"
   | "resume"
   | "coverLetter"
-  | "skills";
+  | "skills"
+  | "recentCompany"
+  | "recentTitle";
 
 const norm = (s: string) =>
   s
@@ -74,6 +79,27 @@ const LABEL_RULES: { test: (t: string) => boolean; field: CanonicalField }[] = [
     field: "phone",
   },
   { test: (t) => t.includes("linkedin"), field: "linkedin" },
+  {
+    test: (t) =>
+      t.includes("recent company") ||
+      t.includes("current company") ||
+      t.includes("current employer") ||
+      t.includes("recent employer") ||
+      t === "company" ||
+      t === "employer",
+    field: "recentCompany",
+  },
+  {
+    test: (t) =>
+      t.includes("recent job title") ||
+      t.includes("recent title") ||
+      t.includes("current job title") ||
+      t.includes("current title") ||
+      t.includes("current role") ||
+      t === "job title" ||
+      t === "title",
+    field: "recentTitle",
+  },
   { test: (t) => t.includes("github"), field: "github" },
   {
     test: (t) =>
@@ -120,7 +146,28 @@ function autocompleteField(ac: string): CanonicalField | null {
   return null;
 }
 
+// Choice controls (single or grouped): a text-field rule must never touch
+// them — "New York City Office" contains "city" but is an option, not a city
+// field. Their answers come from the answer bank via the group's question.
+const CHOICE_TYPES = new Set(["radio", "checkbox", "radio-group", "checkbox-group"]);
+
+// One signal (label / aria / placeholder) tested on its own — joining them
+// used to let a "Type here..." placeholder poison an exact-match rule
+// (label "Name" + placeholder → "name type here" ≠ "name"). The 8-word guard
+// keeps long question-like sentences with the answer bank, while still
+// admitting e.g. "What is your most recent job title?" (7 words).
+function ruleMatch(raw: string): CanonicalField | null {
+  const t = norm(raw);
+  if (!t || t.split(" ").length > 8) return null;
+  for (const rule of LABEL_RULES) {
+    if (rule.test(t)) return rule.field;
+  }
+  return null;
+}
+
 export function classifyField(desc: FieldDescriptor): CanonicalField | null {
+  if (CHOICE_TYPES.has(desc.type)) return null;
+
   const acField = autocompleteField(desc.autocomplete);
   if (acField) return acField;
 
@@ -132,13 +179,10 @@ export function classifyField(desc: FieldDescriptor): CanonicalField | null {
   if (desc.type === "file" && isCoverLetterLabel(label)) {
     return "coverLetter";
   }
-  // long question-like labels ("We would like to contact you via SMS…") must not
-  // hit keyword rules built for short field labels; they belong to the answer bank.
-  if (label && label.split(" ").length <= 6) {
-    for (const rule of LABEL_RULES) {
-      if (rule.test(label)) return rule.field;
-    }
-  }
+
+  const bySignal =
+    ruleMatch(desc.label) ?? ruleMatch(desc.ariaLabel) ?? ruleMatch(desc.placeholder);
+  if (bySignal) return bySignal;
 
   const token = norm([desc.name, desc.fieldId].filter((s) => s).join(" "));
   for (const rule of LABEL_RULES) {

@@ -283,3 +283,72 @@ describe("applyFill combobox routing", () => {
     expect(filled).toBe(1);
   });
 });
+
+describe("choice-group scanning and filling", () => {
+  it("collapses same-name radios into one group descriptor with the question label", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <div>What is your gender?</div>
+          <div>
+            <label><input type="radio" name="eeo_gender" value="m" /><span>Male</span></label>
+            <label><input type="radio" name="eeo_gender" value="f" /><span>Female</span></label>
+            <label><input type="radio" name="eeo_gender" value="d" /><span>Decline to self-identify</span></label>
+          </div>
+        </div>
+      </form></main>`;
+    const found = scanFields(document.body, recipe);
+    expect(found).toHaveLength(1);
+    const d = found[0]!.descriptor;
+    expect(d.type).toBe("radio-group");
+    expect(d.label).toBe("What is your gender?");
+    expect(d.options).toEqual(["Male", "Female", "Decline to self-identify"]);
+  });
+
+  it("collapses Ashby-style labeled-checkbox rows into one group", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <div>Which office are you interested in?</div>
+          <div>
+            <label><input type="checkbox" id="q1-labeled-checkbox-0" name="Remote (U.S.)" /><span>Remote (U.S.)</span></label>
+            <label><input type="checkbox" id="q1-labeled-checkbox-1" name="Austin Office" /><span>Austin Office</span></label>
+          </div>
+        </div>
+      </form></main>`;
+    const found = scanFields(document.body, recipe);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.descriptor.type).toBe("checkbox-group");
+    expect(found[0]!.descriptor.options).toEqual(["Remote (U.S.)", "Austin Office"]);
+  });
+
+  it("fills a radio group by clicking the option matching the value", async () => {
+    document.body.innerHTML = `
+      <main><form>
+        <div>
+          <div>Do you consent?</div>
+          <div>
+            <label><input type="radio" name="consent" value="y" /><span>Yes - I consent</span></label>
+            <label><input type="radio" name="consent" value="n" /><span>No - I do not consent</span></label>
+          </div>
+        </div>
+      </form></main>`;
+    const [group] = scanFields(document.body, recipe);
+    const filled = await applyFill(document, [
+      { fieldId: group!.descriptor.fieldId, value: "Yes - I consent" },
+    ]);
+    expect(filled).toBe(1);
+    const yes = document.querySelector('input[value="y"]') as HTMLInputElement;
+    expect(yes.checked).toBe(true);
+  });
+
+  it("skips zero-signal controls entirely (unlabeled bare file input)", () => {
+    document.body.innerHTML = `
+      <main><form>
+        <input type="file" />
+        <label for="e">Email</label><input id="e" name="email" type="email" />
+      </form></main>`;
+    const names = scanFields(document.body, recipe).map((f) => f.descriptor.name);
+    expect(names).toEqual(["email"]);
+  });
+});

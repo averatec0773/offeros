@@ -11,10 +11,14 @@ export default defineBackground(() => {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   }
 
-  // The panel only lives on supported ATS tabs: per-tab enablement means an
-  // open panel closes itself when the user switches to an unrelated tab and
-  // comes back on its own when they return to an apply page — instead of a
-  // stale panel following them around the whole browser.
+  // The panel only lives on supported ATS tabs. Chrome quirk: with a global
+  // default_path, a user-opened panel is "global" and per-tab enabled:false
+  // does NOT close it — the documented recipe is to disable the panel
+  // globally first, then enable it per-tab, which makes every opened panel
+  // inherently tab-bound (closes on unrelated tabs, returns on apply pages).
+  if (chrome.sidePanel?.setOptions) {
+    void chrome.sidePanel.setOptions({ enabled: false }).catch(() => {});
+  }
   const updatePanelForTab = (tabId: number, url: string | undefined) => {
     if (!chrome.sidePanel?.setOptions) return;
     const enabled = !!url && matchAts(url) !== null;

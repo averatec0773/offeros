@@ -1,4 +1,4 @@
-import type { FieldDescriptor } from "@offeros/autofill";
+import { matchOption, type FieldDescriptor } from "@offeros/autofill";
 import type { AtsRecipe } from "./recipes";
 import { deepQueryAll } from "./deep-query";
 import {
@@ -65,6 +65,69 @@ function isScannable(el: HTMLElement): boolean {
   return true;
 }
 
+/** The question text a choice group answers: walk up from the group's first
+ *  option and take the first content BEFORE the options whose text isn't one
+ *  of the option labels (ATSes render "question title, then options" without
+ *  fieldset/legend structure — Ashby especially). */
+function groupQuestion(first: HTMLElement, optionLabels: string[]): string {
+  let node: HTMLElement | null = first.closest("label")?.parentElement ?? first.parentElement;
+  for (let depth = 0; depth < 4 && node; depth += 1, node = node.parentElement) {
+    for (const child of Array.from(node.children)) {
+      if (child.contains(first)) break; // only content that precedes the options
+      const text = (child.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (text && text.length <= 200 && !optionLabels.includes(text)) return text;
+    }
+  }
+  return "";
+}
+
+/** Grouping key for one choice control: radios group by their shared `name`;
+ *  checkbox option rows (Ashby) share an id prefix `…-labeled-checkbox-N`.
+ *  Null = not part of a group (a lone consent checkbox stays a single field). */
+function choiceGroupKey(el: HTMLElement): string | null {
+  const type = el.getAttribute("type");
+  if (type === "radio") {
+    const name = el.getAttribute("name");
+    return name ? `radio:${name}` : null;
+  }
+  if (type === "checkbox") {
+    const m = /^(.+)-labeled-checkbox-\d+$/.exec(el.id);
+    return m ? `checkbox:${m[1]}` : null;
+  }
+  return null;
+}
+
+function describeGroup(members: HTMLElement[], key: string): FieldDescriptor {
+  const first = members[0]!;
+  const fieldId = `offeros-${++counter}`;
+  first.setAttribute("data-offeros-id", fieldId);
+  const options = members.map((m) => labelFor(m)).filter((t) => t !== "");
+  return {
+    fieldId,
+    label: groupQuestion(first, options),
+    name: key,
+    autocomplete: "",
+    type: key.startsWith("radio:") ? "radio-group" : "checkbox-group",
+    placeholder: "",
+    ariaLabel: "",
+    required: members.some((m) => (m as HTMLInputElement).required),
+    options,
+  };
+}
+
+/** A control with no signal at all (no label, name, aria, or placeholder) is
+ *  unactionable and unclassifiable — pure noise in the panel (e.g. Ashby's own
+ *  "autofill from resume" file input). */
+function hasAnySignal(el: HTMLElement): boolean {
+  return Boolean(
+    labelFor(el) ||
+      el.getAttribute("name") ||
+      el.id ||
+      el.getAttribute("aria-label") ||
+      el.getAttribute("placeholder"),
+  );
+}
+
 export function scanFields(
   root: ParentNode,
   recipe: AtsRecipe,
@@ -77,8 +140,76 @@ export function scanFields(
         (el): el is HTMLElement => el instanceof HTMLElement,
       )
     : Array.from(form.querySelectorAll<HTMLElement>(recipe.fieldSelector));
-  const els = raw.filter(isScannable);
-  return els.map((el) => ({ descriptor: describe(el), el }));
+  const els = raw.filter(isScannable).filter(hasAnySignal);
+
+  // Collapse choice groups (radio sets, Ashby checkbox option rows) into ONE
+  // logical field each, keyed by the group's question — option rows were
+  // previously scanned as N bogus fields and even text-classified ("New York
+  // City Office" → city).
+  const out: { descriptor: FieldDescriptor; el: HTMLElement }[] = [];
+  const grouped = new Map<string, HTMLElement[]>();
+  for (const el of els) {
+    const key = choiceGroupKey(el);
+    if (key) {
+      const list = grouped.get(key) ?? [];
+      list.push(el);
+      grouped.set(key, list);
+    }
+  }
+  const seenGroups = new Set<string>();
+  for (const el of els) {
+    const key = choiceGroupKey(el);
+    if (key && (grouped.get(key)?.length ?? 0) >= 2) {
+      if (!seenGroups.has(key)) {
+        seenGroups.add(key);
+        const members = grouped.get(key)!;
+        out.push({ descriptor: describeGroup(members, key), el: members[0]! });
+      }
+      continue; // members beyond the first are folded into the group
+    }
+    out.push({ descriptor: describe(el), el });
+  }
+  return out;
+}
+
+/** All inputs belonging to the same choice group as `first` (see
+ *  choiceGroupKey): radios by shared name, Ashby checkbox rows by id prefix. */
+function groupMembers(doc: Document, first: HTMLInputElement): HTMLInputElement[] {
+  if (first.type === "radio" && first.name) {
+    return Array.from(
+      doc.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${CSS.escape(first.name)}"]`),
+    );
+  }
+  const m = /^(.+)-labeled-checkbox-\d+$/.exec(first.id);
+  if (m) {
+    const prefix = `${m[1]}-labeled-checkbox-`;
+    return Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).filter(
+      (el) => el.id.startsWith(prefix),
+    );
+  }
+  return [first];
+}
+
+/** Answer a choice group by clicking the option whose visible label matches
+ *  `value` (tolerant matching via matchOption). Verified via .checked — a
+ *  real click that React observes natively. Null when no option matches
+ *  or the click didn't take. */
+function fillChoiceGroup(doc: Document, first: HTMLInputElement, value: string): HTMLInputElement | null {
+  const members = groupMembers(doc, first);
+  const labels = members.map((m) => labelFor(m));
+  const target = matchOption(
+    labels.map((l) => ({ label: l, value: l })),
+    value,
+  );
+  if (!target) return null;
+  const el = members[labels.indexOf(String(target.label ?? ""))];
+  if (!el) return null;
+  el.click();
+  if (!el.checked) {
+    el.checked = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  return el.checked ? el : null;
 }
 
 type Fillable = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
@@ -226,6 +357,17 @@ export async function applyFillDetailed(
       ) ||
       (el instanceof HTMLInputElement && el.type === "file")
     ) {
+      continue;
+    }
+    if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) {
+      const picked = fillChoiceGroup(doc, el, value);
+      if (picked) {
+        highlight(picked);
+        filled++;
+        outcomes.set(fieldId, "filled");
+      } else {
+        outcomes.set(fieldId, "failed");
+      }
       continue;
     }
     if (isComboboxInput(el)) {

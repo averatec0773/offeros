@@ -182,6 +182,10 @@ const EMPTY_PERSONAL: FillPersonalInfo = { name: "", email: "", phone: "", addre
 function toFillPersonal(profile: Profile | null): FillPersonalInfo {
   if (!profile) return EMPTY_PERSONAL;
   const p = profile.personal;
+  // profile.experience is ordered most-recent-first (onboarding parse + the
+  // profile editor both keep that order) — [0] backs the ubiquitous
+  // "most recent company / job title" questions.
+  const recent = profile.experience?.[0];
   return {
     name: p.name,
     email: p.email,
@@ -191,6 +195,8 @@ function toFillPersonal(profile: Profile | null): FillPersonalInfo {
     state: p.state,
     country: p.country,
     postalCode: p.postalCode,
+    recentCompany: recent?.company || undefined,
+    recentTitle: recent?.title || undefined,
     links: p.links,
   };
 }

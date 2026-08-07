@@ -212,3 +212,50 @@ describe("buildFillPlan — open-ended questions (generatable)", () => {
     expect(item!.generatable).toBeUndefined();
   });
 });
+
+describe("choice groups", () => {
+  const desc = (over: Partial<import("../classify").FieldDescriptor>) => ({
+    fieldId: "g1", label: "", name: "radio:x", autocomplete: "", type: "radio-group",
+    placeholder: "", ariaLabel: "", options: [] as string[], ...over,
+  });
+  const profile = {
+    personal: { name: "", email: "", phone: "", address: "", links: {} },
+    skills: [],
+    answerBank: [
+      { id: "a1", questionPatterns: ["gender"], answer: "Decline to self-identify", type: "enum" as const, category: "eeo" as const },
+    ],
+  };
+
+  it("answers from the bank only when the stored answer maps onto an option", () => {
+    const [item] = buildFillPlan(
+      [desc({ label: "What is your gender?", options: ["Male", "Female", "Decline to self-identify"] })],
+      profile,
+    );
+    expect(item!.status).toBe("fillable");
+    expect(item!.value).toBe("Decline to self-identify");
+    expect(item!.source).toBe("answerBank");
+  });
+
+  it("stays needs-answer when the stored answer matches no option", () => {
+    const [item] = buildFillPlan(
+      [desc({ label: "What is your gender?", options: ["A", "B"] })],
+      profile,
+    );
+    expect(item!.status).toBe("needs-answer");
+  });
+
+  it("fills recentCompany/recentTitle from the profile", () => {
+    const p2 = { ...profile, personal: { ...profile.personal, recentCompany: "Acme", recentTitle: "Engineer" } };
+    const items = buildFillPlan(
+      [
+        desc({ fieldId: "c", type: "text", label: "What is your most recent company?", name: "", options: undefined }),
+        desc({ fieldId: "t", type: "text", label: "What is your most recent job title?", name: "", options: undefined }),
+      ],
+      p2,
+    );
+    expect(items.map((i) => [i.status, i.value])).toEqual([
+      ["fillable", "Acme"],
+      ["fillable", "Engineer"],
+    ]);
+  });
+});
