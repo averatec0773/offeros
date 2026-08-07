@@ -54,7 +54,9 @@ describe("Side panel App", () => {
     expect(await screen.findByText("Email")).toBeInTheDocument();
     // web app unreachable → banner
     expect(
-      await screen.findByText("OfferOS web app not running — start it at http://localhost:3000"),
+      await screen.findByText("OfferOS web app not running."),
     ).toBeInTheDocument();
+    // the one-click native-host launcher is offered next to Retry
+    expect(screen.getByRole("button", { name: "Start OfferOS" })).toBeInTheDocument();
   });
 });

@@ -31,6 +31,7 @@ import {
   updateAnswer,
 } from "../../src/lib/offeros-api";
 import { settings } from "../../src/lib/settings";
+import { requestStartWebApp } from "../../src/lib/web-launcher";
 import { PlugZap } from "lucide-react";
 
 // Supported ATS shown to orient the user on an unsupported page. Data, not UI copy.
@@ -97,6 +98,31 @@ export default function App() {
     await ping();
   };
 
+  // One-click start: background → native host spawns the local server
+  // (detached), then we poll until it answers. First dev-server compile can
+  // take a while — a generous budget with the existing ping doing the work.
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const onStartWebApp = async () => {
+    if (starting) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const res = await requestStartWebApp();
+      if (!res.ok) {
+        setStartError(res.error ?? "couldn't start");
+        return;
+      }
+      for (let i = 0; i < 60 && !wasReachableRef.current; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        await ping();
+      }
+      if (!wasReachableRef.current) setStartError("Started, but it isn't answering yet — Retry in a moment.");
+    } finally {
+      setStarting(false);
+    }
+  };
+
   // Page-change push: the content script broadcasts OFFEROS_ENGINE_PAGE_CHANGED;
   // when it's from the active tab, bump the nonce so the panel re-scans.
   useEffect(() => {
@@ -149,16 +175,29 @@ export default function App() {
       </header>
 
       {!webReachable && (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-warn-bg p-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <PlugZap aria-hidden className="h-4 w-4 shrink-0 text-warning" />
-            <span className="min-w-0 flex-1 text-caption text-text-secondary">
-              OfferOS web app not running — start it at {apiBase}
-            </span>
+        <div className="mb-3 rounded-2xl bg-warn-bg p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <PlugZap aria-hidden className="h-4 w-4 shrink-0 text-warning" />
+              <span className="min-w-0 flex-1 text-caption text-text-secondary">
+                OfferOS web app not running.
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="primary"
+                className="rounded-full"
+                disabled={starting}
+                onClick={() => void onStartWebApp()}
+              >
+                {starting ? "Starting…" : "Start OfferOS"}
+              </Button>
+              <Button className="rounded-full" disabled={starting} onClick={() => void ping()}>
+                Retry
+              </Button>
+            </div>
           </div>
-          <Button className="shrink-0 rounded-full" onClick={() => void ping()}>
-            Retry
-          </Button>
+          {startError && <p className="mt-2 text-caption text-warning">{startError}</p>}
         </div>
       )}
 

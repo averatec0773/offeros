@@ -127,7 +127,11 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
 
 1. Open `chrome://extensions`, enable **Developer mode**, **Load unpacked** →
    select `apps/extension/.output/chrome-mv3/`.
-2. Make sure the web app is running (`npm run dev:web`). The side panel talks to
+2. Make sure the web app is running (`npm run dev:web`) — or set up one-click
+   start once with `npm run host:install`: it registers a Chrome native
+   messaging host (spawned by Chrome on demand, no background daemon), and the
+   panel's "Start OfferOS" button then boots the local server for you.
+   `npm run web:stop` shuts it down. The side panel talks to
    `http://localhost:3000` by default (editable in the panel).
 3. Open a supported application page and click the OfferOS toolbar icon to open
    the **Side Panel**.

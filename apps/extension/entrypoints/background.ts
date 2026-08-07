@@ -1,5 +1,6 @@
 import { startDevReload } from "../src/lib/dev-reload";
 import { matchAts } from "../src/lib/autofill/recipes";
+import { isStartWebAppRequest, startWebAppViaHost } from "../src/lib/web-launcher";
 
 export default defineBackground(() => {
   // The toolbar action opens the side panel (Chrome only); with
@@ -35,6 +36,13 @@ export default defineBackground(() => {
   // (the dev auto-reload restarts this worker on every build).
   chrome.tabs.query({}, (tabs) => {
     for (const tab of tabs) if (tab.id !== undefined) updatePanelForTab(tab.id, tab.url);
+  });
+
+  // Panel → native host bridge: only the background may talk to the native
+  // messaging host, so the panel's "Start OfferOS" routes through here.
+  browser.runtime.onMessage.addListener((msg: unknown): Promise<unknown> | undefined => {
+    if (isStartWebAppRequest(msg)) return startWebAppViaHost();
+    return undefined;
   });
 
   // Dev builds only (inert without a build stamp / with an update_url): reload

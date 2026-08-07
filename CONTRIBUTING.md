@@ -14,6 +14,7 @@ npm ci
 
 ```bash
 npm run dev:web     # web app dev server → http://localhost:3000
+npm run host:install # optional: one-click server start from the panel (native messaging host)
 npm run dev         # extension dev build with HMR (separate browser)
 ```
 

@@ -19,7 +19,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run && npm run test -w @offeros/extension",
-    "test:ext": "npm run test -w @offeros/extension"
+    "test:ext": "npm run test -w @offeros/extension",
+    "host:install": "node scripts/native-host-install.mjs",
+    "host:uninstall": "node scripts/native-host-install.mjs uninstall",
+    "web:stop": "node scripts/native-host/offeros-host.mjs cli-stop",
+    "web:status": "node scripts/native-host/offeros-host.mjs cli-status"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

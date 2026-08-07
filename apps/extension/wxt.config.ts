@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     action: {},
     side_panel: { default_path: 'sidepanel.html' },
-    permissions: ['storage', 'tabs', 'sidePanel'],
+    permissions: ['storage', 'tabs', 'sidePanel', 'nativeMessaging'],
     host_permissions: [
       'http://localhost/*',
       'https://*.greenhouse.io/*',
