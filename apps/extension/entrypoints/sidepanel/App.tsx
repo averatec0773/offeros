@@ -193,9 +193,7 @@ export default function App() {
         )}
       </div>
 
-      <p className="mt-3 px-1 text-caption text-text-tertiary">
-        Review and submit yourself — OfferOS never submits for you.
-      </p>
+      <p className="mt-3 px-1 text-caption text-text-tertiary">You submit — OfferOS never does.</p>
     </div>
   );
 }

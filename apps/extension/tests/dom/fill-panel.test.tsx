@@ -143,6 +143,8 @@ const renderPanel = (
       file: { fileName: string; mimeType: string; bytesBase64: string },
     ) => Promise<AttachFileResponse>;
     scrollToField?: (fieldId: string) => Promise<unknown>;
+    scanRetryTries?: number;
+    scanRetryDelayMs?: number;
     api?: FillApi;
     openWebApp?: () => void;
     openApplication?: (id: string) => void;
@@ -163,6 +165,8 @@ const renderPanel = (
       capture={capture}
       attachFile={attachFile}
       scrollToField={over.scrollToField}
+      scanRetryTries={over.scanRetryTries}
+      scanRetryDelayMs={over.scanRetryDelayMs}
       api={api}
       rescanNonce={0}
       openWebApp={openWebApp}
@@ -175,9 +179,30 @@ const renderPanel = (
 };
 
 describe("FillPanel", () => {
-  it("shows the scanning placeholder while the scan is in flight", () => {
+  it("shows the scanning skeleton while the scan is in flight", () => {
     renderPanel({ scan: () => new Promise(() => {}) });
+    expect(screen.getByTestId("scan-skeleton")).toBeInTheDocument();
     expect(screen.getByText("Scanning this page…")).toBeInTheDocument();
+  });
+
+  it("keeps probing while the content script is still injecting, then renders the scan", async () => {
+    let calls = 0;
+    const scan = vi.fn(async (): Promise<ScanResponse> => {
+      calls += 1;
+      if (calls < 3) throw new Error("Could not establish connection. Receiving end does not exist.");
+      return scanOk;
+    });
+    renderPanel({ scan, scanRetryTries: 5, scanRetryDelayMs: 10 });
+    expect(await screen.findByText("Acme · Engineer")).toBeInTheDocument();
+    expect(calls).toBeGreaterThanOrEqual(3);
+  });
+
+  it("shows a readable dead-end after the probe budget runs out", async () => {
+    const scan = vi.fn(async (): Promise<ScanResponse> => {
+      throw new Error("Receiving end does not exist.");
+    });
+    renderPanel({ scan, scanRetryTries: 2, scanRetryDelayMs: 10 });
+    expect(await screen.findByText("Can't reach this page")).toBeInTheDocument();
   });
 
   it("no_form scan shows a small message", async () => {

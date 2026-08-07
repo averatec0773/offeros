@@ -372,6 +372,8 @@ export function FillPanel({
   openApplication,
   webReachable,
   tabUrl,
+  scanRetryTries = 16,
+  scanRetryDelayMs = 500,
 }: {
   scan: () => Promise<ScanResponse>;
   fill: (values: FillValue[]) => Promise<FillResponse>;
@@ -384,6 +386,9 @@ export function FillPanel({
   ) => Promise<AttachFileResponse>;
   /** Bring a scanned field into view on the page (scroll + highlight flash). */
   scrollToField?: (fieldId: string) => Promise<unknown>;
+  /** Scan-probe retry budget while the content script is still injecting. */
+  scanRetryTries?: number;
+  scanRetryDelayMs?: number;
   api: FillApi;
   rescanNonce: number;
   openWebApp: () => void;
@@ -394,6 +399,7 @@ export function FillPanel({
   tabUrl: string;
 }) {
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
+  const [scanTimedOut, setScanTimedOut] = useState(false);
   const [scanNonce, setScanNonce] = useState(0);
   const [plan, setPlan] = useState<FillItem[]>([]);
   const [done, setDone] = useState(false);
@@ -731,8 +737,8 @@ export function FillPanel({
     }
     // Keep the last ok result on screen during a rescan so a page flip doesn't flash the placeholder.
     setScanResult((prev) => (prev?.ok ? prev : null));
-    void scan().then((res) => {
-      if (!live) return;
+    setScanTimedOut(false);
+    const handleScan = (res: ScanResponse) => {
       setScanResult(res);
       if (!res.ok) return;
       // Plan against the claimed bundle's profile; before a claim there is no profile,
@@ -780,14 +786,52 @@ export function FillPanel({
           }
         })();
       }
-    });
+    };
+    // The content script registers its listener at document_end, but the panel
+    // can probe earlier (tab switch mid-load, page refresh) — tabs.sendMessage
+    // then rejects with "no receiving end". Retry briefly instead of hanging
+    // on the placeholder; when the budget runs out, say so readably.
+    const attemptScan = (triesLeft: number) => {
+      scan()
+        .then((res) => {
+          if (live) handleScan(res);
+        })
+        .catch(() => {
+          if (!live) return;
+          if (triesLeft > 0) setTimeout(() => attemptScan(triesLeft - 1), scanRetryDelayMs);
+          else setScanTimedOut(true);
+        });
+    };
+    attemptScan(scanRetryTries);
     return () => {
       live = false;
     };
-  }, [scan, rescanNonce, scanNonce]);
+  }, [scan, rescanNonce, scanNonce, scanRetryTries, scanRetryDelayMs]);
 
   if (scanResult === null) {
-    return <p className="px-1 text-caption text-text-secondary">Scanning this page…</p>;
+    if (scanTimedOut) {
+      return (
+        <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
+          <p className="text-body font-semibold text-text-primary">Can't reach this page</p>
+          <p className="mt-1 text-caption leading-relaxed text-text-secondary">
+            Reload the tab, then reopen the panel.
+          </p>
+        </div>
+      );
+    }
+    // Skeleton mirrors the card that will replace it — the panel reads as
+    // "loading a form" instead of a bare sentence while the content script
+    // finishes injecting on heavy pages.
+    return (
+      <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4" data-testid="scan-skeleton">
+        <div className="h-4 w-2/3 animate-pulse rounded bg-bg-base" />
+        <div className="mt-2.5 h-3 w-1/2 animate-pulse rounded bg-bg-base" />
+        <div className="mt-4 h-9 w-full animate-pulse rounded-full bg-bg-base" />
+        <div className="mt-3 h-3 w-full animate-pulse rounded bg-bg-base" />
+        <div className="mt-1.5 h-3 w-5/6 animate-pulse rounded bg-bg-base" />
+        <p className="mt-3 text-caption text-text-tertiary">Scanning this page…</p>
+      </div>
+    );
   }
 
   if (!scanResult.ok) {
@@ -1021,13 +1065,17 @@ export function FillPanel({
               {instantBusy ? "Starting…" : "Fill this page with my profile"}
             </Button>
             {instantError && <p className="mt-2 text-caption text-warning">{instantError}</p>}
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <p className="min-w-0 flex-1 text-caption leading-relaxed text-text-secondary">
-                Fills from your profile and tracks it in OfferOS.
-              </p>
-              <Button className="shrink-0 rounded-full" onClick={openWebApp}>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="min-w-0 truncate text-micro text-text-tertiary">
+                Fills from your profile · tracked in OfferOS
+              </span>
+              <button
+                type="button"
+                onClick={openWebApp}
+                className="shrink-0 text-micro font-medium text-text-secondary transition-colors hover:text-text-primary"
+              >
                 Open OfferOS
-              </Button>
+              </button>
             </div>
           </div>
         ) : (

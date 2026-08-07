@@ -34,7 +34,7 @@ describe("Side panel App", () => {
   it("keeps the OfferOS heading and the never-submit footer", async () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "OfferOS" })).toBeInTheDocument();
-    expect(screen.getByText("Review and submit yourself — OfferOS never submits for you.")).toBeInTheDocument();
+    expect(screen.getByText("You submit — OfferOS never does.")).toBeInTheDocument();
   });
 
   it("unsupported tab shows the empty state listing supported platforms", async () => {

@@ -12,6 +12,12 @@ export default defineContentScript({
     "https://*.icims.com/*",
     "https://*.myworkdayjobs.com/*",
   ],
+  // document_end, not the default document_idle: the panel starts probing the
+  // moment the tab activates, and on heavy React ATS pages idle can be seconds
+  // away — the engine's message listener must exist before the page settles.
+  // An early scan may see a half-rendered form; the page watcher pushes
+  // PAGE_CHANGED as hydration mutates, so the panel re-scans to full quality.
+  runAt: "document_end",
   async main(ctx) {
     if (!matchAts(location.href)) return;
 
