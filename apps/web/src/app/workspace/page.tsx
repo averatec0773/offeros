@@ -25,8 +25,8 @@ export default function WorkspacePage() {
         <p className="text-title font-semibold">No agent workspace yet</p>
         <p className="mx-auto mt-1 max-w-[460px] text-body text-muted-foreground">
           Every application gets its own agent workspace — tailored résumé, JD analysis, cover
-          letter, and the form-fill handoff. Add a job here, or use the extension&apos;s
-          &ldquo;Add this job&rdquo; on a posting page.
+          letter, and the form-fill handoff. Add a job here, or use the extension&apos;s &ldquo;Add
+          this job&rdquo; on a posting page.
         </p>
         <Link
           href="/applications/new"

@@ -120,12 +120,7 @@ export function createDb(path: string): Db {
     "skipped_cover_letter INTEGER NOT NULL DEFAULT 0",
   );
   addColumnIfMissing(sqlite, "agent_tasks", "field_reports", "field_reports TEXT");
-  addColumnIfMissing(
-    sqlite,
-    "agent_tasks",
-    "fill_first",
-    "fill_first INTEGER NOT NULL DEFAULT 0",
-  );
+  addColumnIfMissing(sqlite, "agent_tasks", "fill_first", "fill_first INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "agent_tasks", "failure_reason", "failure_reason TEXT");
   addColumnIfMissing(sqlite, "resumes", "note", "note TEXT");
   addColumnIfMissing(sqlite, "resumes", "text", "text TEXT");

@@ -649,8 +649,8 @@ describe("startInstantFill", () => {
   });
 
   it("refuses when the page URL is missing", () => {
-    expect(() =>
-      startInstantFill(db, { jobInfo: { ...JOB, applyLink: undefined } }),
-    ).toThrow(/needs the page URL/);
+    expect(() => startInstantFill(db, { jobInfo: { ...JOB, applyLink: undefined } })).toThrow(
+      /needs the page URL/,
+    );
   });
 });

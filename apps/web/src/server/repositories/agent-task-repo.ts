@@ -36,7 +36,12 @@ export function getAgentTask(db: Db, id: string): AgentTask | null {
 
 export function createAgentTask(
   db: Db,
-  input: { applicationId: string; status?: AgentTask["status"]; step?: number; fillFirst?: boolean },
+  input: {
+    applicationId: string;
+    status?: AgentTask["status"];
+    step?: number;
+    fillFirst?: boolean;
+  },
 ): AgentTask {
   const now = Date.now();
   const row = {
