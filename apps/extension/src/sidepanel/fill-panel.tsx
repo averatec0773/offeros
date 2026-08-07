@@ -52,7 +52,20 @@ const STATUS_ICON: Record<FillItem["status"], { Icon: LucideIcon; cls: string }>
   unknown: { Icon: Minus, cls: "text-text-tertiary" },
 };
 
-function StatusIcon({ status }: { status: FillItem["status"] }) {
+function StatusIcon({ status, written }: { status: FillItem["status"]; written: boolean }) {
+  // Written = the value verifiably landed on the page this session (or a
+  // rehydrated report says it did) — a solid brand check, distinct from the
+  // outline "ready" check. Rows flip to this live as the fill progresses.
+  if (written) {
+    return (
+      <span
+        aria-hidden
+        className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-brand"
+      >
+        <Check className="h-2.5 w-2.5 text-brand-foreground" strokeWidth={3} />
+      </span>
+    );
+  }
   const { Icon, cls } = STATUS_ICON[status];
   return <Icon aria-hidden className={`h-3.5 w-3.5 shrink-0 ${cls}`} />;
 }
@@ -397,31 +410,50 @@ function FieldGroup({
   items,
   reasonFor,
   onJump,
+  writtenValue,
+  revealKey,
 }: {
   title: string;
   items: FillItem[];
   reasonFor?: (fieldId: string) => string | undefined;
   onJump?: (fieldId: string) => void;
+  /** Value verifiably written to the page for this field this session, if any. */
+  writtenValue?: (fieldId: string) => string | undefined;
+  /** Changes when a NEW page's fields arrive — remounts rows so the staggered
+   *  reveal replays for the new form (and never on ordinary re-renders). */
+  revealKey?: string;
 }) {
   if (items.length === 0) return null;
   return (
     <div className="mt-3">
       <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">{title}</p>
       <ul className="space-y-0.5 text-body">
-        {items.map((i) => (
-          <li key={i.fieldId}>
-            <button
-              type="button"
-              title={reasonFor?.(i.fieldId)}
-              onClick={() => onJump?.(i.fieldId)}
-              className="flex w-full items-center gap-2 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-bg-base"
+        {items.map((i, index) => {
+          const written = writtenValue?.(i.fieldId);
+          return (
+            <li
+              key={`${revealKey ?? ""}|${i.fieldId}`}
+              className="animate-slide-in-right"
+              style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
             >
-              <StatusIcon status={i.status} />
-              <span className="flex-1 truncate text-text-primary">{i.label}</span>
-              {i.status === "fillable" && <span className="truncate text-text-tertiary">{i.value}</span>}
-            </button>
-          </li>
-        ))}
+              <button
+                type="button"
+                title={reasonFor?.(i.fieldId)}
+                data-written={written !== undefined || undefined}
+                onClick={() => onJump?.(i.fieldId)}
+                className="flex w-full items-center gap-2 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-bg-base"
+              >
+                <StatusIcon status={i.status} written={written !== undefined} />
+                <span className="flex-1 truncate text-text-primary">{i.label}</span>
+                {(written ?? (i.status === "fillable" ? i.value : undefined)) !== undefined && (
+                  <span className="truncate text-text-tertiary">
+                    {written ?? (i.status === "fillable" ? i.value : "")}
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -501,6 +533,13 @@ export function FillPanel({
   const coverFetchedRef = useRef<Extract<FileFetchResult, { ok: true }> | null>(null);
   const coverUrlRef = useRef<string | null>(null);
   const [fitExpanded, setFitExpanded] = useState(false);
+  // fieldId → the value that verifiably landed on the page. Updated live as
+  // each fill phase completes (batch → cover letter → per-question AI →
+  // attaches), so rows flip to their solid check one by one — the local
+  // equivalent of Jobright's progress tracker, minus the theater.
+  const [writtenFields, setWrittenFields] = useState<Map<string, string>>(new Map());
+  const markWritten = (fieldId: string, value: string) =>
+    setWrittenFields((prev) => new Map(prev).set(fieldId, value));
   const [aiAnswers, setAiAnswers] = useState<{ fieldId: string; label: string; answer: string }[]>([]);
   const [reported, setReported] = useState(false);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
@@ -546,8 +585,13 @@ export function FillPanel({
   // continue where the previous session stopped.
   const hydrateFromBundle = (b: FillTaskBundle) => {
     reportsRef.current.clear();
-    for (const r of b.fieldReports ?? []) reportsRef.current.set(reportKey(r), r);
-    if ((b.fieldReports ?? []).some((r) => r.outcome === "filled")) setFilledOnce(true);
+    const written = new Map<string, string>();
+    for (const r of b.fieldReports ?? []) {
+      reportsRef.current.set(reportKey(r), r);
+      if (r.outcome === "filled") written.set(r.fieldId, r.value ?? "");
+    }
+    setWrittenFields(written);
+    if (written.size > 0) setFilledOnce(true);
   };
   const resetTaskMode = () => {
     bundleRef.current = null;
@@ -558,6 +602,7 @@ export function FillPanel({
     setReported(false);
     setFilledOnce(false);
     setInstantError(null);
+    setWrittenFields(new Map());
     setFit(null);
     setFitBusy(false);
     setFitError(null);
@@ -679,7 +724,11 @@ export function FillPanel({
           i.values ? { fieldId: i.fieldId, values: i.values } : { fieldId: i.fieldId, value: i.value },
         ),
       );
-      for (const [id, o] of res.outcomes ?? []) writes.set(id, o);
+      const valueById = new Map(fillable.map((i) => [i.fieldId, i.value ?? i.values?.join(", ") ?? ""]));
+      for (const [id, o] of res.outcomes ?? []) {
+        writes.set(id, o);
+        if (o === "filled") markWritten(id, valueById.get(id) ?? "");
+      }
 
       // 2) cover-letter textareas ← bundle.coverLetterText verbatim (never generated).
       const coverText = b.coverLetterText?.trim() ? b.coverLetterText : null;
@@ -689,6 +738,7 @@ export function FillPanel({
         )) {
           if (await writeOne(cf.fieldId, coverText)) {
             writes.set(cf.fieldId, { outcome: "filled", value: coverText, source: "cover-letter" });
+            markWritten(cf.fieldId, "Cover letter");
           }
           // a failed cover-letter write stays unreported here → needs-user.
         }
@@ -712,6 +762,7 @@ export function FillPanel({
         if (!ans.ok) continue;
         if (await writeOne(q.fieldId, ans.value.answer)) {
           writes.set(q.fieldId, { outcome: "filled", value: ans.value.answer, source: "ai-generated" });
+          markWritten(q.fieldId, ans.value.answer);
           collected.push({ fieldId: q.fieldId, label: q.label, answer: ans.value.answer });
         }
       }
@@ -734,10 +785,16 @@ export function FillPanel({
                 ? await api.fetchResumeFile(b.resumeId)
                 : ({ ok: false } as const)
               : await api.fetchArtifactPdf(b.taskId, "resume");
-          writes.set(t.fieldId, await attachManagedFile(t.fieldId, fetched, "resume"));
+          const outcome = await attachManagedFile(t.fieldId, fetched, "resume");
+          writes.set(t.fieldId, outcome);
+          if (typeof outcome !== "string" && outcome.outcome === "filled")
+            markWritten(t.fieldId, outcome.value ?? "");
         } else if (t.classifiedType === "coverLetter" && coverText) {
           const fetched = await api.fetchArtifactPdf(b.taskId, "cover-letter");
-          writes.set(t.fieldId, await attachManagedFile(t.fieldId, fetched, "coverLetter"));
+          const outcome = await attachManagedFile(t.fieldId, fetched, "coverLetter");
+          writes.set(t.fieldId, outcome);
+          if (typeof outcome !== "string" && outcome.outcome === "filled")
+            markWritten(t.fieldId, outcome.value ?? "");
         }
       }
 
@@ -768,6 +825,7 @@ export function FillPanel({
     });
     if (!ans.ok || !(await writeOne(entry.fieldId, ans.value.answer))) return;
     const answer = ans.value.answer;
+    markWritten(entry.fieldId, answer);
     setAiAnswers((prev) => prev.map((e) => (e.fieldId === entry.fieldId ? { ...e, answer } : e)));
     setSavedFieldIds((prev) => {
       if (!prev.has(entry.fieldId)) return prev;
@@ -793,6 +851,7 @@ export function FillPanel({
     const b = bundleRef.current;
     if (!b || entry.answer.trim() === "") return;
     if (await writeOne(entry.fieldId, entry.answer)) {
+      markWritten(entry.fieldId, entry.answer);
       for (const [k, r] of reportsRef.current) {
         if (r.fieldId === entry.fieldId) {
           reportsRef.current.set(k, { ...r, value: entry.answer, outcome: "filled", source: "ai-generated" });
@@ -897,8 +956,15 @@ export function FillPanel({
         })
         .catch(() => {
           if (!live) return;
-          if (triesLeft > 0) setTimeout(() => attemptScan(triesLeft - 1), scanRetryDelayMs);
-          else setScanTimedOut(true);
+          if (triesLeft > 0) {
+            setTimeout(() => attemptScan(triesLeft - 1), scanRetryDelayMs);
+          } else {
+            // Budget spent: say so, but never go dead — keep a slow heartbeat
+            // probe so a page that eventually loads still connects (the
+            // tab-complete listener in App also restarts a full-budget cycle).
+            setScanTimedOut(true);
+            setTimeout(() => attemptScan(0), scanRetryDelayMs * 6);
+          }
         });
     };
     attemptScan(scanRetryTries);
@@ -911,9 +977,9 @@ export function FillPanel({
     if (scanTimedOut) {
       return (
         <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
-          <p className="text-body font-semibold text-text-primary">Can't reach this page</p>
+          <p className="text-body font-semibold text-text-primary">Can't reach this page yet</p>
           <p className="mt-1 text-caption leading-relaxed text-text-secondary">
-            Reload the tab, then reopen the panel.
+            Still trying — if this persists, reload the tab.
           </p>
         </div>
       );
@@ -1037,6 +1103,7 @@ export function FillPanel({
         return;
       }
       setTailorAttached(true);
+      markWritten(resumeField.fieldId, fetched.fileName);
       for (const [k, r] of reportsRef.current) {
         if (r.fieldId === resumeField.fieldId) {
           reportsRef.current.set(k, {
@@ -1107,6 +1174,7 @@ export function FillPanel({
         return;
       }
       setCoverAttached(true);
+      markWritten(coverField.fieldId, fetched.fileName);
       for (const [k, r] of reportsRef.current) {
         if (r.fieldId === coverField.fieldId) {
           reportsRef.current.set(k, {
@@ -1311,12 +1379,16 @@ export function FillPanel({
           items={plan.filter((i) => i.required)}
           reasonFor={reasonFor}
           onJump={jumpToField}
+          writtenValue={(id) => writtenFields.get(id)}
+          revealKey={pageSigRef.current ?? undefined}
         />
         <FieldGroup
           title="Optional"
           items={plan.filter((i) => !i.required)}
           reasonFor={reasonFor}
           onJump={jumpToField}
+          writtenValue={(id) => writtenFields.get(id)}
+          revealKey={pageSigRef.current ?? undefined}
         />
         {done && (
           <p className="mt-3 text-caption text-success">

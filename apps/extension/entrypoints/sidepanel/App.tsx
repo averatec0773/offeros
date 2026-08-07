@@ -108,6 +108,19 @@ export default function App() {
     return () => browser.runtime.onMessage.removeListener(listener);
   }, [activeTab]);
 
+  // Navigation-complete push: a page reload destroys the content script and the
+  // panel's probe budget can burn out before the new one injects. The browser
+  // knows exactly when the page is ready — restart the probe with a full budget
+  // the moment the active tab finishes loading.
+  useEffect(() => {
+    if (activeTab === null) return;
+    const onUpdated = (tabId: number, changeInfo: { status?: string }) => {
+      if (tabId === activeTab.id && changeInfo.status === "complete") setRescanNonce((n) => n + 1);
+    };
+    browser.tabs.onUpdated.addListener(onUpdated);
+    return () => browser.tabs.onUpdated.removeListener(onUpdated);
+  }, [activeTab]);
+
   const tabId = activeTab?.id ?? -1;
   const scan = useCallback(() => sendEngineScan(tabId), [tabId]);
   const fill = useCallback((values: Parameters<typeof sendEngineFill>[1]) => sendEngineFill(tabId, values), [tabId]);

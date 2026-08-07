@@ -198,12 +198,17 @@ describe("FillPanel", () => {
     expect(calls).toBeGreaterThanOrEqual(3);
   });
 
-  it("shows a readable dead-end after the probe budget runs out", async () => {
+  it("shows a readable state after the probe budget runs out, then keeps a slow heartbeat", async () => {
+    let calls = 0;
     const scan = vi.fn(async (): Promise<ScanResponse> => {
-      throw new Error("Receiving end does not exist.");
+      calls += 1;
+      if (calls <= 4) throw new Error("Receiving end does not exist.");
+      return scanOk;
     });
     renderPanel({ scan, scanRetryTries: 2, scanRetryDelayMs: 10 });
-    expect(await screen.findByText("Can't reach this page")).toBeInTheDocument();
+    expect(await screen.findByText("Can't reach this page yet")).toBeInTheDocument();
+    // The heartbeat probe (delay × 6) eventually connects and the panel recovers.
+    expect(await screen.findByText("Acme · Engineer", undefined, { timeout: 2000 })).toBeInTheDocument();
   });
 
   it("no_form scan shows a small message", async () => {
@@ -509,6 +514,50 @@ describe("FillPanel", () => {
       const posted = (api.postReport as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
       expect(posted[2]).toBe(true);
       expect((posted[1] as { fieldId: string }[]).map((r) => r.fieldId)).toContain("f1");
+    });
+
+    it("flips field rows to their written state live as the fill lands", async () => {
+      const api = claimedApi();
+      const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+      renderPanel({ api, fill });
+      const row = await screen.findByRole("button", { name: /Email/ });
+      expect(row.getAttribute("data-written")).toBeNull();
+      await userEvent.click(await screen.findByRole("button", { name: "Fill 1 field" }));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Email/ }).getAttribute("data-written")).toBe(
+          "true",
+        ),
+      );
+    });
+
+    it("rehydrates written rows from a re-claimed bundle's reports", async () => {
+      const api = claimedApi();
+      api.claim = vi.fn(async () => ({
+        ok: true as const,
+        value: {
+          ...bundle,
+          fieldReports: [
+            {
+              fieldId: "f1",
+              label: "Email",
+              classifiedType: "email",
+              status: "fillable",
+              value: "a@b.com",
+              source: "personal" as const,
+              reason: "",
+              outcome: "filled" as const,
+              required: true,
+            },
+          ],
+        },
+      }));
+      renderPanel({ api });
+      await screen.findByText("Engineer · Acme");
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Email/ }).getAttribute("data-written")).toBe(
+          "true",
+        ),
+      );
     });
 
     it("expands the fit strip to the full narrative and every gap", async () => {
