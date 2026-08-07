@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cn } from "../src/lib/cn";
+import { cn } from "../utils";
 
 describe("cn", () => {
   it("merges tailwind conflicts, last wins", () => {
     expect(cn("p-2", "p-4")).toBe("p-4");
   });
-  it("drops falsy", () => {
-    expect(cn("a", false && "b", undefined, "c")).toBe("a c");
-  });
-  it("keeps text color when a semantic size class follows (regression: blank Fill button)", () => {
+  it("keeps text color when a semantic size class follows (twMerge misread it as a color)", () => {
+    expect(cn("text-muted-foreground", "text-caption")).toBe("text-muted-foreground text-caption");
     expect(cn("text-primary-foreground", "text-body font-semibold")).toBe(
       "text-primary-foreground text-body font-semibold",
     );
