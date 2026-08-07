@@ -352,3 +352,56 @@ describe("choice-group scanning and filling", () => {
     expect(names).toEqual(["email"]);
   });
 });
+
+describe("stable field ids across content-script reloads", () => {
+  const FORM = `
+      <main><form>
+        <label for="e">Email</label><input id="e" name="email" type="email" />
+        <label for="p">Phone</label><input id="p" name="phone" type="tel" />
+        <label for="w">Website</label><input id="w" name="website" type="text" />
+      </form></main>`;
+
+  it("the same logical field gets the same id on every fresh scan (reload survival)", () => {
+    document.body.innerHTML = FORM;
+    const first = Object.fromEntries(
+      scanFields(document.body, recipe).map((f) => [f.descriptor.label, f.descriptor.fieldId]),
+    );
+    // Simulate a content-script reload: identical DOM rebuilt from scratch.
+    document.body.innerHTML = FORM;
+    const second = Object.fromEntries(
+      scanFields(document.body, recipe).map((f) => [f.descriptor.label, f.descriptor.fieldId]),
+    );
+    expect(second).toEqual(first);
+  });
+
+  it("reordered fields keep their ids attached to their content, not their position", () => {
+    document.body.innerHTML = FORM;
+    const byLabel = Object.fromEntries(
+      scanFields(document.body, recipe).map((f) => [f.descriptor.label, f.descriptor.fieldId]),
+    );
+    document.body.innerHTML = `
+      <main><form>
+        <label for="w">Website</label><input id="w" name="website" type="text" />
+        <label for="e">Email</label><input id="e" name="email" type="email" />
+        <label for="p">Phone</label><input id="p" name="phone" type="tel" />
+      </form></main>`;
+    const reordered = Object.fromEntries(
+      scanFields(document.body, recipe).map((f) => [f.descriptor.label, f.descriptor.fieldId]),
+    );
+    expect(reordered).toEqual(byLabel);
+  });
+
+  it("true duplicates disambiguate deterministically by DOM order", () => {
+    const DUP = `
+      <main><form>
+        <label>Reference<input name="ref" type="text" /></label>
+        <label>Reference<input name="ref" type="text" /></label>
+      </form></main>`;
+    document.body.innerHTML = DUP;
+    const ids = scanFields(document.body, recipe).map((f) => f.descriptor.fieldId);
+    expect(ids[0]).not.toBe(ids[1]);
+    document.body.innerHTML = DUP;
+    const ids2 = scanFields(document.body, recipe).map((f) => f.descriptor.fieldId);
+    expect(ids2).toEqual(ids);
+  });
+});

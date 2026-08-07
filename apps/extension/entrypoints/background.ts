@@ -42,6 +42,34 @@ export default defineBackground(() => {
     for (const tab of tabs) if (tab.id !== undefined) updatePanelForTab(tab.id, tab.url);
   });
 
+  // Orphan recovery: reloading the extension invalidates every injected
+  // content script, and Chrome never reinjects into already-open tabs — the
+  // panel then probes a dead tab forever ("Can't reach this page") until the
+  // user manually refreshes it. Ping each ATS tab; where nobody answers,
+  // inject the engine (ISOLATED) and the combobox driver (MAIN) again.
+  const reinjectOrphanedTabs = async () => {
+    if (!chrome.scripting?.executeScript) return;
+    const tabs = await browser.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id === undefined || !tab.url || matchAts(tab.url) === null) continue;
+      try {
+        await browser.tabs.sendMessage(tab.id, { kind: "OFFEROS_ENGINE_PING" });
+      } catch {
+        await chrome.scripting
+          .executeScript({ target: { tabId: tab.id }, files: ["content-scripts/ats.js"] })
+          .catch(() => {});
+        await chrome.scripting
+          .executeScript({
+            target: { tabId: tab.id },
+            files: ["content-scripts/ats-driver.js"],
+            world: "MAIN",
+          })
+          .catch(() => {});
+      }
+    }
+  };
+  void reinjectOrphanedTabs();
+
   // Panel → native host bridge: only the background may talk to the native
   // messaging host, so the panel's "Start OfferOS" routes through here.
   browser.runtime.onMessage.addListener((msg: unknown): Promise<unknown> | undefined => {

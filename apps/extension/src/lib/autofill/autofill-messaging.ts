@@ -57,6 +57,9 @@ export interface EngineScrollToFieldRequest {
   kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD";
   fieldId: string;
 }
+export interface EnginePingRequest {
+  kind: "OFFEROS_ENGINE_PING";
+}
 export interface EnginePageChangedMessage {
   kind: "OFFEROS_ENGINE_PAGE_CHANGED";
 }
@@ -89,6 +92,9 @@ export function isEngineAttachFileRequest(m: unknown): m is EngineAttachFileRequ
     typeof (m as EngineAttachFileRequest).fileName === "string" &&
     typeof (m as EngineAttachFileRequest).bytesBase64 === "string"
   );
+}
+export function isEnginePingRequest(m: unknown): m is EnginePingRequest {
+  return hasKind(m, "OFFEROS_ENGINE_PING");
 }
 export function isEngineScrollToFieldRequest(m: unknown): m is EngineScrollToFieldRequest {
   return (

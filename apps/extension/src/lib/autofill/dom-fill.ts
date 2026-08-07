@@ -8,7 +8,23 @@ import {
   isSkillsResultMsg,
 } from "./combobox-protocol";
 
-let counter = 0;
+/**
+ * Deterministic, content-derived field ids. The old session counter reset on
+ * every content-script reload and reassigned the same `offeros-N` names to
+ * DIFFERENT fields in the new DOM order — any state keyed by fieldId across a
+ * reload (rehydrated reports, written rows) then painted onto the wrong rows.
+ * Hashing the field's stable signals (type|name|label|autocomplete) gives the
+ * same logical field the same id on every scan of the same form; `used`
+ * disambiguates true duplicates by DOM order.
+ */
+function stableFieldId(sig: string, used: Map<string, number>): string {
+  let h = 0;
+  for (let i = 0; i < sig.length; i += 1) h = (h * 31 + sig.charCodeAt(i)) | 0;
+  const base = (h >>> 0).toString(36);
+  const n = used.get(base) ?? 0;
+  used.set(base, n + 1);
+  return n === 0 ? `offeros-${base}` : `offeros-${base}-${n}`;
+}
 
 function labelFor(el: HTMLElement): string {
   const id = el.getAttribute("id");
@@ -38,19 +54,22 @@ function isRequired(el: HTMLElement, label: string): boolean {
   return /\*/.test(label);
 }
 
-function describe(el: HTMLElement): FieldDescriptor {
-  const fieldId = `offeros-${++counter}`;
-  el.setAttribute("data-offeros-id", fieldId);
+function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
   const label = labelFor(el);
+  const name = el.getAttribute("name") || el.id || "";
+  const type = (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text";
+  const autocomplete = el.getAttribute("autocomplete") ?? "";
+  const fieldId = stableFieldId(`${type}|${name}|${label}|${autocomplete}`, used);
+  el.setAttribute("data-offeros-id", fieldId);
   return {
     fieldId,
     label,
     // `id` stands in when `name` is absent — real Greenhouse job-boards file
     // inputs carry id="resume"/id="cover_letter" with no name, and the id is
     // the only signal that tells the two "Attach" fields apart.
-    name: el.getAttribute("name") || el.id || "",
-    autocomplete: el.getAttribute("autocomplete") ?? "",
-    type: (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text",
+    name,
+    autocomplete,
+    type,
     placeholder: el.getAttribute("placeholder") ?? "",
     ariaLabel: el.getAttribute("aria-label") ?? "",
     required: isRequired(el, label),
@@ -97,14 +116,19 @@ function choiceGroupKey(el: HTMLElement): string | null {
   return null;
 }
 
-function describeGroup(members: HTMLElement[], key: string): FieldDescriptor {
+function describeGroup(
+  members: HTMLElement[],
+  key: string,
+  used: Map<string, number>,
+): FieldDescriptor {
   const first = members[0]!;
-  const fieldId = `offeros-${++counter}`;
-  first.setAttribute("data-offeros-id", fieldId);
   const options = members.map((m) => labelFor(m)).filter((t) => t !== "");
+  const question = groupQuestion(first, options);
+  const fieldId = stableFieldId(`group|${key}|${question}`, used);
+  first.setAttribute("data-offeros-id", fieldId);
   return {
     fieldId,
-    label: groupQuestion(first, options),
+    label: question,
     name: key,
     autocomplete: "",
     type: key.startsWith("radio:") ? "radio-group" : "checkbox-group",
@@ -147,6 +171,7 @@ export function scanFields(
   // previously scanned as N bogus fields and even text-classified ("New York
   // City Office" → city).
   const out: { descriptor: FieldDescriptor; el: HTMLElement }[] = [];
+  const usedIds = new Map<string, number>();
   const grouped = new Map<string, HTMLElement[]>();
   for (const el of els) {
     const key = choiceGroupKey(el);
@@ -163,11 +188,11 @@ export function scanFields(
       if (!seenGroups.has(key)) {
         seenGroups.add(key);
         const members = grouped.get(key)!;
-        out.push({ descriptor: describeGroup(members, key), el: members[0]! });
+        out.push({ descriptor: describeGroup(members, key, usedIds), el: members[0]! });
       }
       continue; // members beyond the first are folded into the group
     }
-    out.push({ descriptor: describe(el), el });
+    out.push({ descriptor: describe(el, usedIds), el });
   }
   return out;
 }

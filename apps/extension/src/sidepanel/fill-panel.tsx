@@ -585,13 +585,24 @@ export function FillPanel({
   // continue where the previous session stopped.
   const hydrateFromBundle = (b: FillTaskBundle) => {
     reportsRef.current.clear();
-    const written = new Map<string, string>();
+    let anyFilled = false;
     for (const r of b.fieldReports ?? []) {
       reportsRef.current.set(reportKey(r), r);
-      if (r.outcome === "filled") written.set(r.fieldId, r.value ?? "");
+      if (r.outcome === "filled") anyFilled = true;
     }
-    setWrittenFields(written);
-    if (written.size > 0) setFilledOnce(true);
+    // Written rows are NOT painted from here — rehydrated reports only light a
+    // row up when their page signature matches the current scan (see
+    // writtenValueFor), so a report from an earlier page layout (or the old
+    // session-counter id era) can never decorate the wrong field.
+    if (anyFilled) setFilledOnce(true);
+  };
+
+  // Live writes first; else a rehydrated report for THIS page signature.
+  const writtenValueFor = (fieldId: string): string | undefined => {
+    const live = writtenFields.get(fieldId);
+    if (live !== undefined) return live;
+    const hydrated = reportsRef.current.get(`${pageSigRef.current ?? ""} ${fieldId}`);
+    return hydrated?.outcome === "filled" ? (hydrated.value ?? "") : undefined;
   };
   const resetTaskMode = () => {
     bundleRef.current = null;
@@ -1379,7 +1390,7 @@ export function FillPanel({
           items={plan.filter((i) => i.required)}
           reasonFor={reasonFor}
           onJump={jumpToField}
-          writtenValue={(id) => writtenFields.get(id)}
+          writtenValue={writtenValueFor}
           revealKey={pageSigRef.current ?? undefined}
         />
         <FieldGroup
@@ -1387,7 +1398,7 @@ export function FillPanel({
           items={plan.filter((i) => !i.required)}
           reasonFor={reasonFor}
           onJump={jumpToField}
-          writtenValue={(id) => writtenFields.get(id)}
+          writtenValue={writtenValueFor}
           revealKey={pageSigRef.current ?? undefined}
         />
         {done && (

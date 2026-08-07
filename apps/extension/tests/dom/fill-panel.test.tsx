@@ -530,24 +530,27 @@ describe("FillPanel", () => {
       );
     });
 
-    it("rehydrates written rows from a re-claimed bundle's reports", async () => {
+    it("rehydrates written rows only for reports whose page matches the current scan", async () => {
       const api = claimedApi();
+      const report = (fieldId: string, page: string) => ({
+        fieldId,
+        label: "Email",
+        classifiedType: "email",
+        status: "fillable",
+        value: "a@b.com",
+        source: "personal" as const,
+        reason: "",
+        outcome: "filled" as const,
+        required: true,
+        page,
+      });
       api.claim = vi.fn(async () => ({
         ok: true as const,
         value: {
           ...bundle,
           fieldReports: [
-            {
-              fieldId: "f1",
-              label: "Email",
-              classifiedType: "email",
-              status: "fillable",
-              value: "a@b.com",
-              source: "personal" as const,
-              reason: "",
-              outcome: "filled" as const,
-              required: true,
-            },
+            report("f1", "f1|q1"), // matches scanOk's page signature -> paints
+            report("q1", "some-older-page-layout"), // stale page -> must NOT paint
           ],
         },
       }));
@@ -558,6 +561,9 @@ describe("FillPanel", () => {
           "true",
         ),
       );
+      expect(
+        screen.getByRole("button", { name: /Why do you want/ }).getAttribute("data-written"),
+      ).toBeNull();
     });
 
     it("expands the fit strip to the full narrative and every gap", async () => {

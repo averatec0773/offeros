@@ -11,6 +11,7 @@ import { captureJd, sanitizeLabel } from "../autofill/jd-capture";
 import { base64ToBytes } from "../autofill/base64";
 import { effectiveDocOf, watchPage } from "./page-watcher";
 import {
+  isEnginePingRequest,
   isEngineScanRequest,
   isEngineFillRequest,
   isEngineCaptureJdRequest,
@@ -150,6 +151,7 @@ export function registerEngine(doc: Document, ctx: EngineContext): Engine {
   const engine = createEngine(doc);
 
   const listener = (msg: unknown): Promise<unknown> | undefined => {
+    if (isEnginePingRequest(msg)) return Promise.resolve(true);
     if (isEngineScanRequest(msg)) return engine.scan();
     if (isEngineFillRequest(msg)) return engine.fill(msg.values);
     if (isEngineCaptureJdRequest(msg)) return Promise.resolve(engine.capture());
