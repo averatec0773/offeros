@@ -133,9 +133,14 @@ export function buildFillPlan(
     // only if it actually maps onto one of the group's options — the value
     // carried is the OPTION's own label, so the driver can click it verbatim.
     if ((desc.type === "radio-group" || desc.type === "checkbox-group") && desc.options?.length) {
-      const stored = profile ? matchAnswer(desc.label || desc.ariaLabel || "", profile.answerBank) : null;
+      const stored = profile
+        ? matchAnswer(desc.label || desc.ariaLabel || "", profile.answerBank)
+        : null;
       const option = stored
-        ? matchOption(desc.options.map((o) => ({ label: o, value: o })), stored.answer)
+        ? matchOption(
+            desc.options.map((o) => ({ label: o, value: o })),
+            stored.answer,
+          )
         : null;
       if (stored && option) {
         return {

@@ -215,20 +215,38 @@ describe("buildFillPlan — open-ended questions (generatable)", () => {
 
 describe("choice groups", () => {
   const desc = (over: Partial<import("../classify").FieldDescriptor>) => ({
-    fieldId: "g1", label: "", name: "radio:x", autocomplete: "", type: "radio-group",
-    placeholder: "", ariaLabel: "", options: [] as string[], ...over,
+    fieldId: "g1",
+    label: "",
+    name: "radio:x",
+    autocomplete: "",
+    type: "radio-group",
+    placeholder: "",
+    ariaLabel: "",
+    options: [] as string[],
+    ...over,
   });
   const profile = {
     personal: { name: "", email: "", phone: "", address: "", links: {} },
     skills: [],
     answerBank: [
-      { id: "a1", questionPatterns: ["gender"], answer: "Decline to self-identify", type: "enum" as const, category: "eeo" as const },
+      {
+        id: "a1",
+        questionPatterns: ["gender"],
+        answer: "Decline to self-identify",
+        type: "enum" as const,
+        category: "eeo" as const,
+      },
     ],
   };
 
   it("answers from the bank only when the stored answer maps onto an option", () => {
     const [item] = buildFillPlan(
-      [desc({ label: "What is your gender?", options: ["Male", "Female", "Decline to self-identify"] })],
+      [
+        desc({
+          label: "What is your gender?",
+          options: ["Male", "Female", "Decline to self-identify"],
+        }),
+      ],
       profile,
     );
     expect(item!.status).toBe("fillable");
@@ -245,11 +263,26 @@ describe("choice groups", () => {
   });
 
   it("fills recentCompany/recentTitle from the profile", () => {
-    const p2 = { ...profile, personal: { ...profile.personal, recentCompany: "Acme", recentTitle: "Engineer" } };
+    const p2 = {
+      ...profile,
+      personal: { ...profile.personal, recentCompany: "Acme", recentTitle: "Engineer" },
+    };
     const items = buildFillPlan(
       [
-        desc({ fieldId: "c", type: "text", label: "What is your most recent company?", name: "", options: undefined }),
-        desc({ fieldId: "t", type: "text", label: "What is your most recent job title?", name: "", options: undefined }),
+        desc({
+          fieldId: "c",
+          type: "text",
+          label: "What is your most recent company?",
+          name: "",
+          options: undefined,
+        }),
+        desc({
+          fieldId: "t",
+          type: "text",
+          label: "What is your most recent job title?",
+          name: "",
+          options: undefined,
+        }),
       ],
       p2,
     );

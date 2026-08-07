@@ -149,22 +149,45 @@ describe("classifyField precision fixes", () => {
 });
 
 describe("per-signal matching (placeholder must not poison the label)", () => {
-  const base = { fieldId: "f", name: "", autocomplete: "", type: "text", placeholder: "", ariaLabel: "" };
+  const base = {
+    fieldId: "f",
+    name: "",
+    autocomplete: "",
+    type: "text",
+    placeholder: "",
+    ariaLabel: "",
+  };
   it("bare 'Name' with a generic placeholder still classifies as fullName", () => {
     expect(classifyField({ ...base, label: "Name", placeholder: "Type here..." })).toBe("fullName");
   });
   it("verbose linkedin question classifies despite a placeholder", () => {
     expect(
-      classifyField({ ...base, label: "Please add your LinkedIn profile", placeholder: "Type here..." }),
+      classifyField({
+        ...base,
+        label: "Please add your LinkedIn profile",
+        placeholder: "Type here...",
+      }),
     ).toBe("linkedin");
   });
   it("most recent company / job title map to the new canonicals", () => {
-    expect(classifyField({ ...base, label: "What is your most recent company?" })).toBe("recentCompany");
-    expect(classifyField({ ...base, label: "What is your most recent job title?" })).toBe("recentTitle");
+    expect(classifyField({ ...base, label: "What is your most recent company?" })).toBe(
+      "recentCompany",
+    );
+    expect(classifyField({ ...base, label: "What is your most recent job title?" })).toBe(
+      "recentTitle",
+    );
   });
   it("choice controls are never text-classified (option label containing 'city')", () => {
     expect(classifyField({ ...base, label: "New York City Office", type: "checkbox" })).toBeNull();
-    expect(classifyField({ ...base, label: "Yes - I consent to receiving text messages", type: "radio" })).toBeNull();
-    expect(classifyField({ ...base, label: "Which office?", type: "radio-group", options: ["A"] })).toBeNull();
+    expect(
+      classifyField({
+        ...base,
+        label: "Yes - I consent to receiving text messages",
+        type: "radio",
+      }),
+    ).toBeNull();
+    expect(
+      classifyField({ ...base, label: "Which office?", type: "radio-group", options: ["A"] }),
+    ).toBeNull();
   });
 });
