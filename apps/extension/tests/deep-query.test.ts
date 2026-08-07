@@ -55,15 +55,4 @@ describe("deepQuery — pierces shadow roots", () => {
     expect(deepQueryAll(document, "textarea")).toEqual([]);
   });
 
-  it("skips a host subtree (and its shadow) matching the skip selector", () => {
-    document.body.innerHTML =
-      "<dq-host></dq-host><offeros-overlay></offeros-overlay>";
-    // both hosts render an <input> in their shadow root
-    const overlay = document.querySelector("offeros-overlay")!;
-    overlay.attachShadow({ mode: "open" }).innerHTML = '<input type="text" />';
-    const all = deepQueryAll(document, "input");
-    expect(all.length).toBe(2); // dq-host input + overlay input
-    const pruned = deepQueryAll(document, "input", { skip: "offeros-overlay" });
-    expect(pruned.length).toBe(1); // overlay subtree excluded
-  });
 });

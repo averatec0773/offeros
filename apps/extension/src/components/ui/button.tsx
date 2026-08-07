@@ -1,12 +1,11 @@
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-type Variant = "primary" | "ghost" | "danger";
+type Variant = "primary" | "ghost";
 
 const styles: Record<Variant, string> = {
   primary: "bg-primary text-primary-foreground hover:bg-primary/85",
   ghost: "bg-bg-elevated text-text-primary border border-border-subtle hover:bg-bg-elevated-hover",
-  danger: "bg-danger text-bg-base hover:opacity-90",
 };
 
 export function Button({

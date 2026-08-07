@@ -9,7 +9,7 @@ import {
 } from "../autofill/dom-fill";
 import { captureJd, sanitizeLabel } from "../autofill/jd-capture";
 import { base64ToBytes } from "../autofill/base64";
-import { effectiveDocOf, watchPage } from "../overlay/page-watcher";
+import { effectiveDocOf, watchPage } from "./page-watcher";
 import {
   isEngineScanRequest,
   isEngineFillRequest,
@@ -35,8 +35,7 @@ export interface Engine {
 
 /**
  * The content-script fill engine: scan/fill/capture/watch over the live page.
- * The overlay drives it locally; the side panel drives it over messaging (see
- * `registerEngine`). `effectiveDocOf(doc)` is resolved at call time so iCIMS
+ * The side panel drives it over messaging (see `registerEngine`). `effectiveDocOf(doc)` is resolved at call time so iCIMS
  * same-origin iframe portals are followed after navigation, never pinned.
  */
 export function createEngine(doc: Document): Engine {
@@ -144,9 +143,8 @@ export interface EngineContext {
  * Wire the engine into the content script: register a `runtime.onMessage`
  * handler for SCAN/FILL/CAPTURE_JD (returning the promise so the async response
  * flows back), and push OFFEROS_ENGINE_PAGE_CHANGED on every page change so the
- * panel re-scans. Non-engine messages fall through (return undefined) so other
- * listeners (FETCH_JD, etc.) still handle them. Both are torn down on
- * `ctx.onInvalidated`.
+ * panel re-scans. Non-engine messages fall through (return undefined). Both
+ * are torn down on `ctx.onInvalidated`.
  */
 export function registerEngine(doc: Document, ctx: EngineContext): Engine {
   const engine = createEngine(doc);

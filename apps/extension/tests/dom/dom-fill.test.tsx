@@ -1,6 +1,19 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
-import { applyFill, attachFile, scanFields, setControlledValue } from "../../src/lib/autofill/dom-fill";
+import {
+  applyFillDetailed,
+  attachFile,
+  scanFields,
+  setControlledValue,
+  type FillValue,
+} from "../../src/lib/autofill/dom-fill";
+
+// The old thin `applyFill` wrapper was deleted; tests keep its shape locally.
+const applyFill = async (
+  doc: Document,
+  values: FillValue[],
+  opts?: { comboTimeoutMs?: number; skillsTimeoutMs?: number },
+) => (await applyFillDetailed(doc, values, opts)).filled;
 import { matchAts } from "../../src/lib/autofill/recipes";
 
 const recipe = matchAts("https://boards.greenhouse.io/acme/jobs/1")!;

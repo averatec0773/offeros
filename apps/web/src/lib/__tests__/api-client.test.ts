@@ -20,8 +20,8 @@ function stubFetch(body: unknown, status = 200) {
 describe("api client", () => {
   it("unwraps the envelope result", async () => {
     stubFetch({ success: true, errorCode: 10000, errorMsg: null, result: [{ id: "a" }] });
-    const apps = await api.applications.list();
-    expect(apps).toEqual([{ id: "a" }]);
+    const events = await api.applications.events("a");
+    expect(events).toEqual([{ id: "a" }]);
   });
 
   it("calls the right url and method for a create", async () => {
@@ -43,11 +43,11 @@ describe("api client", () => {
       { success: false, errorCode: 40400, errorMsg: "application not found", result: null },
       404,
     );
-    await expect(api.applications.get("missing")).rejects.toMatchObject({
+    await expect(api.agentTasks.get("missing")).rejects.toMatchObject({
       name: "ApiError",
       code: 40400,
     });
-    await expect(api.applications.get("missing")).rejects.toBeInstanceOf(ApiError);
+    await expect(api.agentTasks.get("missing")).rejects.toBeInstanceOf(ApiError);
   });
 
   it("settings.llmKeys calls the right url", async () => {

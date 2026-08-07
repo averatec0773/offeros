@@ -14,8 +14,13 @@ npm ci
 
 ```bash
 npm run dev:web     # web app dev server → http://localhost:3000
-npm run dev         # extension dev build with HMR
+npm run dev         # extension dev build with HMR (separate browser)
 ```
+
+For iterating against your own Chrome instead: `npm run build -w
+@offeros/extension` stamps the unpacked output and a loaded unpacked extension
+auto-reloads itself within ~2s of a rebuild (first load needs one manual
+reload; open ATS tabs need a page refresh for new content-script code).
 
 The web app is the product and owns your data; the extension is a thin
 client that talks to it over `http://localhost:3000` by default.
@@ -70,7 +75,8 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`,
 - All gates above must be green.
 - Behavior changes need accompanying tests — don't rely on manual testing
   alone.
-- Follow the **web-first rule**: primary features live in the web app
-  (`apps/web`). The extension is execution only — it fills forms from data
-  the web app already computed, and should not grow its own data store, AI
-  calls, or standalone features.
+- Follow the **web-first rule**: the web app (`apps/web`) owns the data and
+  the AI; the extension owns the apply moment. The panel may _initiate_
+  server-side work (instant fill, tailor, cover letter, fit) and complete an
+  application, but it must not grow its own data store or make LLM calls of
+  its own — everything routes through the web app's local API.

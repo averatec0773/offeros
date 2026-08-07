@@ -45,9 +45,18 @@ localhost-only, single-user trust model, including:
 - Path traversal or arbitrary file write/read through résumé or template
   uploads.
 - Any path that causes the extension to attach a file other than the three
-  OfferOS-managed artifacts (tailored résumé PDF, stored original résumé,
-  confirmed cover-letter PDF), or to read a file from the page. File bytes
-  are fetched only from the configured local web-app API base.
+  OfferOS-managed artifacts it currently handles (tailored résumé PDF, stored
+  original résumé, cover-letter PDF), or to read a file from the page. File
+  bytes are fetched only from the configured local web-app API base. (This
+  describes the current implementation — if the set of managed files grows,
+  this section moves with it.)
+- The extension's host permissions are a fixed allowlist: `http://localhost/*`
+  (the web app) plus the supported ATS hosts — never `<all_urls>`. The
+  `localhost` grant is what lets the panel call the local API; the request
+  guard on the web app side is the enforcement boundary.
+- Panel-initiated writes (`POST /api/v1/agent/fill/instant`, targeted
+  tailor/cover-letter runs) go through the same request guard and envelope as
+  every other mutating route; they create/modify only local rows.
 
 ## Accepted risks (out of scope)
 

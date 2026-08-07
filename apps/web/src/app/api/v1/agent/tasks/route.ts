@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jobInfoSchema } from "@offeros/core";
 import { getDb } from "@/server/db/client";
 import { createApplication } from "@/server/repositories/application-repo";
-import { listAgentTasks, createAgentTask } from "@/server/repositories/agent-task-repo";
+import { createAgentTask } from "@/server/repositories/agent-task-repo";
 import { handle, ok } from "@/server/http/envelope";
 
 export const runtime = "nodejs";
@@ -20,10 +20,6 @@ const byJdSchema = z.object({
   source: z.string().optional(),
 });
 const createSchema = z.union([byApplicationSchema, byJdSchema]);
-
-export async function GET() {
-  return handle(() => ok(listAgentTasks(getDb())));
-}
 
 export async function POST(request: Request) {
   return handle(async () => {

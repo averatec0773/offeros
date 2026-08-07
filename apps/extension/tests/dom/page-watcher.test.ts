@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { pageSignature, watchPage } from "../../src/lib/overlay/page-watcher";
+import { pageSignature, watchPage } from "../../src/lib/engine/page-watcher";
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -174,7 +174,7 @@ describe("watchPage", () => {
 
 describe("effectiveDocOf (same-origin iframe hosting)", () => {
   it("picks the iframe document when it holds more fields", async () => {
-    const { effectiveDocOf } = await import("../../src/lib/overlay/page-watcher");
+    const { effectiveDocOf } = await import("../../src/lib/engine/page-watcher");
     document.body.innerHTML = "<input name='top1' />";
     const frame = document.createElement("iframe");
     document.body.appendChild(frame);
@@ -184,7 +184,7 @@ describe("effectiveDocOf (same-origin iframe hosting)", () => {
   });
 
   it("stays on the top document when it has equal or more fields", async () => {
-    const { effectiveDocOf } = await import("../../src/lib/overlay/page-watcher");
+    const { effectiveDocOf } = await import("../../src/lib/engine/page-watcher");
     document.body.innerHTML = "<input name='t1' /><input name='t2' />";
     const frame = document.createElement("iframe");
     document.body.appendChild(frame);
@@ -193,7 +193,7 @@ describe("effectiveDocOf (same-origin iframe hosting)", () => {
   });
 
   it("pageSignature reflects iframe field changes", async () => {
-    const { pageSignature } = await import("../../src/lib/overlay/page-watcher");
+    const { pageSignature } = await import("../../src/lib/engine/page-watcher");
     document.body.innerHTML = "";
     const frame = document.createElement("iframe");
     document.body.appendChild(frame);

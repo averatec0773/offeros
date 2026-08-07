@@ -109,16 +109,6 @@ export function uploadResume(
   return toSummary(row);
 }
 
-/** Sets `isPrimary`; when true, clears the flag on every other resume first
- *  so exactly one resume is ever primary. Null when `id` doesn't exist. */
-export function setPrimaryResume(db: Db, id: string, isPrimary: boolean): ResumeSummary | null {
-  const existing = db.select().from(resumes).where(eq(resumes.id, id)).get();
-  if (!existing) return null;
-  if (isPrimary) clearPrimaryFlag(db);
-  db.update(resumes).set({ isPrimary }).where(eq(resumes.id, id)).run();
-  return toSummary({ ...existing, isPrimary });
-}
-
 /**
  * Renames a resume, sets its note, and/or toggles its primary flag in one
  * patch. Setting `isPrimary: true` clears the flag on every other resume first

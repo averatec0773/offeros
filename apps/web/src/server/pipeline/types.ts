@@ -10,11 +10,6 @@ export type GateKind = "confirm" | "choice";
  * runner in 2b drives state itself, so registered steps return `void`; this
  * type is the contract Task 5 can adopt when steps start surfacing status/notes.
  */
-export interface StepResult {
-  status?: AgentTaskStatus;
-  note?: string;
-}
-
 export interface PipelineStep {
   key: PipelineStepKey;
   /**

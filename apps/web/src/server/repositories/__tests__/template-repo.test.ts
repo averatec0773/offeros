@@ -7,7 +7,6 @@ import { createDb, type Db } from "../../db/client";
 import {
   clearDefaultForKind,
   deleteTemplateRow,
-  findTemplateByName,
   getDefaultTemplate,
   getTemplate,
   listTemplates,
@@ -44,7 +43,6 @@ describe("template repo", () => {
     upsertTemplate(db, tpl({ id: "a", name: "Alpha" }));
     expect(getTemplate(db, "a")!.name).toBe("Alpha");
     expect(getTemplate(db, "missing")).toBeNull();
-    expect(findTemplateByName(db, "Alpha")!.id).toBe("a");
 
     upsertTemplate(db, tpl({ id: "a", name: "Alpha", content: "updated" }));
     expect(getTemplate(db, "a")!.content).toBe("updated");

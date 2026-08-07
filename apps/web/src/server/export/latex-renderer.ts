@@ -80,11 +80,6 @@ export function hasPdflatex(): boolean {
   return pdflatexPathCache != null;
 }
 
-/** Test hook — forces the next `hasPdflatex()` to re-probe. */
-export function __resetPdflatexCache(): void {
-  pdflatexPathCache = undefined;
-}
-
 /**
  * Render a cover-letter template to PDF via pdflatex.
  *

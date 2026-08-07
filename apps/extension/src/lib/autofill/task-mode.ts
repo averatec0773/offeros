@@ -52,7 +52,7 @@ function hostOf(url: string): string | null {
  *   1) a ticket whose applyLink parses to the same ATS job id as the page URL,
  *   2) else a ticket whose applyLink shares the page's hostname,
  *   3) else, if exactly one open ticket exists, that ticket,
- *   4) else null (ambiguous → stay standalone).
+ *   4) else null (ambiguous → no handoff claimed).
  * `jobIdFromUrl` is injected (the extension's recipes.jobIdFromUrl); it returns
  * "" or null when no id can be parsed, both treated as "no id".
  */

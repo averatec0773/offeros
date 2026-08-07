@@ -1,7 +1,7 @@
 // Workday Skills probe (Playwright, real Chromium).
 //
 // Proves the OfferOS skills capability against a faithful Workday shadow-DOM
-// skills widget (tests/fixtures/workday-skills.html) in a REAL browser — beyond
+// skills widget (scripts/fixtures/workday-skills.html) in a REAL browser — beyond
 // the happy-dom unit tests. It:
 //   1. shows the NAIVE approach (top-level [role="option"]) finds nothing,
 //      because Workday's ui5 skill picker keeps its options in shadow roots;
@@ -22,7 +22,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const FIXTURE = pathToFileURL(resolve(ROOT, "tests/fixtures/workday-skills.html")).href;
+const FIXTURE = pathToFileURL(resolve(ROOT, "scripts/fixtures/workday-skills.html")).href;
 const RESUME_SKILLS = ["C", "C++", "Linux", "CUDA", "Floating-point arithmetic"];
 const log = (...a) => console.log("[probe]", ...a);
 

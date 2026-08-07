@@ -18,14 +18,8 @@ import type {
   Template,
 } from "@offeros/core";
 import type { ParsedResume } from "@offeros/llm";
-import type { FillTaskBundle } from "@/server/services/fill-service";
 import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
 import type { LineDiff } from "./diff";
-
-/** An open fill ticket plus the job header the pending list renders. */
-export type FillTicket = FillHandoff & {
-  job: { title: string; company: string; applyLink?: string };
-};
 
 export class ApiError extends Error {
   readonly code: number;
@@ -78,16 +72,11 @@ const json = (method: string, payload: unknown): RequestInit => ({
 
 export const api = {
   profile: {
-    get: () => request<Profile | null>("/profile"),
     save: (profile: Profile) => request<Profile>("/profile", json("PUT", profile)),
     parseResume: (input: { resumeText: string }) =>
       request<ParsedResume>("/profile/parse-resume", json("POST", input)),
   },
   applications: {
-    list: () => request<Application[]>("/applications"),
-    get: (id: string) => request<Application>(`/applications/${id}`),
-    create: (input: { jobInfo: JobInfo; jdText?: string; status?: ApplicationStatus }) =>
-      request<Application>("/applications", json("POST", input)),
     update: (
       id: string,
       patch: Partial<{
@@ -102,21 +91,10 @@ export const api = {
     events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
   },
   agentTasks: {
-    list: () => request<AgentTask[]>("/agent/tasks"),
     create: (input: { applicationId: string }) =>
       request<AgentTask>("/agent/tasks", json("POST", input)),
     createFromJd: (input: { jobInfo: JobInfo; jdText?: string; source?: string }) =>
       request<AgentTask>("/agent/tasks", json("POST", input)),
-    update: (
-      id: string,
-      patch: Partial<{
-        status: AgentTask["status"];
-        step: number;
-        applicationInfo: ApplicationInfo;
-        resumeId: string;
-        coverLetterId: string;
-      }>,
-    ) => request<AgentTask>(`/agent/tasks/${id}`, json("PATCH", patch)),
     get: (id: string) =>
       request<{ task: AgentTask; jdAnalysis: JdAnalysis | null; artifacts: Artifact[] }>(
         `/agent/tasks/${id}`,
@@ -136,19 +114,7 @@ export const api = {
     fillResolve: (id: string, action: "fixed" | "applied-manually") =>
       request<AgentTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
   },
-  fill: {
-    pending: () => request<FillTicket[]>("/agent/fill/pending"),
-    claim: (handoffId: string) =>
-      request<FillTaskBundle>(`/agent/fill/handoffs/${handoffId}/claim`, json("POST", {})),
-    report: (taskId: string, body: { reports: FieldReport[]; complete?: boolean }) =>
-      request<AgentTask>(`/agent/tasks/${taskId}/fill/report`, json("POST", body)),
-    answer: (
-      taskId: string,
-      body: { question: string; label: string; context?: string; existingAnswer?: string },
-    ) => request<{ answer: string }>(`/agent/tasks/${taskId}/fill/answer`, json("POST", body)),
-  },
   fit: {
-    get: (applicationId: string) => request<FitAnalysis>(`/applications/${applicationId}/fit`),
     recompute: (applicationId: string) =>
       request<FitAnalysis>(`/applications/${applicationId}/fit`, json("POST", {})),
   },

@@ -17,15 +17,7 @@ export interface SkillsFillResult {
   skipped: string[];
 }
 
-export interface SkillsFillOptions {
-  /** Max time to wait for a skill's suggestions to render, per skill. */
-  settleMs?: number;
-  /** Poll interval while waiting for suggestions. */
-  pollMs?: number;
-  delay?: (ms: number) => Promise<void>;
-}
-
-const defaultDelay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function ownerWindow(el: Element): typeof globalThis {
   return (el.ownerDocument.defaultView as unknown as typeof globalThis) ?? globalThis;
@@ -45,14 +37,9 @@ function optionText(el: Element): string {
   return (el.textContent ?? "").trim();
 }
 
-export async function fillSkills(
-  host: Element,
-  skills: string[],
-  opts: SkillsFillOptions = {},
-): Promise<SkillsFillResult> {
-  const settleMs = opts.settleMs ?? 800;
-  const pollMs = opts.pollMs ?? 25;
-  const delay = opts.delay ?? defaultDelay;
+export async function fillSkills(host: Element, skills: string[]): Promise<SkillsFillResult> {
+  const settleMs = 800;
+  const pollMs = 25;
   const filled: string[] = [];
   const skipped: string[] = [];
 

@@ -4,7 +4,6 @@ import {
   isEngineFillRequest,
   isEngineCaptureJdRequest,
   isEngineAttachFileRequest,
-  isEngineRequest,
   isEnginePageChanged,
 } from "../src/lib/autofill/autofill-messaging";
 
@@ -41,22 +40,6 @@ describe("engine request guards", () => {
     expect(isEngineAttachFileRequest(null)).toBe(false);
   });
 
-  it("isEngineRequest matches any engine request but not the page-changed push", () => {
-    expect(isEngineRequest({ kind: "OFFEROS_ENGINE_SCAN" })).toBe(true);
-    expect(isEngineRequest({ kind: "OFFEROS_ENGINE_FILL", values: [] })).toBe(true);
-    expect(isEngineRequest({ kind: "OFFEROS_ENGINE_CAPTURE_JD" })).toBe(true);
-    expect(
-      isEngineRequest({
-        kind: "OFFEROS_ENGINE_ATTACH_FILE",
-        fieldId: "f1",
-        fileName: "resume.pdf",
-        mimeType: "application/pdf",
-        bytesBase64: "AAA=",
-      }),
-    ).toBe(true);
-    expect(isEngineRequest({ kind: "OFFEROS_ENGINE_PAGE_CHANGED" })).toBe(false);
-    expect(isEngineRequest({ kind: "FETCH_JD", url: "u" })).toBe(false);
-  });
 
   it("isEnginePageChanged matches only the page-changed push", () => {
     expect(isEnginePageChanged({ kind: "OFFEROS_ENGINE_PAGE_CHANGED" })).toBe(true);

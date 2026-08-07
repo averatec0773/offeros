@@ -4,8 +4,8 @@ import { settings } from "./settings";
 /**
  * Fetch wrapper over apps/web's `/api/v1` envelope. Never throws to callers —
  * network failure, a non-ok envelope, and malformed JSON all collapse to
- * `{ ok: false, error }` so standalone mode (web app not running) degrades
- * cleanly instead of surfacing an unhandled rejection.
+ * `{ ok: false, error }` so a stopped web app degrades cleanly (panel banner)
+ * instead of surfacing an unhandled rejection.
  */
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: string };
 

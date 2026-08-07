@@ -4,13 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { createDb, type Db } from "../../db/client";
-import {
-  listResumes,
-  uploadResume,
-  setPrimaryResume,
-  updateResume,
-  deleteResume,
-} from "../resume-service";
+import { listResumes, uploadResume, updateResume, deleteResume } from "../resume-service";
 import { resumes } from "../../db/schema";
 
 let db: Db;
@@ -171,32 +165,6 @@ describe("uploadResume", () => {
   });
 });
 
-describe("setPrimaryResume", () => {
-  it("clears the flag on all other resumes when set to true", () => {
-    const a = uploadResume(
-      db,
-      { name: "a.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64, isPrimary: true },
-      { storageDir },
-    );
-    const b = uploadResume(
-      db,
-      { name: "b.pdf", mimeType: "application/pdf", dataBase64: PDF_BASE64 },
-      { storageDir },
-    );
-
-    const updated = setPrimaryResume(db, b.id, true);
-    expect(updated?.isPrimary).toBe(true);
-
-    const all = listResumes(db);
-    expect(all.find((r) => r.id === a.id)?.isPrimary).toBe(false);
-    expect(all.find((r) => r.id === b.id)?.isPrimary).toBe(true);
-  });
-
-  it("returns null for a missing resume", () => {
-    expect(setPrimaryResume(db, "does-not-exist", true)).toBeNull();
-  });
-});
-
 describe("updateResume", () => {
   it("renames a resume and sets its note", () => {
     const r = uploadResume(
@@ -300,7 +268,7 @@ describe("deleteResume", () => {
     db.update(resumes).set({ createdAt: 3000 }).where(eq(resumes.id, third.id)).run();
 
     // Make the first one primary
-    setPrimaryResume(db, first.id, true);
+    updateResume(db, first.id, { isPrimary: true });
     let all = listResumes(db);
     expect(all.find((r) => r.id === first.id)?.isPrimary).toBe(true);
     expect(all.find((r) => r.id === second.id)?.isPrimary).toBe(false);

@@ -10,7 +10,7 @@ export interface FillResponse {
   ok: true;
   filled: number;
   /**
-   * Task-mode only: per-field write outcome for field reports. Ignored by standalone mode.
+   * Per-field write outcome for field reports (consumed by the panel's task mode).
    * Encoded as entry tuples (not a Map) so it survives the JSON serialization that
    * runtime/tabs.sendMessage applies across the panel↔content boundary — a Map arrives as {}.
    */
@@ -69,13 +69,6 @@ export interface ScrollToFieldResponse {
   ok: boolean;
 }
 
-export type EngineRequest =
-  | EngineScanRequest
-  | EngineFillRequest
-  | EngineCaptureJdRequest
-  | EngineAttachFileRequest
-  | EngineScrollToFieldRequest;
-
 function hasKind(m: unknown, kind: string): boolean {
   return typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === kind;
 }
@@ -101,15 +94,6 @@ export function isEngineScrollToFieldRequest(m: unknown): m is EngineScrollToFie
   return (
     hasKind(m, "OFFEROS_ENGINE_SCROLL_TO_FIELD") &&
     typeof (m as EngineScrollToFieldRequest).fieldId === "string"
-  );
-}
-export function isEngineRequest(m: unknown): m is EngineRequest {
-  return (
-    isEngineScanRequest(m) ||
-    isEngineFillRequest(m) ||
-    isEngineCaptureJdRequest(m) ||
-    isEngineAttachFileRequest(m) ||
-    isEngineScrollToFieldRequest(m)
   );
 }
 export function isEnginePageChanged(m: unknown): m is EnginePageChangedMessage {

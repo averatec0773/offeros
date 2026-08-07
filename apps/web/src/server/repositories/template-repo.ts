@@ -16,11 +16,6 @@ export function getTemplate(db: Db, id: string): Template | null {
   return row ? templateSchema.parse(row.doc) : null;
 }
 
-/** First template with the given name, or null. Used for re-import stability. */
-export function findTemplateByName(db: Db, name: string): Template | null {
-  return listTemplates(db).find((t) => t.name === name) ?? null;
-}
-
 /** The default template for `kind`, or null when none is marked default. */
 export function getDefaultTemplate(db: Db, kind: string): Template | null {
   return listTemplates(db).find((t) => t.kind === kind && t.isDefault) ?? null;

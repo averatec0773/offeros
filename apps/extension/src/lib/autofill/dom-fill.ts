@@ -10,7 +10,7 @@ import {
 
 let counter = 0;
 
-export function labelFor(el: HTMLElement): string {
+function labelFor(el: HTMLElement): string {
   const id = el.getAttribute("id");
   if (id) {
     const lbl = el.ownerDocument.querySelector(`label[for="${CSS.escape(id)}"]`);
@@ -124,7 +124,7 @@ export function resolveFieldEl(doc: Document, fieldId: string): HTMLElement | nu
   return doc.querySelector<HTMLElement>(`[data-offeros-id="${CSS.escape(fieldId)}"]`);
 }
 
-export function isComboboxInput(el: HTMLElement): boolean {
+function isComboboxInput(el: HTMLElement): boolean {
   return (
     el instanceof HTMLInputElement &&
     (el.getAttribute("role") === "combobox" || el.getAttribute("aria-autocomplete") === "list")
@@ -186,31 +186,12 @@ export type FillValue =
   | { fieldId: string; values: string[] };
 
 /**
- * Fill values by re-resolving each field from the live document at fill time —
- * element references held from scan time go stale when SPA hosts re-render.
- * File inputs are never written (never-submit + no-file-write invariants).
- * Combobox fields (react-select) route over postMessage to the MAIN-world
- * driver and count as filled ONLY on a verified ok:true reply (timeout or
- * failure → not counted, keeping the returned count truthful). Skills fields
- * carry an array and route to the driver's multi-tag loop; the field counts as
- * one filled when at least one skill was tagged.
- * Returns the number of fields actually filled.
- */
-export async function applyFill(
-  doc: Document,
-  values: FillValue[],
-  opts?: { comboTimeoutMs?: number; skillsTimeoutMs?: number },
-): Promise<number> {
-  return (await applyFillDetailed(doc, values, opts)).filled;
-}
-
-/**
- * Same fill routine as `applyFill`, but additionally returns a per-field
- * outcome map for task mode's field reports. A field appears in `outcomes` only
- * when it was actually attempted: `"filled"` on a verified write, `"failed"`
- * when a combobox/skills driver declined it. Fields skipped entirely (element
- * gone, file input, empty skills list) are absent — the caller reports them
- * from the plan status instead. `filled` matches `applyFill` exactly.
+ * Fill the given values into the live page, returning the count of verified
+ * writes plus a per-field outcome map for task mode's field reports. A field
+ * appears in `outcomes` only when it was actually attempted: `"filled"` on a
+ * verified write, `"failed"` when a combobox/skills driver declined it. Fields
+ * skipped entirely (element gone, file input, empty skills list) are absent —
+ * the caller reports them from the plan status instead.
  */
 export async function applyFillDetailed(
   doc: Document,

@@ -180,9 +180,6 @@ describe("/api/v1/agent/tasks", () => {
       )
     ).json();
     expect(task.result.status).toBe("queued");
-
-    const list = await (await tasksRoute.GET()).json();
-    expect(list.result.length).toBeGreaterThan(0);
   });
 
   it("400s when applicationId is missing", async () => {
