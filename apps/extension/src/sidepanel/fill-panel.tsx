@@ -13,6 +13,14 @@ import {
 } from "@offeros/autofill";
 import type { FillValue } from "../lib/autofill/dom-fill";
 import { jobIdFromUrl } from "../lib/autofill/recipes";
+import {
+  pickPostingLink,
+  rankPostingLinks,
+  isSameTarget,
+  mayAttemptRescue,
+  noteRescueAttempt,
+  clearRescueLog,
+} from "../lib/autofill/rescue";
 import { bytesToBase64 } from "../lib/autofill/base64";
 import type {
   ScanResponse,
@@ -114,6 +122,12 @@ export interface FillApi {
   ) => Promise<ApiResult<unknown>>;
   /** Undo a mark-as-submitted (mis-click recovery). */
   undoSubmission: (taskId: string) => Promise<ApiResult<unknown>>;
+  /** Ledger a self-recovery attempt (best-effort; failures ignored). */
+  postRepairEvent: (
+    taskId: string,
+    kind: "repair-attempted" | "repair-succeeded" | "repair-failed",
+    payload: { failure: string; action: string; detail?: string },
+  ) => Promise<ApiResult<unknown>>;
   /** Original stored résumé bytes (`bundle.attachResume === "original"`). */
   fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
   /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
@@ -506,6 +520,7 @@ export function FillPanel({
   tabUrl,
   getBoundHandoff,
   claimNonce = 0,
+  navigateTab,
   scanRetryTries = 16,
   scanRetryDelayMs = 500,
 }: {
@@ -526,6 +541,9 @@ export function FillPanel({
   /** Bumped when the server pushes a new fill ticket — re-attempts the claim
    *  without waiting for a page change. */
   claimNonce?: number;
+  /** Navigate the driven tab (self-recovery jumps). The task follows the tab,
+   *  so navigation never breaks the binding. */
+  navigateTab?: (url: string) => Promise<void>;
   /** Scan-probe retry budget while the content script is still injecting. */
   scanRetryTries?: number;
   scanRetryDelayMs?: number;
@@ -583,6 +601,48 @@ export function FillPanel({
   // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
   // the caption never claims an unsaved edit was saved.
   const [savedFieldIds, setSavedFieldIds] = useState<Set<string>>(new Set());
+
+  // Self-recovery: on a form-less page while HOLDING a task, jump the bound
+  // tab toward the form — the posting page's apply link first, else a
+  // confident title match among a board page's posting links. Each target is
+  // attempted at most once; every attempt/outcome is ledgered. Without a held
+  // task the panel stays quiet (a browsing user may want the JD page itself).
+  const attemptedRescueRef = useRef<Set<string>>(new Set());
+  const pendingRepairRef = useRef<{ failure: string; action: string } | null>(null);
+  useEffect(() => {
+    const sr = scanResult;
+    const b = bundleRef.current;
+    if (!sr || sr.ok || sr.reason !== "no_form" || sr.submittedLikely) return;
+    if (!b || !navigateTab) return;
+    // A previous jump that landed on ANOTHER form-less page is a failed repair.
+    if (pendingRepairRef.current) {
+      const p = pendingRepairRef.current;
+      pendingRepairRef.current = null;
+      void api.postRepairEvent(b.taskId, "repair-failed", { ...p, detail: "still no form" });
+    }
+    const here = sr.url ?? tabUrl;
+    // A form page's own "Application" link points at itself — never jump to
+    // where we already are.
+    const applyTarget =
+      sr.applyHref && !(here && isSameTarget(sr.applyHref, here)) ? sr.applyHref : undefined;
+    const matched = applyTarget
+      ? null
+      : pickPostingLink(sr.postingLinks ?? [], b.job.title ?? "");
+    const target = applyTarget ?? matched?.href;
+    if (!target || attemptedRescueRef.current.has(target)) return;
+    // Budgeted per tab and remembered across the remount every jump causes.
+    const store = typeof sessionStorage === "undefined" ? undefined : sessionStorage;
+    if (!mayAttemptRescue(store, target)) return;
+    attemptedRescueRef.current.add(target);
+    noteRescueAttempt(store, target);
+    const repair = applyTarget
+      ? { failure: "page-not-form", action: "jump-to-apply" }
+      : { failure: "board-directory", action: "jump-to-matched-posting" };
+    pendingRepairRef.current = repair;
+    void api.postRepairEvent(b.taskId, "repair-attempted", { ...repair, detail: target });
+    void navigateTab(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanResult, navigateTab]);
 
   // A pushed "ticket created" event re-opens the claim window: reset the
   // once-per-job claim latch and re-scan so the fresh ticket is picked up.
@@ -1020,9 +1080,48 @@ export function FillPanel({
     // Keep the last ok result on screen during a rescan so a page flip doesn't flash the placeholder.
     setScanResult((prev) => (prev?.ok ? prev : null));
     setScanTimedOut(false);
+    // Claim the handoff explicitly bound to this tab. Runs on form-less pages
+    // too: the workspace binds the tab BEFORE the form exists (a posting page
+    // whose Apply link hasn't been followed yet), and without the bundle the
+    // panel can't self-recover toward the form at all. Unbound tabs still need
+    // a real form — heuristic matching on a page we can't identify would be
+    // exactly the guessing the binding replaced.
+    const claimBoundHandoff = () => {
+      if (bundleRef.current !== null || claimTriedRef.current) return;
+      claimTriedRef.current = true;
+      void (async () => {
+        try {
+          const bound = (await getBoundHandoff?.()) ?? null;
+          if (!bound) {
+            claimTriedRef.current = false; // leave the window open for an ok scan
+            return;
+          }
+          const claimed = await api.claim(bound);
+          if (!live || !claimed.ok) return;
+          bundleRef.current = claimed.value;
+          setBundle(claimed.value);
+          hydrateFromBundle(claimed.value);
+          setScanNonce((n) => n + 1);
+        } catch {
+          // Web app unreachable / context invalidated → stay in "no task".
+        }
+      })();
+    };
+
     const handleScan = (res: ScanResponse) => {
       setScanResult(res);
-      if (!res.ok) return;
+      if (!res.ok) {
+        claimBoundHandoff();
+        return;
+      }
+      // A real form ends any rescue episode: ledger the success and restore a
+      // full jump budget for the next job in this tab.
+      if (typeof sessionStorage !== "undefined") clearRescueLog(sessionStorage);
+      if (pendingRepairRef.current && bundleRef.current) {
+        const p = pendingRepairRef.current;
+        pendingRepairRef.current = null;
+        void api.postRepairEvent(bundleRef.current.taskId, "repair-succeeded", p);
+      }
       // Plan against the claimed bundle's profile; before a claim there is no profile,
       // so everything reads as needs-answer/unknown until a bundle arrives.
       const { plan: newPlan, trace: newTrace } = explainFillPlan(res.descriptors, bundleRef.current?.fillProfile ?? null);
@@ -1138,6 +1237,25 @@ export function FillPanel({
     // submission confirmation — for a held task, that's the moment to offer
     // "mark as applied" with something real behind it, not a guess.
     const submittedLikely = noForm && scanResult.submittedLikely === true && bundle !== null;
+    // Directory rescue's human rung: the confident auto-jump didn't apply,
+    // but the page lists postings — offer the ranked candidates for THIS job.
+    const rescueCandidates =
+      noForm && !submittedLikely && bundle !== null && !scanResult.applyHref
+        ? rankPostingLinks(scanResult.postingLinks ?? [], bundle.job.title ?? "")
+            .filter((l) => l.score > 0)
+            .slice(0, 5)
+        : [];
+    const jumpToCandidate = (href: string) => {
+      const b = bundleRef.current;
+      if (b) {
+        void api.postRepairEvent(b.taskId, "repair-attempted", {
+          failure: "board-directory",
+          action: "user-picked-posting",
+          detail: href,
+        });
+      }
+      void navigateTab?.(href);
+    };
     return (
       <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
         <p className="text-body font-semibold text-text-primary">
@@ -1177,6 +1295,26 @@ export function FillPanel({
               </Button>
             )}
             {submitError && <p className="text-caption text-warning">{submitError}</p>}
+          </div>
+        )}
+        {rescueCandidates.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+              Is your job one of these?
+            </p>
+            <ul className="space-y-1">
+              {rescueCandidates.map((c) => (
+                <li key={c.href}>
+                  <button
+                    type="button"
+                    onClick={() => jumpToCandidate(c.href)}
+                    className="w-full rounded-xl border border-border-subtle bg-bg-base px-3 py-2 text-left text-caption text-text-primary transition-colors hover:border-brand"
+                  >
+                    {c.text}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {/* A posting page with no form yet (Lever/Ashby/Workday before the applicant

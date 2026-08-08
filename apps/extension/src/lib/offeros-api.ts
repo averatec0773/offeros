@@ -332,6 +332,16 @@ export function undoSubmission(
   return call<unknown>(`/agent/tasks/${taskId}/fill/undo`, json("POST", {}), fetchImpl);
 }
 
+/** Ledger a self-recovery attempt (best-effort bookkeeping; callers ignore failures). */
+export function postRepairEvent(
+  taskId: string,
+  kind: "repair-attempted" | "repair-succeeded" | "repair-failed",
+  payload: { failure: string; action: string; detail?: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<unknown>> {
+  return call<unknown>(`/agent/tasks/${taskId}/repair-event`, json("POST", { kind, payload }), fetchImpl);
+}
+
 /** In-panel "Tailor résumé for this job": run the tailor step out of band for a
  *  task parked at the fill/submit gate. Long-running (an LLM call) — resolves
  *  when the resume artifact exists, ready for `fetchArtifactPdf` preview. */

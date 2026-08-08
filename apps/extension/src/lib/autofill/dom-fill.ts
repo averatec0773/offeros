@@ -519,6 +519,11 @@ export async function applyFillDetailed(
       continue;
     }
     if (isComboboxInput(el)) {
+      // No retry rung here on purpose: when the driver can't drive a
+      // react-select, typing into its visible input leaves the underlying
+      // selection unset — the field submits empty while the input LOOKS
+      // filled. Reporting "failed" keeps the panel honest; the user gets a
+      // needs-user row that jumps straight to the control.
       if (await fillComboboxViaDriver(el, fieldId, value, timeoutMs)) {
         highlight(el);
         filled++;

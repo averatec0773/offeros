@@ -1,3 +1,4 @@
+import { classifyField, type FieldDescriptor } from "@offeros/autofill";
 import { matchAts, companyFromDocTitle, companyFromUrl } from "../autofill/recipes";
 import {
   scanFields,
@@ -65,14 +66,89 @@ export function createEngine(doc: Document): Engine {
   const SUBMITTED_MARKERS =
     /thank you for applying|thanks for applying|application (?:has been |was )?submitted|(?:received|we've received) your application|submission (?:was )?successful/i;
 
+  // A posting page's route to the form: a same-origin link whose target or
+  // text says "apply" (Ashby: <a href=".../application">, Greenhouse/Lever:
+  // "Apply" buttons/anchors). Href-based so the jump is a plain navigation
+  // the panel can perform and verify — no synthetic clicks.
+  const findApplyHref = (doc: Document): string | undefined => {
+    const anchors = Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"));
+    const candidates = anchors.filter((a) => {
+      const text = (a.textContent ?? "").trim();
+      const target = a.getAttribute("href") ?? "";
+      if (!(a.getBoundingClientRect().width > 0)) return false;
+      if (!/apply|application/i.test(`${text} ${target}`)) return false;
+      try {
+        return new URL(target, doc.location.href).origin === doc.location.origin;
+      } catch {
+        return false;
+      }
+    });
+    const best =
+      candidates.find((a) => /\/application\/?$/.test(a.getAttribute("href") ?? "")) ??
+      candidates.find((a) => /^apply/i.test((a.textContent ?? "").trim()));
+    return best ? new URL(best.getAttribute("href")!, doc.location.href).toString() : undefined;
+  };
+
+  // Directory-rescue candidates: same-origin links whose path shapes like an
+  // individual posting (Ashby/Lever tenant/uuid, Greenhouse /jobs/<id>). The
+  // panel matches these against the held job's title.
+  const POSTING_PATH = /\/(?:[0-9a-f-]{36}|jobs\/\d+)(?:\/|$)/i;
+  const listPostingLinks = (doc: Document): { href: string; text: string }[] => {
+    const seen = new Set<string>();
+    const out: { href: string; text: string }[] = [];
+    for (const a of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+      const raw = a.getAttribute("href") ?? "";
+      let resolved: URL;
+      try {
+        resolved = new URL(raw, doc.location.href);
+      } catch {
+        continue;
+      }
+      if (resolved.origin !== doc.location.origin || !POSTING_PATH.test(resolved.pathname)) continue;
+      const text = (a.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (!text || text.length > 120) continue;
+      const href = resolved.toString();
+      if (seen.has(href)) continue;
+      seen.add(href);
+      out.push({ href, text });
+      if (out.length >= 80) break;
+    }
+    return out;
+  };
+
+  // Every real application form asks for at least one identity field. A job
+  // BOARD, by contrast, has filter dropdowns (department/location/type) and a
+  // list of postings — without this check a directory reads as a form with a
+  // handful of junk fields (observed live: 4 filter selects on a real board),
+  // which is precisely the state that leaves a task stuck with nothing to fill.
+  const IDENTITY_FIELDS = new Set(["fullName", "firstName", "lastName", "email", "phone", "resume"]);
+  const looksLikeApplication = (descriptors: FieldDescriptor[]): boolean =>
+    descriptors.some((d) => {
+      const canonical = classifyField(d);
+      return canonical !== null && IDENTITY_FIELDS.has(canonical);
+    });
+
   const scan = async (): Promise<ScanResponse> => {
     const href = url();
     const recipe = matchAts(href);
     if (!recipe) return { ok: false, reason: "not_supported" };
     const scanned = scanFields(edoc().body, recipe);
-    if (scanned.length === 0) {
-      const text = (edoc().body?.textContent ?? "").slice(0, 20000);
-      return { ok: false, reason: "no_form", submittedLikely: SUBMITTED_MARKERS.test(text) };
+    const d0 = edoc();
+    const postingLinks = listPostingLinks(d0);
+    const isDirectory =
+      scanned.length > 0 &&
+      postingLinks.length >= 3 &&
+      !looksLikeApplication(scanned.map((s) => s.descriptor));
+    if (scanned.length === 0 || isDirectory) {
+      const text = (d0.body?.textContent ?? "").slice(0, 20000);
+      return {
+        ok: false,
+        reason: "no_form",
+        url: href,
+        submittedLikely: SUBMITTED_MARKERS.test(text),
+        applyHref: findApplyHref(d0),
+        postingLinks,
+      };
     }
     const meta = pageMeta();
     return {

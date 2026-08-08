@@ -10,6 +10,16 @@ export type ScanResponse =
       /** no_form only: the page reads like a submission confirmation ("Thank
        *  you for applying…") — evidence for the mark-as-applied suggestion. */
       submittedLikely?: boolean;
+      /** no_form only: the scanned page's own URL — lets the panel refuse a
+       *  jump to where it already is (a form page's own "Application" tab
+       *  link points at itself; without this the rescue loops forever). */
+      url?: string;
+      /** no_form only: a same-origin link that leads to the application form
+       *  (a posting page's "Apply" affordance) — the self-recovery jump target. */
+      applyHref?: string;
+      /** no_form only: same-origin links that look like individual job
+       *  postings (a board/directory page) — directory-rescue candidates. */
+      postingLinks?: { href: string; text: string }[];
     };
 
 export interface FillResponse {

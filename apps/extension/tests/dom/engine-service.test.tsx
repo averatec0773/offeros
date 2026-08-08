@@ -52,14 +52,57 @@ describe("engine SCAN handler", () => {
     history.replaceState(null, "", greenhouseUrl);
     document.body.innerHTML = `<main><h1>Nothing here</h1></main>`;
     const res = await createEngine(document).scan();
-    expect(res).toEqual({ ok: false, reason: "no_form", submittedLikely: false });
+    expect(res).toMatchObject({ ok: false, reason: "no_form", submittedLikely: false });
+    expect((res as { applyHref?: string }).applyHref).toBeUndefined();
+    expect((res as { postingLinks?: unknown[] }).postingLinks).toEqual([]);
   });
 
   it("flags a form-less confirmation page as submittedLikely", async () => {
     history.replaceState(null, "", greenhouseUrl);
     document.body.innerHTML = `<main><h1>Thank you for applying!</h1><p>We received your application.</p></main>`;
     const res = await createEngine(document).scan();
-    expect(res).toEqual({ ok: false, reason: "no_form", submittedLikely: true });
+    expect(res).toMatchObject({ ok: false, reason: "no_form", submittedLikely: true });
+  });
+
+  it("surfaces a posting page's apply link as the self-recovery jump target", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    // happy-dom gives elements zero size; stub the visibility check the
+    // affordance scan relies on.
+    const origRect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () {
+      return { width: 100, height: 20 } as DOMRect;
+    };
+    try {
+      document.body.innerHTML = `
+        <main>
+          <h1>Senior Software Engineer</h1>
+          <a href="/acme/jobs/1">Back to the job</a>
+          <a href="/acme/jobs/1/application">Apply for this Job</a>
+        </main>`;
+      const res = (await createEngine(document).scan()) as { applyHref?: string };
+      expect(res.applyHref).toBe("https://boards.greenhouse.io/acme/jobs/1/application");
+    } finally {
+      Element.prototype.getBoundingClientRect = origRect;
+    }
+  });
+
+  it("lists same-origin posting links on a board page (directory-rescue candidates)", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    document.body.innerHTML = `
+      <main>
+        <a href="/acme/jobs/11">Senior Software Engineer, Data</a>
+        <a href="/acme/jobs/12">Design Operations Manager</a>
+        <a href="https://elsewhere.test/acme/jobs/13">Off-site posting</a>
+        <a href="/about">About us</a>
+      </main>`;
+    const res = (await createEngine(document).scan()) as {
+      postingLinks?: { href: string; text: string }[];
+    };
+    expect(res.postingLinks?.map((l) => l.text)).toEqual([
+      "Senior Software Engineer, Data",
+      "Design Operations Manager",
+    ]);
+    expect(res.postingLinks?.[0]!.href).toBe("https://boards.greenhouse.io/acme/jobs/11");
   });
 
   it("returns not_supported for an unsupported url", async () => {

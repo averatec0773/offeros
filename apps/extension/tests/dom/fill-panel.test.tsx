@@ -110,6 +110,7 @@ const emptyApi = (): FillApi => ({
   computeFit: vi.fn(async (): Promise<ApiResult<FitSummary>> => ({ ok: true, value: FIT })),
   resolveFillAction: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   undoSubmission: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
+  postRepairEvent: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   fetchResumeFile: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
@@ -153,6 +154,7 @@ const renderPanel = (
     webReachable?: boolean;
     tabUrl?: string;
     getBoundHandoff?: () => Promise<string | null>;
+    navigateTab?: (url: string) => Promise<void>;
   } = {},
 ) => {
   const fill = over.fill ?? vi.fn(async (v: FillValue[]) => okFill(v));
@@ -177,6 +179,7 @@ const renderPanel = (
       webReachable={over.webReachable ?? true}
       tabUrl={over.tabUrl ?? scanOk.url}
       getBoundHandoff={over.getBoundHandoff}
+      navigateTab={over.navigateTab}
     />,
   );
   return { fill, capture, attachFile, api, openWebApp, openApplication };
@@ -858,6 +861,157 @@ describe("FillPanel", () => {
     expect(select.tagName).toBe("SELECT");
     expect(select.value).toBe("Yes");
     expect([...select.options].map((o) => o.value)).toEqual(["Yes", "No"]);
+  });
+
+  describe("self-recovery on form-less pages", () => {
+    const heldTaskApi = (): FillApi => ({
+      ...emptyApi(),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+    });
+
+    /** Scan the form once (so a task gets claimed), then the given form-less page. */
+    const claimThen = (later: ScanResponse) => {
+      let n = 0;
+      return async (): Promise<ScanResponse> => {
+        n += 1;
+        return n === 1 ? scanOk : later;
+      };
+    };
+
+    const renderWithScan = (
+      scan: () => Promise<ScanResponse>,
+      api: FillApi,
+      navigateTab: (url: string) => Promise<void>,
+      rescanNonce = 0,
+    ) =>
+      render(
+        <FillPanel
+          scan={scan}
+          fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+          capture={vi.fn(async () => captureOk)}
+          attachFile={vi.fn(okAttach)}
+          api={api}
+          rescanNonce={rescanNonce}
+          openWebApp={vi.fn()}
+          openApplication={vi.fn()}
+          webReachable
+          tabUrl={scanOk.url}
+          navigateTab={navigateTab}
+        />,
+      );
+
+    it("jumps the bound tab to the posting's apply link and ledgers the attempt", async () => {
+      const api = heldTaskApi();
+      const navigateTab = vi.fn(async () => {});
+      const scan = claimThen({
+        ok: false,
+        reason: "no_form",
+        applyHref: "https://boards.greenhouse.io/acme/jobs/1/application",
+      });
+      const { rerender } = renderWithScan(scan, api, navigateTab);
+      await screen.findByText("Engineer · Acme");
+
+      rerender(
+        <FillPanel
+          scan={scan}
+          fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+          capture={vi.fn(async () => captureOk)}
+          attachFile={vi.fn(okAttach)}
+          api={api}
+          rescanNonce={1}
+          openWebApp={vi.fn()}
+          openApplication={vi.fn()}
+          webReachable
+          tabUrl={scanOk.url}
+          navigateTab={navigateTab}
+        />,
+      );
+      await waitFor(() =>
+        expect(navigateTab).toHaveBeenCalledWith("https://boards.greenhouse.io/acme/jobs/1/application"),
+      );
+      expect(api.postRepairEvent).toHaveBeenCalledWith(
+        "t1",
+        "repair-attempted",
+        expect.objectContaining({ failure: "page-not-form", action: "jump-to-apply" }),
+      );
+      // One attempt per target — a repeated scan of the same page must not loop.
+      const calls = navigateTab.mock.calls.length;
+      rerender(
+        <FillPanel
+          scan={scan}
+          fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+          capture={vi.fn(async () => captureOk)}
+          attachFile={vi.fn(okAttach)}
+          api={api}
+          rescanNonce={2}
+          openWebApp={vi.fn()}
+          openApplication={vi.fn()}
+          webReachable
+          tabUrl={scanOk.url}
+          navigateTab={navigateTab}
+        />,
+      );
+      await waitFor(() => expect(navigateTab.mock.calls.length).toBe(calls));
+    });
+
+    it("never jumps without a held task (a browsing user keeps the JD page)", async () => {
+      const navigateTab = vi.fn(async () => {});
+      renderPanel({
+        api: emptyApi(),
+        scan: async () => ({
+          ok: false,
+          reason: "no_form",
+          applyHref: "https://boards.greenhouse.io/acme/jobs/1/application",
+        }),
+        navigateTab,
+      });
+      await screen.findByText("No form detected");
+      expect(navigateTab).not.toHaveBeenCalled();
+    });
+
+    it("on a board page, offers the ranked postings for the held job instead of guessing", async () => {
+      const api = heldTaskApi();
+      const navigateTab = vi.fn(async () => {});
+      // No confident title match for "Engineer" — the human rung renders.
+      const scan = claimThen({
+        ok: false,
+        reason: "no_form",
+        postingLinks: [
+          { href: "https://boards.greenhouse.io/acme/jobs/11", text: "Engineer, Platform" },
+          { href: "https://boards.greenhouse.io/acme/jobs/12", text: "Head of Marketing" },
+        ],
+      });
+      const { rerender } = renderWithScan(scan, api, navigateTab);
+      await screen.findByText("Engineer · Acme");
+      rerender(
+        <FillPanel
+          scan={scan}
+          fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+          capture={vi.fn(async () => captureOk)}
+          attachFile={vi.fn(okAttach)}
+          api={api}
+          rescanNonce={1}
+          openWebApp={vi.fn()}
+          openApplication={vi.fn()}
+          webReachable
+          tabUrl={scanOk.url}
+          navigateTab={navigateTab}
+        />,
+      );
+      const candidate = await screen.findByRole("button", { name: "Engineer, Platform" });
+      expect(navigateTab).not.toHaveBeenCalled(); // no auto-jump on a weak match
+      expect(screen.queryByRole("button", { name: "Head of Marketing" })).toBeNull(); // score 0
+      await act(async () => {
+        await userEvent.click(candidate);
+      });
+      expect(navigateTab).toHaveBeenCalledWith("https://boards.greenhouse.io/acme/jobs/11");
+      expect(api.postRepairEvent).toHaveBeenCalledWith(
+        "t1",
+        "repair-attempted",
+        expect.objectContaining({ action: "user-picked-posting" }),
+      );
+    });
   });
 
   describe("submission evidence + undo", () => {

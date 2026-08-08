@@ -26,6 +26,7 @@ import {
   instantFill,
   listAnswers,
   postReport,
+  postRepairEvent,
   resolveFillAction,
   tailorResume,
   undoSubmission,
@@ -61,6 +62,7 @@ const api = {
   computeFit,
   resolveFillAction,
   undoSubmission,
+  postRepairEvent,
   fetchResumeFile,
   fetchArtifactPdf,
   listAnswers,
@@ -179,6 +181,12 @@ export default function App() {
     () => (tabId >= 0 ? getFillBinding(tabId) : Promise.resolve(null)),
     [tabId],
   );
+  const navigateTab = useCallback(
+    async (url: string) => {
+      if (tabId >= 0) await browser.tabs.update(tabId, { url });
+    },
+    [tabId],
+  );
   const openWebApp = useMemo(() => () => void browser.tabs.create({ url: apiBase || undefined }), [apiBase]);
   const openApplication = useCallback(
     (applicationId: string) => void browser.tabs.create({ url: `${apiBase}/applications/${applicationId}` }),
@@ -255,6 +263,7 @@ export default function App() {
             tabUrl={activeTab?.url ?? ""}
             getBoundHandoff={getBoundHandoff}
             claimNonce={claimNonce}
+            navigateTab={navigateTab}
           />
         ) : (
           <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
