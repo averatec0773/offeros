@@ -1,6 +1,13 @@
 import { startDevReload } from "../src/lib/dev-reload";
 import { matchAts } from "../src/lib/autofill/recipes";
 import { isStartWebAppRequest, startWebAppViaHost } from "../src/lib/web-launcher";
+import {
+  isOpenFillTabRequest,
+  isGetFillBindingRequest,
+  isOpenableFillUrl,
+  type OpenFillTabResponse,
+  type GetFillBindingResponse,
+} from "../src/lib/fill-binding";
 
 export default defineBackground(() => {
   // The toolbar action opens the side panel (Chrome only); with
@@ -90,12 +97,46 @@ export default defineBackground(() => {
       .catch(() => {});
   });
 
-  // Panel → native host bridge: only the background may talk to the native
-  // messaging host, so the panel's "Start OfferOS" routes through here.
-  browser.runtime.onMessage.addListener((msg: unknown): Promise<unknown> | undefined => {
-    if (isStartWebAppRequest(msg)) return startWebAppViaHost();
-    return undefined;
+  // Explicit fill-tab bindings: tabId → handoffId, written when the web app
+  // asks us to open an apply page and read by the panel to claim the exact
+  // handoff (no URL guessing). storage.session survives worker restarts but
+  // not browser restarts — correct lifetime, since tab ids reset with the
+  // browser anyway.
+  const bindingKey = (tabId: number) => `fillBinding:${tabId}`;
+  const openFillTab = async (handoffId: string, url: string): Promise<OpenFillTabResponse> => {
+    if (!isOpenableFillUrl(url)) return { ok: false };
+    try {
+      const tab = await browser.tabs.create({ url, active: true });
+      if (tab.id === undefined) return { ok: false };
+      await chrome.storage.session.set({ [bindingKey(tab.id)]: handoffId });
+      return { ok: true, tabId: tab.id };
+    } catch {
+      return { ok: false };
+    }
+  };
+  const getFillBindingFor = async (tabId: number | undefined): Promise<GetFillBindingResponse> => {
+    if (tabId === undefined) return { handoffId: null };
+    const key = bindingKey(tabId);
+    const stored = await chrome.storage.session.get(key);
+    const v = stored[key];
+    return { handoffId: typeof v === "string" && v !== "" ? v : null };
+  };
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    void chrome.storage.session.remove(bindingKey(tabId));
   });
+
+  // Panel → native host bridge + fill-binding queries: only the background
+  // may talk to the native messaging host or the binding store.
+  browser.runtime.onMessage.addListener(
+    (msg: unknown, sender: { tab?: { id?: number } }): Promise<unknown> | undefined => {
+      if (isStartWebAppRequest(msg)) return startWebAppViaHost();
+      if (isOpenFillTabRequest(msg)) return openFillTab(msg.handoffId, msg.url);
+      if (isGetFillBindingRequest(msg)) {
+        return getFillBindingFor(msg.tabId ?? sender.tab?.id);
+      }
+      return undefined;
+    },
+  );
 
   // Dev builds only (inert without a build stamp / with an update_url): reload
   // the whole extension when a fresh build lands in the unpacked directory.

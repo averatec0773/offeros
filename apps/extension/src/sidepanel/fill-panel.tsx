@@ -488,6 +488,7 @@ export function FillPanel({
   openApplication,
   webReachable,
   tabUrl,
+  getBoundHandoff,
   scanRetryTries = 16,
   scanRetryDelayMs = 500,
 }: {
@@ -502,6 +503,9 @@ export function FillPanel({
   ) => Promise<AttachFileResponse>;
   /** Bring a scanned field into view on the page (scroll + highlight flash). */
   scrollToField?: (fieldId: string) => Promise<unknown>;
+  /** The handoff explicitly bound to this tab (workspace-opened tabs) — wins
+   *  over URL-heuristic ticket matching when present. */
+  getBoundHandoff?: () => Promise<string | null>;
   /** Scan-probe retry budget while the content script is still injecting. */
   scanRetryTries?: number;
   scanRetryDelayMs?: number;
@@ -995,18 +999,25 @@ export function FillPanel({
         setDone(false);
       }
 
-      // Auto-claim: one attempt per job while no bundle is held. Any failure (web app
-      // down, no ticket, no match, claim rejected) is a silent no-op → panel stays in
-      // the "no task" state. On success, rebuild the plan against the bundle profile.
+      // Auto-claim: one attempt per job while no bundle is held. An explicit
+      // tab binding (the workspace opened this tab for a specific handoff)
+      // wins outright — the task follows the TAB, so redirects or the user
+      // navigating from a careers directory to the real posting never break
+      // it. Only unbound tabs fall back to the URL-heuristic match. Any
+      // failure is a silent no-op → panel stays in the "no task" state.
       if (bundleRef.current === null && !claimTriedRef.current) {
         claimTriedRef.current = true;
         void (async () => {
           try {
-            const pend = await api.getPending();
-            if (!live || !pend.ok || pend.value.length === 0) return;
-            const match = matchHandoff(pend.value, res.url, jobIdFromUrl);
-            if (!match) return;
-            const claimed = await api.claim(match.id);
+            const bound = (await getBoundHandoff?.()) ?? null;
+            let target = bound;
+            if (!target) {
+              const pend = await api.getPending();
+              if (!live || !pend.ok || pend.value.length === 0) return;
+              target = matchHandoff(pend.value, res.url, jobIdFromUrl)?.id ?? null;
+            }
+            if (!target) return;
+            const claimed = await api.claim(target);
             if (!live || !claimed.ok) return;
             bundleRef.current = claimed.value;
             setBundle(claimed.value);

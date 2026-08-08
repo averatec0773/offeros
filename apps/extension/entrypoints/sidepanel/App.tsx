@@ -32,6 +32,7 @@ import {
 } from "../../src/lib/offeros-api";
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
+import { getFillBinding } from "../../src/lib/fill-binding";
 import { PlugZap } from "lucide-react";
 
 // Supported ATS shown to orient the user on an unsupported page. Data, not UI copy.
@@ -160,6 +161,10 @@ export default function App() {
     (fieldId: string) => sendEngineScrollToField(tabId, fieldId),
     [tabId],
   );
+  const getBoundHandoff = useCallback(
+    () => (tabId >= 0 ? getFillBinding(tabId) : Promise.resolve(null)),
+    [tabId],
+  );
   const openWebApp = useMemo(() => () => void browser.tabs.create({ url: apiBase || undefined }), [apiBase]);
   const openApplication = useCallback(
     (applicationId: string) => void browser.tabs.create({ url: `${apiBase}/applications/${applicationId}` }),
@@ -225,6 +230,7 @@ export default function App() {
             openApplication={openApplication}
             webReachable={webReachable}
             tabUrl={activeTab?.url ?? ""}
+            getBoundHandoff={getBoundHandoff}
           />
         ) : (
           <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">

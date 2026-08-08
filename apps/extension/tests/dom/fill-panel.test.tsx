@@ -151,6 +151,7 @@ const renderPanel = (
     openApplication?: (id: string) => void;
     webReachable?: boolean;
     tabUrl?: string;
+    getBoundHandoff?: () => Promise<string | null>;
   } = {},
 ) => {
   const fill = over.fill ?? vi.fn(async (v: FillValue[]) => okFill(v));
@@ -174,6 +175,7 @@ const renderPanel = (
       openApplication={openApplication}
       webReachable={over.webReachable ?? true}
       tabUrl={over.tabUrl ?? scanOk.url}
+      getBoundHandoff={over.getBoundHandoff}
     />,
   );
   return { fill, capture, attachFile, api, openWebApp, openApplication };
@@ -645,6 +647,40 @@ describe("FillPanel", () => {
     ).toBeInTheDocument();
     // Still no bundle: the instant entry stays available.
     expect(screen.getByRole("button", { name: "Fill this page with my profile" })).toBeInTheDocument();
+  });
+
+  it("a tab-bound handoff is claimed directly, beating URL heuristics that would refuse", async () => {
+    // The pending ticket points at ANOTHER tenant — heuristics would (rightly)
+    // refuse it. The explicit binding says this tab was opened for h9, so h9
+    // is claimed without consulting the ticket pool at all.
+    const boundBundle = { ...bundle, handoffId: "h9" };
+    const api: FillApi = {
+      ...emptyApi(),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [{ ...ticket, id: "other", applyLink: "https://jobs.ashbyhq.com/other-co/1" }],
+      })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: boundBundle })),
+    };
+    renderPanel({
+      api,
+      getBoundHandoff: async () => "h9",
+      tabUrl: "https://jobs.ashbyhq.com/acme/2/application",
+    });
+    await screen.findByText("Engineer · Acme");
+    expect(api.claim).toHaveBeenCalledWith("h9");
+    expect(api.getPending).not.toHaveBeenCalled();
+  });
+
+  it("an unbound tab still falls back to the URL-heuristic ticket match", async () => {
+    const api: FillApi = {
+      ...emptyApi(),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+    };
+    renderPanel({ api, getBoundHandoff: async () => null });
+    await screen.findByText("Engineer · Acme");
+    expect(api.claim).toHaveBeenCalledWith("h1");
   });
 
   it("claims a matching handoff, fills the fillable field, generates open-ended answers, and reports", async () => {

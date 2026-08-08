@@ -13,6 +13,7 @@ import {
 } from "@offeros/core";
 import type { LineDiff } from "@/lib/diff";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
+import { extensionPresent, openFillTabViaExtension } from "@/lib/extension-bridge";
 import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
 import { JobCard } from "./job-card";
@@ -266,16 +267,26 @@ export function WorkspaceClient({
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    // Open synchronously, before the await, so browsers' popup-blocker
-    // heuristics still treat it as user-initiated. The link is already known
-    // from the application record; fall back to the handoff's link only if
-    // it wasn't (current behavior, minus the popup-safety).
+    // With the extension present, IT opens the tab — bound to the handoff id,
+    // so the panel claims exactly this task with no URL guessing, and the
+    // binding survives redirects or the user navigating to the right posting.
+    // Without it, open synchronously before the await so browsers'
+    // popup-blocker heuristics still treat the open as user-initiated.
     const knownApplyLink = application.jobInfo.applyLink;
-    if (knownApplyLink) window.open(knownApplyLink, "_blank");
+    const viaExtension = extensionPresent();
+    if (!viaExtension && knownApplyLink) window.open(knownApplyLink, "_blank");
     try {
       const handoff = await api.agentTasks.fillHandoff(taskId);
       setTicketCreated(true);
-      if (!knownApplyLink && handoff.applyLink) window.open(handoff.applyLink, "_blank");
+      const link = knownApplyLink ?? handoff.applyLink;
+      if (viaExtension && link) {
+        const opened = await openFillTabViaExtension(handoff.id, link);
+        // Stale bridge (extension updated/disabled since page load) — degrade
+        // to a plain open; the panel's heuristic match still has a chance.
+        if (!opened) window.open(link, "_blank");
+      } else if (!viaExtension && !knownApplyLink && handoff.applyLink) {
+        window.open(handoff.applyLink, "_blank");
+      }
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

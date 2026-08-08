@@ -1,6 +1,7 @@
 import { matchAts } from "../src/lib/autofill/recipes";
 import { registerEngine } from "../src/lib/engine/engine-service";
 import { createPanelOverlay } from "../src/lib/overlay/panel-overlay";
+import { getFillBinding } from "../src/lib/fill-binding";
 
 export default defineContentScript({
   matches: [
@@ -41,6 +42,12 @@ export default defineContentScript({
       logoUrl: browser.runtime.getURL("/icon/48.png"),
     });
     ctx.onInvalidated(() => overlay.destroy());
+
+    // A tab the workspace opened for a specific handoff auto-expands the
+    // panel — the user asked to fill this job, so the copilot shows up ready.
+    void getFillBinding().then((handoffId) => {
+      if (handoffId) overlay.open();
+    });
 
     // Keep-alive: Greenhouse job boards hydrate <html>; a hydration mismatch
     // rebuilds the whole tree and silently drops foreign DOM — our style tag
