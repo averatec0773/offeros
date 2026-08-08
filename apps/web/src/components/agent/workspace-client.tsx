@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
 import { JobCard } from "./job-card";
 import { StepTimeline } from "./step-timeline";
-import { AgentStatusBar } from "./agent-status-bar";
+import { AgentStatusBar, type QueueJob } from "./agent-status-bar";
 import { GateCard, type GateKind } from "./gate-card";
 import { TweakInput } from "./tweak-input";
 import { ArtifactViewer } from "./artifact-viewer";
@@ -96,12 +96,14 @@ export function WorkspaceClient({
   initialJdAnalysis,
   initialArtifacts,
   initialFit,
+  queue,
 }: {
   application: Application;
   initialTask: AgentTask | null;
   initialJdAnalysis: JdAnalysis | null;
   initialArtifacts: Artifact[];
   initialFit: FitAnalysis | null;
+  queue?: QueueJob[];
 }) {
   const [taskId, setTaskId] = useState<string | null>(initialTask?.id ?? null);
   const [task, setTask] = useState<AgentTask | null>(initialTask);
@@ -379,7 +381,12 @@ export function WorkspaceClient({
 
   return (
     <main className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col px-6 py-6">
-      <AgentStatusBar state={statusBarState} jobCount={1} onAction={statusBarAction} />
+      <AgentStatusBar
+        state={statusBarState}
+        jobCount={queue?.length ?? 1}
+        onAction={statusBarAction}
+        queue={queue}
+      />
 
       {showConnectBanner && <ConnectProviderNote message="Connect your AI provider to start" />}
 

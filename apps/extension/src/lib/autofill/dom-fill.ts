@@ -239,6 +239,46 @@ export function scanFields(
     }
     out.push({ descriptor: describe(el, usedIds), el });
   }
+
+  // Ashby "Yes/No" widgets: a display:none checkbox behind two visible
+  // buttons. The hidden input fails isScannable, so without this pass the
+  // question is entirely invisible to the panel (observed on real postings:
+  // work-authorization / commute / policy-consent questions all use it).
+  for (const container of Array.from(form.querySelectorAll<HTMLElement>('div[class*="_yesno"]'))) {
+    const hiddenInput = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const options = buttons.map((b) => (b.textContent ?? "").trim()).filter((t) => t !== "");
+    if (!hiddenInput || options.length < 2) continue;
+    const title = precedingTitle(container, options);
+    const question = title?.text ?? "";
+    const name = hiddenInput.getAttribute("name") || hiddenInput.id || "";
+    const fieldId = stableFieldId(`group|yesno:${name}|${question}`, usedIds);
+    container.setAttribute("data-offeros-id", fieldId);
+    out.push({
+      descriptor: {
+        fieldId,
+        label: question,
+        name: `yesno:${name}`,
+        autocomplete: "",
+        // Semantically a single-choice group — reuses the whole choice-group
+        // pipeline (classification short-circuit, answer-bank/AI option fill).
+        type: "radio-group",
+        placeholder: "",
+        ariaLabel: "",
+        required: /\*/.test(question) || (title?.required ?? false),
+        options,
+        currentValue: buttons.find((b) => /(^|\s)_active_/.test(b.className))?.textContent?.trim() ?? "",
+      },
+      el: container,
+    });
+  }
+
+  // The yes/no pass appends out of document order — restore it so the panel's
+  // field list reads top-to-bottom like the page. Ids are already assigned, so
+  // sorting cannot destabilize them.
+  out.sort((a, b) =>
+    a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+  );
   return out;
 }
 
@@ -280,6 +320,34 @@ function fillChoiceGroup(doc: Document, first: HTMLInputElement, value: string):
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
   return el.checked ? el : null;
+}
+
+/** An Ashby yes/no widget container (see the scan pass above). */
+function isYesNoWidget(el: HTMLElement): boolean {
+  return el instanceof HTMLDivElement && /(?:^|\s)_yesno/.test(el.className);
+}
+
+/** Answer a yes/no widget by clicking the matching visible button. React
+ *  applies the selection asynchronously, so verification polls briefly for
+ *  the button's active class before declaring the click landed. */
+async function fillYesNoWidget(container: HTMLElement, value: string): Promise<boolean> {
+  const buttons = Array.from(container.querySelectorAll("button"));
+  const labels = buttons.map((b) => (b.textContent ?? "").trim());
+  const target = matchOption(
+    labels.map((l) => ({ label: l, value: l })),
+    value,
+  );
+  if (!target) return false;
+  const btn = buttons[labels.indexOf(String(target.label ?? ""))];
+  if (!btn) return false;
+  if (/(^|\s)_active_/.test(btn.className)) return true; // already selected
+  btn.click();
+  const win = container.ownerDocument.defaultView;
+  for (let i = 0; i < 10; i += 1) {
+    if (/(^|\s)_active_/.test(btn.className)) return true;
+    await new Promise((r) => (win ?? window).setTimeout(r, 60));
+  }
+  return /(^|\s)_active_/.test(btn.className);
 }
 
 type Fillable = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
@@ -419,6 +487,16 @@ export async function applyFillDetailed(
     }
     const { fieldId, value } = item;
     const el = resolveFieldEl(doc, fieldId);
+    if (el && isYesNoWidget(el)) {
+      if (await fillYesNoWidget(el, value)) {
+        highlight(el);
+        filled++;
+        outcomes.set(fieldId, "filled");
+      } else {
+        outcomes.set(fieldId, "failed");
+      }
+      continue;
+    }
     if (
       !(
         el instanceof HTMLInputElement ||

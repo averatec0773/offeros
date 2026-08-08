@@ -48,9 +48,39 @@ describe("AgentStatusBar", () => {
     expect((inertButton as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("always renders the job list and settings icon buttons", () => {
+  it("always renders the job list button and a settings link", () => {
     render(<AgentStatusBar state="running" jobCount={1} />);
     expect(screen.getByRole("button", { name: "Job list" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy();
+    expect((screen.getByRole("link", { name: "Settings" }) as HTMLAnchorElement).href).toContain(
+      "/settings",
+    );
+  });
+
+  it("the list button opens a queue popover with every application, current flagged", async () => {
+    render(
+      <AgentStatusBar
+        state="running"
+        jobCount={2}
+        queue={[
+          { id: "a1", title: "Engineer", company: "Acme", status: "applying", current: true },
+          { id: "a2", title: "Analyst", company: "Beta", status: "saved" },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Job list" }));
+    expect(screen.getByText("Engineer")).toBeTruthy();
+    expect(screen.getByText("current")).toBeTruthy();
+    const analystRow = screen.getByText("Analyst").closest("a") as HTMLAnchorElement;
+    expect(analystRow.href).toContain("/applications/a2");
+    expect(screen.getByText("saved")).toBeTruthy();
+    // Toggles closed again.
+    fireEvent.click(screen.getByRole("button", { name: "Job list" }));
+    expect(screen.queryByText("Engineer")).toBeNull();
+  });
+
+  it("the list button shows an honest empty state with no applications", () => {
+    render(<AgentStatusBar state="standby-empty" jobCount={0} queue={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Job list" }));
+    expect(screen.getByText(/No applications yet/)).toBeTruthy();
   });
 });

@@ -125,9 +125,23 @@ export interface FillApi {
 /** One OfferOS-managed file kind a file input can classify as — the only
  *  kinds the panel ever auto-attaches. Maps to the report source vocabulary. */
 /** Voluntary self-identification questions AI must never answer — the user
- *  seeds these once in Profile → Equal Employment and the bank fills them. */
+ *  seeds these once in Profile → Equal Employment and the bank fills them.
+ *  Checked against the question AND the option labels: real forms ask
+ *  neutral-sounding questions ("Which communities do you belong to?") whose
+ *  OPTIONS are the sensitive part (disability / veteran / immigrant …). */
 const SENSITIVE_GROUP =
-  /gender|race|ethnic|veteran|disab|orientation|lgbt|pronoun|hispanic|latino/i;
+  /gender|race|ethnic|veteran|disab|orientation|lgbt|pronoun|hispanic|latino|transgender|immigrant|refugee|\bage\b/i;
+
+function isSensitiveGroup(label: string, desc: { label?: string; options?: string[] }): boolean {
+  if (SENSITIVE_GROUP.test(`${label} ${desc.label ?? ""}`)) return true;
+  return (desc.options ?? []).some((o) => SENSITIVE_GROUP.test(o));
+}
+
+/** Work-authorization / visa questions: legally-consequential facts only the
+ *  user can assert. They fill from the answer bank (set once in Profile →
+ *  Equal Employment) — a wrong AI guess here is a misrepresentation, so AI
+ *  never touches them and unanswered ones surface as needs-user. */
+const TRUTH_REQUIRED_GROUP = /sponsor|authoriz\w* to work|work authoriz|legally (?:able|authorized|eligible)|eligible to work|\bvisa\b/i;
 
 const FILE_KIND_SOURCE: Record<"resume" | "coverLetter", FieldReportSource> = {
   resume: "resume-file",
@@ -805,23 +819,30 @@ export function FillPanel({
           collected.push({ fieldId: q.fieldId, label: q.label, answer: ans.value.answer });
         }
       }
-      // 3b) required multiple-choice groups the bank couldn't answer → AI picks
-      // exactly one of the page's own options. Voluntary self-identification
-      // questions (gender/race/veteran/…) are deliberately excluded — those are
-      // answered once from Profile → Equal Employment, never guessed by AI. An
-      // off-list AI answer simply fails the group's option-click verify and the
-      // field stays needs-user.
-      for (const g of planForFill.filter((i) => {
+      // 3b) multiple-choice groups the bank couldn't answer → AI picks exactly
+      // one of the page's own options. Required groups first, then optional
+      // ones (owner call: optional questions are worth answering too — every
+      // AI pick stays visible and editable in the panel). Voluntary
+      // self-identification questions (gender/race/veteran/…) are deliberately
+      // excluded — those are answered once from Profile → Equal Employment,
+      // never guessed by AI. An off-list AI answer simply fails the group's
+      // option-click verify and the field stays needs-user.
+      const aiAnswerableGroup = (i: FillItem) => {
         const desc = descriptorById.get(i.fieldId);
         return (
           i.status === "needs-answer" &&
-          i.required &&
           desc != null &&
           (desc.type === "radio-group" || desc.type === "checkbox-group") &&
           (desc.options?.length ?? 0) > 0 &&
-          !SENSITIVE_GROUP.test(`${i.label} ${desc.label ?? ""}`)
+          !isSensitiveGroup(i.label, desc) &&
+          !TRUTH_REQUIRED_GROUP.test(`${i.label} ${desc.label ?? ""}`)
         );
-      })) {
+      };
+      const groupsToAnswer = [
+        ...planForFill.filter((i) => aiAnswerableGroup(i) && i.required),
+        ...planForFill.filter((i) => aiAnswerableGroup(i) && !i.required),
+      ];
+      for (const g of groupsToAnswer) {
         const options = descriptorById.get(g.fieldId)!.options!;
         const ans = await api.generateAnswer(b.taskId, {
           question: g.label,

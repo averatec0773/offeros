@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getDb } from "@/server/db/client";
-import { getApplication } from "@/server/repositories/application-repo";
+import { getApplication, listApplications } from "@/server/repositories/application-repo";
 import { getAgentTaskByApplicationId } from "@/server/repositories/agent-task-by-application";
 import { getJdAnalysis } from "@/server/repositories/jd-analysis-repo";
 import { listArtifacts } from "@/server/repositories/artifact-repo";
@@ -23,6 +23,18 @@ export default async function ApplicationWorkspace({
   const jdAnalysis = getJdAnalysis(db, id);
   const artifacts = task ? listArtifacts(db, task.id) : [];
   const fit = getFit(db, id);
+  // The status bar's queue popover: every application, newest first, the
+  // open one flagged as current.
+  const queue = listApplications(db)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 10)
+    .map((a) => ({
+      id: a.id,
+      title: a.jobInfo.jobTitle,
+      company: a.jobInfo.companyName,
+      status: a.status,
+      current: a.id === id,
+    }));
 
   return (
     <WorkspaceClient
@@ -31,6 +43,7 @@ export default async function ApplicationWorkspace({
       initialJdAnalysis={jdAnalysis}
       initialArtifacts={artifacts}
       initialFit={fit}
+      queue={queue}
     />
   );
 }

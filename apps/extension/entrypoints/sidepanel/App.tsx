@@ -33,7 +33,7 @@ import {
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
 import { getFillBinding } from "../../src/lib/fill-binding";
-import { PlugZap } from "lucide-react";
+import { ExternalLink, PlugZap } from "lucide-react";
 
 // Supported ATS shown to orient the user on an unsupported page. Data, not UI copy.
 const PLATFORMS = [
@@ -214,6 +214,15 @@ export default function App() {
           onChange={(e) => void onChangeApiBase(e.target.value)}
           aria-label="Web app URL"
         />
+        <button
+          type="button"
+          onClick={openWebApp}
+          aria-label="Open the web app"
+          title="Open the web app"
+          className="inline-flex shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-bg-elevated p-2 text-text-secondary transition-colors hover:text-text-primary"
+        >
+          <ExternalLink aria-hidden className="h-4 w-4" />
+        </button>
       </label>
 
       <div className="flex-1">

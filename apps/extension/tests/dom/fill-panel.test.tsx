@@ -746,6 +746,42 @@ describe("FillPanel", () => {
           required: true,
           options: ["Male", "Female", "Decline to self-identify"],
         },
+        {
+          fieldId: "g3",
+          label: "Which office would you prefer?",
+          name: "",
+          autocomplete: "",
+          type: "radio-group",
+          placeholder: "",
+          ariaLabel: "",
+          required: false,
+          options: ["Boston", "Remote"],
+        },
+        {
+          // Neutral-sounding question, sensitive OPTIONS — the real-form shape
+          // that must never be AI-answered (observed on a live posting).
+          fieldId: "g4",
+          label: "Which of the following communities do you belong to?",
+          name: "",
+          autocomplete: "",
+          type: "checkbox-group",
+          placeholder: "",
+          ariaLabel: "",
+          required: false,
+          options: ["Person with disability", "Veteran", "None of the above", "I prefer not to answer"],
+        },
+        {
+          // Legally-consequential fact — bank-only, never an AI guess.
+          fieldId: "g5",
+          label: "Will you require visa sponsorship now or in the future?",
+          name: "",
+          autocomplete: "",
+          type: "radio-group",
+          placeholder: "",
+          ariaLabel: "",
+          required: true,
+          options: ["Yes", "No"],
+        },
       ],
     };
     const api: FillApi = {
@@ -761,14 +797,22 @@ describe("FillPanel", () => {
       await userEvent.click(fillBtn);
     });
 
-    // Exactly one AI call — the Python group, with its options; the Gender
-    // self-ID group is never AI-answered.
-    expect(api.generateAnswer).toHaveBeenCalledTimes(1);
-    expect(api.generateAnswer).toHaveBeenCalledWith("t1", {
+    // Two AI calls — the required Python group first, then the OPTIONAL office
+    // group. Never AI-answered: the Gender group (sensitive label), the
+    // communities group (neutral label, sensitive options), and the visa
+    // sponsorship group (truth-required fact, bank-only).
+    expect(api.generateAnswer).toHaveBeenCalledTimes(2);
+    expect(api.generateAnswer).toHaveBeenNthCalledWith(1, "t1", {
       question: "Have you used Python professionally?",
       label: "Have you used Python professionally?",
       context: undefined,
       options: ["Yes", "No"],
+    });
+    expect(api.generateAnswer).toHaveBeenNthCalledWith(2, "t1", {
+      question: "Which office would you prefer?",
+      label: "Which office would you prefer?",
+      context: undefined,
+      options: ["Boston", "Remote"],
     });
     // The chosen option is written through the normal fill path (group click).
     expect(fill).toHaveBeenCalledWith([{ fieldId: "g1", value: "Yes" }]);

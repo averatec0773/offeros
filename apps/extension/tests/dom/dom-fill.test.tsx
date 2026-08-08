@@ -493,3 +493,76 @@ describe("required via title-element class (CSS-asterisk ATSes)", () => {
     expect(f!.descriptor.required).toBe(false);
   });
 });
+
+describe("Ashby yes/no widgets (hidden checkbox behind visible buttons)", () => {
+  const ashby = matchAts("https://jobs.ashbyhq.com/acme/1/application")!;
+
+  const mountYesNo = (labelCls = "_label_x _required_y") => {
+    document.body.innerHTML = `
+      <div class="_fieldEntry_a">
+        <label class="${labelCls}">Are you authorized to work in the United States?</label>
+        <div class="_container_1 _yesno_2">
+          <input type="checkbox" name="uuid-auth-1" style="display:none">
+          <button type="button" class="_option_a">Yes</button>
+          <button type="button" class="_option_b">No</button>
+        </div>
+      </div>`;
+    // Simulate the site's widget behavior: clicking a button marks it active
+    // (async, like React) and syncs the hidden checkbox.
+    const hidden = document.querySelector<HTMLInputElement>("input[type=checkbox]")!;
+    for (const btn of document.querySelectorAll("button")) {
+      btn.addEventListener("click", () => {
+        setTimeout(() => {
+          for (const b of document.querySelectorAll("button")) b.classList.remove("_active_z");
+          btn.classList.add("_active_z");
+          hidden.checked = btn.textContent === "Yes";
+        }, 30);
+      });
+    }
+  };
+
+  it("scans the widget as a radio-group with the question label and Yes/No options", () => {
+    mountYesNo();
+    const found = scanFields(document.body, ashby);
+    const group = found.find((f) => f.descriptor.type === "radio-group");
+    expect(group).toBeTruthy();
+    expect(group!.descriptor.label).toBe("Are you authorized to work in the United States?");
+    expect(group!.descriptor.options).toEqual(["Yes", "No"]);
+    expect(group!.descriptor.required).toBe(true);
+    // The HIDDEN checkbox itself must not surface as a separate field.
+    expect(found.filter((f) => f.descriptor.name.includes("uuid-auth-1")).length).toBe(1);
+  });
+
+  it("fills by clicking the matching button and verifies via the active class", async () => {
+    mountYesNo();
+    const found = scanFields(document.body, ashby);
+    const group = found.find((f) => f.descriptor.type === "radio-group")!;
+    const { outcomes } = await applyFillDetailed(document, [
+      { fieldId: group.descriptor.fieldId, value: "Yes" },
+    ]);
+    expect(outcomes.get(group.descriptor.fieldId)).toBe("filled");
+    const yesBtn = [...document.querySelectorAll("button")].find((b) => b.textContent === "Yes")!;
+    expect(/_active_/.test(yesBtn.className)).toBe(true);
+    expect(document.querySelector<HTMLInputElement>("input[type=checkbox]")!.checked).toBe(true);
+  });
+
+  it("reports failed when no option matches the value", async () => {
+    mountYesNo();
+    const found = scanFields(document.body, ashby);
+    const group = found.find((f) => f.descriptor.type === "radio-group")!;
+    const { outcomes } = await applyFillDetailed(document, [
+      { fieldId: group.descriptor.fieldId, value: "Purple" },
+    ]);
+    expect(outcomes.get(group.descriptor.fieldId)).toBe("failed");
+  });
+
+  it("carries the selected button as currentValue on rescan", async () => {
+    mountYesNo();
+    let found = scanFields(document.body, ashby);
+    const group = found.find((f) => f.descriptor.type === "radio-group")!;
+    await applyFillDetailed(document, [{ fieldId: group.descriptor.fieldId, value: "No" }]);
+    found = scanFields(document.body, ashby);
+    const rescanned = found.find((f) => f.descriptor.type === "radio-group")!;
+    expect(rescanned.descriptor.currentValue).toBe("No");
+  });
+});
