@@ -146,7 +146,12 @@ export function createEngine(doc: Document): Engine {
         reason: "no_form",
         url: href,
         submittedLikely: SUBMITTED_MARKERS.test(text),
-        applyHref: findApplyHref(d0),
+        // A board page's apply links belong to whichever posting happens to be
+        // listed first — they say nothing about the job the panel is holding.
+        // Offering one as THE jump target would send the task to a stranger's
+        // form; on a directory only the posting links (which get title-matched)
+        // are meaningful.
+        applyHref: isDirectory ? undefined : findApplyHref(d0),
         postingLinks,
       };
     }

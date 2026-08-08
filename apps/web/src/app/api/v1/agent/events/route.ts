@@ -21,23 +21,26 @@ export async function GET(request: Request) {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
+      // Teardown is idempotent and ALWAYS releases the subscription and the
+      // heartbeat — a `closed` flag alone would strand both (an enqueue on a
+      // dead stream used to just set the flag, and close() then early-returned).
+      const close = () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // already torn down by the runtime
+        }
+      };
       const send = (chunk: string) => {
         if (closed) return;
         try {
           controller.enqueue(encoder.encode(chunk));
         } catch {
-          closed = true;
-        }
-      };
-      const close = () => {
-        if (closed) return;
-        closed = true;
-        clearInterval(heartbeat);
-        unsubscribe();
-        try {
-          controller.close();
-        } catch {
-          // already torn down by the runtime
+          close();
         }
       };
       send("event: ready\ndata: {}\n\n");
@@ -47,6 +50,10 @@ export async function GET(request: Request) {
       });
       heartbeat = setInterval(() => send(": hb\n\n"), 25_000);
       request.signal.addEventListener("abort", close);
+      // The client can already be gone by the time this runs (fast navigation,
+      // a double-mounted dev client): the abort event has fired and will never
+      // fire again, so check the flag too or the listener + interval live on.
+      if (request.signal.aborted) close();
     },
     cancel() {
       clearInterval(heartbeat);

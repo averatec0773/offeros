@@ -1,4 +1,4 @@
-import { matchOption, type FieldDescriptor } from "@offeros/autofill";
+import { matchOption, matchOptionValue, type FieldDescriptor } from "@offeros/autofill";
 import type { AtsRecipe } from "./recipes";
 import { deepQueryAll } from "./deep-query";
 import {
@@ -525,6 +525,26 @@ export async function applyFillDetailed(
       // filled. Reporting "failed" keeps the panel honest; the user gets a
       // needs-user row that jumps straight to the control.
       if (await fillComboboxViaDriver(el, fieldId, value, timeoutMs)) {
+        highlight(el);
+        filled++;
+        outcomes.set(fieldId, "filled");
+      } else {
+        outcomes.set(fieldId, "failed");
+      }
+      continue;
+    }
+    // A native <select> only accepts one of its own option values: assigning
+    // anything else (a label like "United States" against value="US") is
+    // silently reset to "" by the browser, so a raw write would report a field
+    // as filled that the form will reject. Resolve the option first — with the
+    // shared geo/synonym matcher — and verify the selection landed.
+    if (el instanceof HTMLSelectElement) {
+      const option = matchOptionValue([...el.options], value);
+      const optionValue = option ? String((option as HTMLOptionElement).value ?? "") : "";
+      if (option && optionValue !== "") {
+        setControlledValue(el, optionValue);
+      }
+      if (el.value !== "" && (!option || el.value === optionValue)) {
         highlight(el);
         filled++;
         outcomes.set(fieldId, "filled");

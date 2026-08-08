@@ -117,6 +117,15 @@ export function startQueue(
       skipped.push({ applicationId: id, reason: `task already ${task.status}` });
       continue;
     }
+    if (task && atHumanGate(task)) {
+      // Waiting on the browser (fill) or on the user (submit) — the queue has
+      // nothing to contribute and must not step through the gate for them.
+      skipped.push({
+        applicationId: id,
+        reason: `waiting for you at ${PIPELINE_STEPS[task.step]?.label ?? "a gate"}`,
+      });
+      continue;
+    }
     q.queued.push(id);
     appendEvent(db, { applicationId: id, kind: "queued" });
   }
@@ -130,6 +139,11 @@ export function startQueue(
   return { status: queueStatus(), skipped };
 }
 
+/** True when the task is parked at a gate only a human may move past. */
+function atHumanGate(task: AgentTask): boolean {
+  return task.status === "awaiting_user" && HUMAN_GATES.has(PIPELINE_STEPS[task.step]?.key ?? "");
+}
+
 /** Run one task forward to its next human gate. Exported for tests. */
 export async function runItemToGate(
   db: Db,
@@ -139,6 +153,11 @@ export async function runItemToGate(
   const runner = deps.runner ?? { startTask, advance, choose };
   const existing = getAgentTaskByApplicationId(db, applicationId);
   const task = existing ?? createAgentTask(db, { applicationId });
+  // Nothing to run: the task already waits on a human. This check MUST come
+  // before the first advance() — at the submit gate advance() *is* "mark as
+  // submitted", so starting the queue on such a task would close it and flag
+  // the application applied without anyone clicking anything.
+  if (atHumanGate(task)) return task;
   const ctx = deps.ctxFor(task.id);
 
   let t = task.status === "queued" ? await runner.startTask(ctx) : await runner.advance(ctx);
@@ -166,15 +185,26 @@ async function runLoop(db: Db, deps: QueueDeps): Promise<void> {
       q.current = applicationId;
       try {
         const t = await runItemToGate(db, applicationId, deps);
-        q.done.push(applicationId);
-        appendEvent(db, {
-          applicationId,
-          kind: "queue-processed",
-          payload: {
-            stoppedAt: PIPELINE_STEPS[t.step]?.key ?? "end",
-            taskStatus: t.status,
-          },
-        });
+        // The runner swallows step-body errors: it persists `failed` and
+        // RETURNS the task rather than throwing (only a missing API key
+        // propagates). Reading the returned status is therefore the only way
+        // to tell a real failure from a completed run — without it the bar
+        // counts failures as successes.
+        if (t.status === "failed") {
+          const reason = t.failureReason ?? "step failed";
+          q.failed.push({ applicationId, reason });
+          appendEvent(db, { applicationId, kind: "queue-item-failed", payload: { reason } });
+        } else {
+          q.done.push(applicationId);
+          appendEvent(db, {
+            applicationId,
+            kind: "queue-processed",
+            payload: {
+              stoppedAt: PIPELINE_STEPS[t.step]?.key ?? "end",
+              taskStatus: t.status,
+            },
+          });
+        }
       } catch (error) {
         const reason = failureReasonFor(error);
         q.failed.push({ applicationId, reason });

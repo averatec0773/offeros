@@ -98,9 +98,13 @@ export function rankPostingLinks(links: PostingLink[], jobTitle: string): Ranked
 }
 
 /**
- * The auto-jump pick: the best link, but only when it's a CONFIDENT match —
- * at least 60% of the title's tokens and at least two of them (a single
- * shared word like "Engineer" must never auto-navigate).
+ * The auto-jump pick: the best link, but only when it's a CONFIDENT and
+ * UNAMBIGUOUS match — at least 60% of the title's tokens, at least two of them
+ * (a single shared word like "Engineer" must never auto-navigate), and no
+ * runner-up scoring the same. A held title that is a subset of several
+ * postings ("Software Engineer" vs "Senior Software Engineer", "… Intern")
+ * scores full marks on all of them; picking the first in document order would
+ * send the task to a different role. Ties fall through to the human list.
  */
 export function pickPostingLink(
   links: PostingLink[],
@@ -111,5 +115,6 @@ export function pickPostingLink(
   if (!best || best.score < 0.6) return null;
   const titleTokens = tokenize(jobTitle).length;
   if (Math.round(best.score * titleTokens) < 2) return null;
+  if (ranked[1] && ranked[1].score === best.score) return null;
   return best;
 }

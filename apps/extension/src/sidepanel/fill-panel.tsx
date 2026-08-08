@@ -625,10 +625,15 @@ export function FillPanel({
     // where we already are.
     const applyTarget =
       sr.applyHref && !(here && isSameTarget(sr.applyHref, here)) ? sr.applyHref : undefined;
-    const matched = applyTarget
-      ? null
-      : pickPostingLink(sr.postingLinks ?? [], b.job.title ?? "");
-    const target = applyTarget ?? matched?.href;
+    // A page listing several postings is a board even if it also carries an
+    // apply link: a title match is tied to THIS job, an apply link is not, so
+    // the match wins there. Belt and braces with the engine's own suppression.
+    const looksLikeBoard = (sr.postingLinks?.length ?? 0) >= 3;
+    const matched =
+      applyTarget && !looksLikeBoard
+        ? null
+        : pickPostingLink(sr.postingLinks ?? [], b.job.title ?? "");
+    const target = matched?.href ?? (looksLikeBoard ? undefined : applyTarget);
     if (!target || attemptedRescueRef.current.has(target)) return;
     // Budgeted per tab and remembered across the remount every jump causes.
     const store = typeof sessionStorage === "undefined" ? undefined : sessionStorage;
@@ -897,6 +902,15 @@ export function FillPanel({
         }
       }
 
+      // The guard every AI-answered field passes, free text and choice alike:
+      // voluntary self-identification is answered once in Profile → Equal
+      // Employment, and work-authorization / visa questions are the user's own
+      // legal assertion. A generated answer to either is a fabrication about a
+      // real person on a real application — these fields stay needs-user.
+      const aiForbidden = (label: string, desc?: { label?: string; options?: string[] }) =>
+        isSensitiveGroup(label, desc ?? {}) ||
+        TRUTH_REQUIRED_GROUP.test(`${label} ${desc?.label ?? ""}`);
+
       // 3) open-ended free-text → AI answer → fill. Generation or write failure leaves
       // the field unwritten so it reports as needs-user (a human must answer).
       const collected: { fieldId: string; label: string; answer: string; options?: string[] }[] =
@@ -906,7 +920,8 @@ export function FillPanel({
           i.status === "needs-answer" &&
           i.generatable === true &&
           !isCoverLetterField(i.label) &&
-          isTextTarget(i.fieldId),
+          isTextTarget(i.fieldId) &&
+          !aiForbidden(i.label, descriptorById.get(i.fieldId)),
       )) {
         const ans = await api.generateAnswer(b.taskId, {
           question: q.label,
@@ -935,8 +950,7 @@ export function FillPanel({
           desc != null &&
           (desc.type === "radio-group" || desc.type === "checkbox-group") &&
           (desc.options?.length ?? 0) > 0 &&
-          !isSensitiveGroup(i.label, desc) &&
-          !TRUTH_REQUIRED_GROUP.test(`${i.label} ${desc.label ?? ""}`)
+          !aiForbidden(i.label, desc)
         );
       };
       const groupsToAnswer = [

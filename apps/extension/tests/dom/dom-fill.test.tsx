@@ -566,3 +566,41 @@ describe("Ashby yes/no widgets (hidden checkbox behind visible buttons)", () => 
     expect(rescanned.descriptor.currentValue).toBe("No");
   });
 });
+
+describe("native <select> fill honesty", () => {
+  const mountCountrySelect = () => {
+    document.body.innerHTML = `<main><form>
+      <label for="c">Country</label>
+      <select id="c" name="country">
+        <option value="">Select…</option>
+        <option value="US">United States</option>
+        <option value="CA">Canada</option>
+      </select>
+    </form></main>`;
+    return scanFields(document.body, recipe)[0]!.descriptor.fieldId;
+  };
+
+  it("resolves a human-readable value onto the option that carries it", async () => {
+    // Real ATS country/state selects label options in words but value them as
+    // codes; a raw assignment of "United States" is silently reset to "".
+    const fieldId = mountCountrySelect();
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId, value: "United States" },
+    ]);
+    const el = document.getElementById("c") as HTMLSelectElement;
+    expect(el.value).toBe("US");
+    expect(outcomes.get(fieldId)).toBe("filled");
+    expect(filled).toBe(1);
+  });
+
+  it("reports failed — never filled — when no option matches", async () => {
+    const fieldId = mountCountrySelect();
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId, value: "Atlantis" },
+    ]);
+    const el = document.getElementById("c") as HTMLSelectElement;
+    expect(el.value).toBe(""); // the page holds nothing…
+    expect(outcomes.get(fieldId)).toBe("failed"); // …and we say so
+    expect(filled).toBe(0);
+  });
+});
