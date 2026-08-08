@@ -581,6 +581,35 @@ describe("FillPanel", () => {
       ).toBeNull();
     });
 
+    it("treats a value the page already holds as answered, and never overwrites it", async () => {
+      // The user (or the browser, or an earlier session) filled the open-ended
+      // question. We have no answer for it — but the field IS answered.
+      const api = claimedApi();
+      const scanWithUserAnswer: ScanResponse = {
+        ...scanOk,
+        descriptors: [
+          scanOk.descriptors[0]!, // Email — fillable from the profile
+          { ...scanOk.descriptors[1]!, currentValue: "Typed by hand." },
+        ],
+      };
+      const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+      renderPanel({ api, fill, scan: async () => scanWithUserAnswer });
+
+      // Header counts it as done, not outstanding…
+      expect(await screen.findByText(/1 ready · 0 unanswered/)).toBeInTheDocument();
+      // …the row shows the page's value…
+      const row = screen.getByRole("button", { name: /Why do you want/ });
+      expect(row.getAttribute("data-written")).toBe("true");
+      expect(row.textContent).toContain("Typed by hand.");
+
+      // …and a fill run leaves it alone (no generated answer clobbers it).
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Fill 1 field" }));
+      });
+      expect(fill).toHaveBeenCalledWith([{ fieldId: "f1", value: "a@b.com" }]);
+      expect(api.generateAnswer).not.toHaveBeenCalled();
+    });
+
     it("drops a rehydrated checkmark when the page no longer holds the value (reloaded page)", async () => {
       const api = claimedApi();
       api.claim = vi.fn(async () => ({

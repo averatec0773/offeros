@@ -713,15 +713,20 @@ export function FillPanel({
   // "OfferOS can't fill this".
   const pageValuesRef = useRef<Map<string, string>>(new Map());
 
-  // Live writes first; else a rehydrated report for THIS page signature —
-  // honored only while the field still holds a value on the page.
+  // What this field holds, from the most specific source to the least:
+  //   1. a value we verifiably wrote this session,
+  //   2. a rehydrated report for THIS page signature, still backed by a value
+  //      on the page,
+  //   3. whatever the PAGE holds — typed by the user, restored by the browser,
+  //      or left by an earlier session. Not ours, but the field IS answered,
+  //      and pretending otherwise makes a finished form look unfinished.
   const writtenValueFor = (fieldId: string): string | undefined => {
     const live = writtenFields.get(fieldId);
     if (live !== undefined) return live;
+    const onPage = pageValuesRef.current.get(fieldId) ?? "";
     const hydrated = reportsRef.current.get(`${pageSigRef.current ?? ""} ${fieldId}`);
-    if (hydrated?.outcome !== "filled") return undefined;
-    if ((pageValuesRef.current.get(fieldId) ?? "") === "") return undefined;
-    return hydrated.value ?? "";
+    if (hydrated?.outcome === "filled" && onPage !== "") return hydrated.value ?? "";
+    return onPage.trim() === "" ? undefined : onPage;
   };
   const resetTaskMode = () => {
     bundleRef.current = null;
@@ -844,7 +849,7 @@ export function FillPanel({
   // profile, cover-letter textareas verbatim, AI answers for open-ended free-text,
   // résumé/cover-letter file attaches, then a cumulative FieldReport back to the
   // workspace. Any other (unrecognized) file input is still never touched.
-  const taskFillPage = async (planForFill: FillItem[], sr: OkScan, traceForFill: FieldTrace[]) => {
+  const taskFillPage = async (plan0: FillItem[], sr: OkScan, traceForFill: FieldTrace[]) => {
     const b = bundleRef.current;
     if (!b || pendingRef.current) return;
     pendingRef.current = true;
@@ -852,6 +857,14 @@ export function FillPanel({
     try {
       const writes = new Map<string, WriteOutcome>();
       const descriptorById = new Map(sr.descriptors.map((d) => [d.fieldId, d]));
+      // The one choke point every fill flows through: never touch a field the
+      // page already holds a value for. Someone answered it — the user, the
+      // browser's restore, an earlier run — and overwriting it (with a profile
+      // value or a generated answer) destroys their work. Read from THIS
+      // scan's descriptors so the check is as fresh as the fill itself.
+      const planForFill = plan0.filter(
+        (i) => (descriptorById.get(i.fieldId)?.currentValue ?? "").trim() === "",
+      );
       const isTextTarget = (fieldId: string) => {
         const desc = descriptorById.get(fieldId);
         return desc ? isTextAnswerTarget(desc) : false;
@@ -1328,9 +1341,20 @@ export function FillPanel({
     );
   }
 
-  const fillable = plan.filter((i) => i.status === "fillable");
-  const needs = plan.filter((i) => i.status === "needs-answer").length;
-  const unknown = plan.filter((i) => i.status === "unknown").length;
+  // Fields the PAGE already holds a value for — whoever put it there. They are
+  // done: counting them as outstanding tells the user a filled form is
+  // unfinished. They are also excluded from the fill batch, so a run never
+  // clobbers an answer someone typed by hand.
+  const satisfiedByPage = new Set(
+    [...pageValuesRef.current].filter(([, v]) => v.trim() !== "").map(([id]) => id),
+  );
+  const fillable = plan.filter((i) => i.status === "fillable" && !satisfiedByPage.has(i.fieldId));
+  const needs = plan.filter(
+    (i) => i.status === "needs-answer" && !satisfiedByPage.has(i.fieldId),
+  ).length;
+  const unknown = plan.filter(
+    (i) => i.status === "unknown" && !satisfiedByPage.has(i.fieldId),
+  ).length;
   const drift = plan.length > 0 && classifiedRatio(plan) < 0.3;
 
   // Panel row → page glue. traceRef is written together with `plan`, so at
@@ -1343,6 +1367,8 @@ export function FillPanel({
 
   const onFill = async () => {
     if (pendingRef.current || done || !scanResult.ok || !bundleRef.current) return;
+    // Fields the page already holds are skipped inside taskFillPage — the one
+    // place every fill path passes through.
     await taskFillPage(plan, scanResult, traceRef.current);
   };
 
@@ -1679,7 +1705,7 @@ export function FillPanel({
             Most fields here weren't recognized — this platform's adapter may be out of date.
           </p>
         )}
-        {plan.length > 0 && <CoverageBar coverage={fillCoverage(plan)} />}
+        {plan.length > 0 && <CoverageBar coverage={fillCoverage(plan, satisfiedByPage)} />}
         <FieldGroup
           title="Required"
           items={plan.filter((i) => i.required)}

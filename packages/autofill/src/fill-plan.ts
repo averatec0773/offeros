@@ -376,13 +376,20 @@ export interface Coverage {
 }
 
 /**
- * Submit-readiness for the checklist header. Counts required fields we have a
- * value for over all required fields; when the ATS marks nothing required, falls
- * back to all fields so the bar still means something. A field is "filled" here
- * when it is fillable (we have a value ready) — the green check.
+ * Submit-readiness for the checklist header. Counts required fields that are
+ * ready over all required fields; when the ATS marks nothing required, falls
+ * back to all fields so the bar still means something.
+ *
+ * A field counts as ready when we have a value for it (status "fillable") OR
+ * the page already holds one (`satisfiedFieldIds` — values the user typed, the
+ * browser restored, or an earlier fill left behind). Without that second half
+ * a form the user finished by hand still reads as incomplete, which is the
+ * mirror of claiming a field is filled when the page is empty: both lie about
+ * the page.
  */
-export function fillCoverage(plan: FillItem[]): Coverage {
-  const isFilled = (i: FillItem) => i.status === "fillable";
+export function fillCoverage(plan: FillItem[], satisfiedFieldIds?: ReadonlySet<string>): Coverage {
+  const isFilled = (i: FillItem) =>
+    i.status === "fillable" || satisfiedFieldIds?.has(i.fieldId) === true;
   const required = plan.filter((i) => i.required);
   const basis = required.length > 0 ? required : plan;
   const total = basis.length;

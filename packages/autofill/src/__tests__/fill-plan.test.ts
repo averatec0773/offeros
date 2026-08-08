@@ -157,6 +157,23 @@ describe("fillCoverage", () => {
   it("is 100% for an empty plan", () => {
     expect(fillCoverage([]).percent).toBe(100);
   });
+
+  it("counts fields the page already holds as ready, whoever filled them", () => {
+    const plan = buildFillPlan(
+      [
+        d("f1", { label: "Email", required: true }), // fillable from the profile
+        d("f2", { label: "Why this team?", required: true }), // we have no answer…
+      ],
+      profile,
+    );
+    expect(fillCoverage(plan).percent).toBe(50);
+    // …but the user typed one on the page: the form IS complete.
+    expect(fillCoverage(plan, new Set(["f2"]))).toMatchObject({
+      filled: 2,
+      total: 2,
+      percent: 100,
+    });
+  });
 });
 
 describe("classifiedRatio", () => {
