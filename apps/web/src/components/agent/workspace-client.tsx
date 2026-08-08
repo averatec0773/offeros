@@ -14,6 +14,7 @@ import {
 import type { LineDiff } from "@/lib/diff";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
 import { extensionPresent, openFillTabViaExtension } from "@/lib/extension-bridge";
+import { subscribeToAgentEvents } from "@/lib/agent-events";
 import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
 import { JobCard } from "./job-card";
@@ -198,7 +199,8 @@ export function WorkspaceClient({
   // poll while stalled at the fill-form gate — the extension writes
   // fieldReports/applicationInfo out-of-band while the tab is open, so the
   // report table needs to stay live without a manual reload. Local API, so
-  // continuous polling at the gate is acceptable.
+  // continuous polling at the gate is acceptable. (With the push channel
+  // below this is the fallback cadence, not the primary one.)
   const poll = shouldPoll(task);
   useEffect(() => {
     if (!taskId || !poll) return;
@@ -207,6 +209,23 @@ export function WorkspaceClient({
     }, POLL_MS);
     return () => clearInterval(interval);
   }, [taskId, poll, syncFull]);
+
+  // Push: any agent event on this application refreshes the workspace right
+  // away — including the states the poll deliberately skips (task completed,
+  // awaiting other gates). Bursts collapse into one refetch via a trailing
+  // debounce.
+  useEffect(() => {
+    if (!taskId) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeToAgentEvents(application.id, () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void syncFull(taskId), 300);
+    });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [application.id, taskId, syncFull]);
 
   async function run(id: string, action: (id: string) => Promise<unknown>, optimistic = true) {
     if (busyRef.current) return;

@@ -81,11 +81,15 @@ export function createHandoffForTask(db: Db, taskId: string): FillHandoff {
     throw new ServiceError("task is not awaiting fill");
   }
   const application = getApplication(db, task.applicationId);
-  return createFillHandoff(db, {
+  const handoff = createFillHandoff(db, {
     taskId,
     applicationId: task.applicationId,
     applyLink: application?.jobInfo.applyLink,
   });
+  // Timeline + live push: an open panel on the right page learns a ticket
+  // exists without waiting for a rescan.
+  appendEvent(db, { applicationId: task.applicationId, kind: "fill-handoff-created" });
+  return handoff;
 }
 
 /**

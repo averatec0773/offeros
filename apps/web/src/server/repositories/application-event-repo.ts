@@ -3,6 +3,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { applicationEventSchema, type ApplicationEvent } from "@offeros/core";
 import type { Db } from "../db/client";
 import { applicationEvents } from "../db/schema";
+import { emitAgentEvent } from "../events/bus";
 
 export type AppendEventInput = {
   applicationId: string;
@@ -34,6 +35,10 @@ export function appendEvent(db: Db, event: AppendEventInput): void {
         payload: doc.payload,
       })
       .run();
+    // Mirror onto the live bus so open surfaces refresh without polling.
+    // Every state change already appends here, so this one line is the whole
+    // push story.
+    emitAgentEvent({ applicationId: doc.applicationId, kind: doc.kind, at: doc.at });
   } catch (error) {
     console.error("[application-event-repo] appendEvent failed:", error);
   }

@@ -503,6 +503,7 @@ export function FillPanel({
   webReachable,
   tabUrl,
   getBoundHandoff,
+  claimNonce = 0,
   scanRetryTries = 16,
   scanRetryDelayMs = 500,
 }: {
@@ -520,6 +521,9 @@ export function FillPanel({
   /** The handoff explicitly bound to this tab (workspace-opened tabs) — wins
    *  over URL-heuristic ticket matching when present. */
   getBoundHandoff?: () => Promise<string | null>;
+  /** Bumped when the server pushes a new fill ticket — re-attempts the claim
+   *  without waiting for a page change. */
+  claimNonce?: number;
   /** Scan-probe retry budget while the content script is still injecting. */
   scanRetryTries?: number;
   scanRetryDelayMs?: number;
@@ -577,6 +581,18 @@ export function FillPanel({
   // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
   // the caption never claims an unsaved edit was saved.
   const [savedFieldIds, setSavedFieldIds] = useState<Set<string>>(new Set());
+
+  // A pushed "ticket created" event re-opens the claim window: reset the
+  // once-per-job claim latch and re-scan so the fresh ticket is picked up.
+  const lastClaimNonceRef = useRef(claimNonce);
+  useEffect(() => {
+    if (claimNonce === lastClaimNonceRef.current) return;
+    lastClaimNonceRef.current = claimNonce;
+    if (bundleRef.current === null) {
+      claimTriedRef.current = false;
+      setScanNonce((n) => n + 1);
+    }
+  }, [claimNonce]);
 
   const pendingRef = useRef(false);
   const pageSigRef = useRef<string | null>(null);

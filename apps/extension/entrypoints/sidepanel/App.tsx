@@ -33,6 +33,7 @@ import {
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
 import { getFillBinding } from "../../src/lib/fill-binding";
+import { subscribeAgentEvents } from "../../src/lib/agent-events";
 import { ExternalLink, PlugZap } from "lucide-react";
 
 // Supported ATS shown to orient the user on an unsupported page. Data, not UI copy.
@@ -148,6 +149,17 @@ export default function App() {
     return () => browser.tabs.onUpdated.removeListener(onUpdated);
   }, [activeTab]);
 
+  // Server push: a new fill ticket created while this panel is already open
+  // (workspace "Open & fill" targeting this page) triggers a fresh claim
+  // attempt — previously that needed a page change or reload.
+  const [claimNonce, setClaimNonce] = useState(0);
+  useEffect(() => {
+    if (!webReachable || !apiBase) return;
+    return subscribeAgentEvents(apiBase, (event) => {
+      if (event.kind === "fill-handoff-created") setClaimNonce((n) => n + 1);
+    });
+  }, [webReachable, apiBase]);
+
   const tabId = activeTab?.id ?? -1;
   const scan = useCallback(() => sendEngineScan(tabId), [tabId]);
   const fill = useCallback((values: Parameters<typeof sendEngineFill>[1]) => sendEngineFill(tabId, values), [tabId]);
@@ -240,6 +252,7 @@ export default function App() {
             webReachable={webReachable}
             tabUrl={activeTab?.url ?? ""}
             getBoundHandoff={getBoundHandoff}
+            claimNonce={claimNonce}
           />
         ) : (
           <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">

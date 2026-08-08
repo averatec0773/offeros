@@ -672,6 +672,37 @@ describe("FillPanel", () => {
     expect(api.getPending).not.toHaveBeenCalled();
   });
 
+  it("a claimNonce bump re-attempts the claim after the first attempt found nothing", async () => {
+    // First pass: no pending tickets → the panel latches "claim tried".
+    const api: FillApi = {
+      ...emptyApi(),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [] })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+    };
+    const props = {
+      scan: async () => scanOk,
+      fill: vi.fn(async (v: FillValue[]) => okFill(v)),
+      capture: vi.fn(async () => captureOk),
+      attachFile: vi.fn(okAttach),
+      api,
+      rescanNonce: 0,
+      openWebApp: vi.fn(),
+      openApplication: vi.fn(),
+      webReachable: true,
+      tabUrl: scanOk.url,
+    };
+    const { rerender } = render(<FillPanel {...props} claimNonce={0} />);
+    await screen.findByRole("button", { name: "Fill this page with my profile" });
+    expect(api.getPending).toHaveBeenCalledTimes(1);
+    expect(api.claim).not.toHaveBeenCalled();
+
+    // Server push: a ticket now exists → nonce bump → re-check + claim.
+    api.getPending = vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] }));
+    rerender(<FillPanel {...props} claimNonce={1} />);
+    await screen.findByText("Engineer · Acme");
+    expect(api.claim).toHaveBeenCalledWith("h1");
+  });
+
   it("an unbound tab still falls back to the URL-heuristic ticket match", async () => {
     const api: FillApi = {
       ...emptyApi(),
