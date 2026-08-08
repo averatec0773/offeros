@@ -326,6 +326,11 @@ export function WorkspaceClient({
     await run(taskId, (tid) => api.agentTasks.fillResolve(tid, action));
   }
 
+  async function handleUndoApplied() {
+    if (!taskId) return;
+    await run(taskId, (tid) => api.agentTasks.fillUndo(tid), false);
+  }
+
   async function handleFitRecompute() {
     if (fitBusy) return;
     setFitBusy(true);
@@ -525,6 +530,25 @@ export function WorkspaceClient({
           )}
 
           {task && gate === "submit" && <SubmitGateCard onMarkSubmitted={handleApprove} />}
+
+          {task && task.status === "done" && (
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <p className="text-body font-semibold text-foreground">Applied ✓</p>
+              <p className="mt-1 text-body text-muted-foreground">
+                Marked as submitted. Clicked by mistake? Undo restores the task to where it was.
+              </p>
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={handleUndoApplied}
+                  disabled={busy}
+                  className="inline-flex items-center rounded-full border border-border px-3.5 py-1.5 text-caption font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  Undo — I didn&apos;t apply
+                </button>
+              </div>
+            </div>
+          )}
 
           {task && task.fieldReports.length > 0 && <FillReportCard reports={task.fieldReports} />}
 

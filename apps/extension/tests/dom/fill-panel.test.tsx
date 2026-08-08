@@ -109,6 +109,7 @@ const emptyApi = (): FillApi => ({
   getFit: vi.fn(async (): Promise<ApiResult<FitSummary>> => ({ ok: false, error: "not found" })),
   computeFit: vi.fn(async (): Promise<ApiResult<FitSummary>> => ({ ok: true, value: FIT })),
   resolveFillAction: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
+  undoSubmission: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   fetchResumeFile: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
   listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
@@ -857,6 +858,82 @@ describe("FillPanel", () => {
     expect(select.tagName).toBe("SELECT");
     expect(select.value).toBe("Yes");
     expect([...select.options].map((o) => o.value)).toEqual(["Yes", "No"]);
+  });
+
+  describe("submission evidence + undo", () => {
+    const claimedThenConfirmation = () => {
+      // First scan: the form (claim happens). Later scans: a form-less
+      // confirmation page.
+      let scans = 0;
+      return async (): Promise<ScanResponse> => {
+        scans += 1;
+        return scans === 1 ? scanOk : { ok: false, reason: "no_form", submittedLikely: true };
+      };
+    };
+
+    it("suggests mark-as-applied on a confirmation page while a task is held, with undo after", async () => {
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+        claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+      };
+      const scan = claimedThenConfirmation();
+      const { rerender } = render(
+        <FillPanel
+          scan={scan}
+          fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+          capture={vi.fn(async () => captureOk)}
+          attachFile={vi.fn(okAttach)}
+          api={api}
+          rescanNonce={0}
+          openWebApp={vi.fn()}
+          openApplication={vi.fn()}
+          webReachable
+          tabUrl={scanOk.url}
+        />,
+      );
+      await screen.findByText("Engineer · Acme"); // claimed on the form page
+
+      // The page navigates to the confirmation page → rescan.
+      rerender(
+        <FillPanel
+          scan={scan}
+          fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+          capture={vi.fn(async () => captureOk)}
+          attachFile={vi.fn(okAttach)}
+          api={api}
+          rescanNonce={1}
+          openWebApp={vi.fn()}
+          openApplication={vi.fn()}
+          webReachable
+          tabUrl={scanOk.url}
+        />,
+      );
+      expect(await screen.findByText("Looks submitted")).toBeInTheDocument();
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Yes — mark as applied" }));
+      });
+      expect(api.resolveFillAction).toHaveBeenCalledWith("t1", "applied-manually");
+      expect(await screen.findByText("Marked as submitted.")).toBeInTheDocument();
+
+      // Mis-click recovery: Undo reopens the task.
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+      });
+      expect(api.undoSubmission).toHaveBeenCalledWith("t1");
+      expect(screen.getByRole("button", { name: "Yes — mark as applied" })).toBeInTheDocument();
+    });
+
+    it("never suggests mark-as-applied without a held task, even on a confirmation page", async () => {
+      const api = emptyApi();
+      renderPanel({
+        api,
+        scan: async () => ({ ok: false, reason: "no_form", submittedLikely: true }),
+      });
+      expect(await screen.findByText("No form detected")).toBeInTheDocument();
+      expect(screen.queryByText("Looks submitted")).toBeNull();
+    });
   });
 
   describe("AI answer memory (accept → persist, deduped)", () => {

@@ -52,7 +52,14 @@ describe("engine SCAN handler", () => {
     history.replaceState(null, "", greenhouseUrl);
     document.body.innerHTML = `<main><h1>Nothing here</h1></main>`;
     const res = await createEngine(document).scan();
-    expect(res).toEqual({ ok: false, reason: "no_form" });
+    expect(res).toEqual({ ok: false, reason: "no_form", submittedLikely: false });
+  });
+
+  it("flags a form-less confirmation page as submittedLikely", async () => {
+    history.replaceState(null, "", greenhouseUrl);
+    document.body.innerHTML = `<main><h1>Thank you for applying!</h1><p>We received your application.</p></main>`;
+    const res = await createEngine(document).scan();
+    expect(res).toEqual({ ok: false, reason: "no_form", submittedLikely: true });
   });
 
   it("returns not_supported for an unsupported url", async () => {

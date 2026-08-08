@@ -112,6 +112,8 @@ export interface FillApi {
     taskId: string,
     action: "fixed" | "applied-manually",
   ) => Promise<ApiResult<unknown>>;
+  /** Undo a mark-as-submitted (mis-click recovery). */
+  undoSubmission: (taskId: string) => Promise<ApiResult<unknown>>;
   /** Original stored résumé bytes (`bundle.attachResume === "original"`). */
   fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
   /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
@@ -726,6 +728,16 @@ export function FillPanel({
     }
   };
 
+  // Mis-click recovery: reopen the task at the gate it was completed from.
+  const onUndoApplied = async () => {
+    const b = bundleRef.current;
+    if (!b || submitState !== "done") return;
+    setSubmitError(null);
+    const res = await api.undoSubmission(b.taskId);
+    if (res.ok) setSubmitState("idle");
+    else setSubmitError(res.error);
+  };
+
   // Write one value and report whether the DOM actually took it. An absent outcome
   // (file input, element gone) must never be treated as a successful write.
   const writeOne = async (fieldId: string, value: string): Promise<boolean> => {
@@ -1122,16 +1134,51 @@ export function FillPanel({
 
   if (!scanResult.ok) {
     const noForm = scanResult.reason === "no_form";
+    // Evidence-based close: the form is gone AND the page reads like a
+    // submission confirmation — for a held task, that's the moment to offer
+    // "mark as applied" with something real behind it, not a guess.
+    const submittedLikely = noForm && scanResult.submittedLikely === true && bundle !== null;
     return (
       <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
         <p className="text-body font-semibold text-text-primary">
-          {noForm ? "No form detected" : "Not an application form"}
+          {submittedLikely
+            ? "Looks submitted"
+            : noForm
+              ? "No form detected"
+              : "Not an application form"}
         </p>
         <p className="mt-1 text-caption leading-relaxed text-text-secondary">
-          {noForm
-            ? "Open the application step of this job to fill it."
-            : "This page isn't a supported application form."}
+          {submittedLikely
+            ? "This page reads like a submission confirmation."
+            : noForm
+              ? "Open the application step of this job to fill it."
+              : "This page isn't a supported application form."}
         </p>
+        {submittedLikely && (
+          <div className="mt-3 space-y-2">
+            {submitState === "done" ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-caption text-success">Marked as submitted.</p>
+                <button
+                  type="button"
+                  onClick={() => void onUndoApplied()}
+                  className="shrink-0 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-colors hover:text-text-primary"
+                >
+                  Undo
+                </button>
+              </div>
+            ) : (
+              <Button
+                className="w-full rounded-full"
+                disabled={submitState === "busy"}
+                onClick={() => void onMarkApplied()}
+              >
+                {submitState === "busy" ? "Marking…" : "Yes — mark as applied"}
+              </Button>
+            )}
+            {submitError && <p className="text-caption text-warning">{submitError}</p>}
+          </div>
+        )}
         {/* A posting page with no form yet (Lever/Ashby/Workday before the applicant
             clicks Apply) still has a JD to capture — Add-this-job only needs that, not
             a form. jobKeyRef is never set here (only an ok scan sets it), so key on the
@@ -1636,9 +1683,18 @@ export function FillPanel({
             <div className="mt-3 space-y-2">
               <p className="text-caption text-success">Reported — check the workspace.</p>
               {submitState === "done" ? (
-                <p className="text-caption text-success">
-                  Marked as submitted — the application is closed in OfferOS.
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-caption text-success">
+                    Marked as submitted — the application is closed in OfferOS.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void onUndoApplied()}
+                    className="shrink-0 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-colors hover:text-text-primary"
+                  >
+                    Undo
+                  </button>
+                </div>
               ) : (
                 <Button
                   className="w-full rounded-full"

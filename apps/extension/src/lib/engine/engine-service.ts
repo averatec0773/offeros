@@ -59,12 +59,21 @@ export function createEngine(doc: Document): Engine {
     return { company, title };
   };
 
+  // After a real submit, ATSes navigate to a form-less confirmation page.
+  // Detecting that wording turns "no form here" into evidence the panel can
+  // offer as "looks submitted — mark as applied?" instead of a dead end.
+  const SUBMITTED_MARKERS =
+    /thank you for applying|thanks for applying|application (?:has been |was )?submitted|(?:received|we've received) your application|submission (?:was )?successful/i;
+
   const scan = async (): Promise<ScanResponse> => {
     const href = url();
     const recipe = matchAts(href);
     if (!recipe) return { ok: false, reason: "not_supported" };
     const scanned = scanFields(edoc().body, recipe);
-    if (scanned.length === 0) return { ok: false, reason: "no_form" };
+    if (scanned.length === 0) {
+      const text = (edoc().body?.textContent ?? "").slice(0, 20000);
+      return { ok: false, reason: "no_form", submittedLikely: SUBMITTED_MARKERS.test(text) };
+    }
     const meta = pageMeta();
     return {
       ok: true,

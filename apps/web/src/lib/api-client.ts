@@ -111,6 +111,7 @@ export const api = {
       request<FillHandoff>(`/agent/tasks/${id}/fill/handoff`, json("POST", {})),
     fillResolve: (id: string, action: "fixed" | "applied-manually") =>
       request<AgentTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
+    fillUndo: (id: string) => request<AgentTask>(`/agent/tasks/${id}/fill/undo`, json("POST", {})),
   },
   fit: {
     recompute: (applicationId: string) =>

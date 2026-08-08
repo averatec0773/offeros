@@ -24,7 +24,7 @@ import {
 import { getArtifact } from "../repositories/artifact-repo";
 import { getJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getProfile } from "../repositories/profile-repo";
-import { appendEvent } from "../repositories/application-event-repo";
+import { appendEvent, listEvents } from "../repositories/application-event-repo";
 import { buildProfileFacts, resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { listResumes } from "./resume-service";
 import {
@@ -384,9 +384,16 @@ export function resolveFill(
       throw new ServiceError("task is not awaiting a fill resolution");
     }
     closeOpenHandoffsForTask(db, taskId);
+    const prevApplicationStatus = getApplication(db, task.applicationId)?.status;
     updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
     const result = persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
-    appendEvent(db, { applicationId: task.applicationId, kind: "marked-submitted" });
+    // The payload is the undo contract: where to restore the task and the
+    // application if this turns out to be a mis-click.
+    appendEvent(db, {
+      applicationId: task.applicationId,
+      kind: "marked-submitted",
+      payload: { prevStep: task.step, prevApplicationStatus },
+    });
     return result;
   }
 
@@ -442,9 +449,53 @@ export function completeSubmitted(db: Db, taskId: string): AgentTask {
   if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "submit") {
     throw new ServiceError("task is not at the submit gate");
   }
+  const prevApplicationStatus = getApplication(db, task.applicationId)?.status;
   updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
   const result = persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
-  appendEvent(db, { applicationId: task.applicationId, kind: "marked-submitted" });
+  appendEvent(db, {
+    applicationId: task.applicationId,
+    kind: "marked-submitted",
+    payload: { prevStep: task.step, prevApplicationStatus },
+  });
+  return result;
+}
+
+const UNDOABLE_APP_STATUSES = new Set(["saved", "applying"]);
+
+/**
+ * Undo a terminal "marked as submitted" — one-way doors get handles. Restores
+ * the task to the gate it was completed from and the application to its
+ * pre-applied status, both read from the completion event's payload (the
+ * append-only ledger is what makes this restoration trustworthy). Completions
+ * recorded before payloads existed restore to the submit gate. Appends
+ * `submission-undone` so the reversal itself is on the timeline.
+ */
+export function undoSubmitted(db: Db, taskId: string): AgentTask {
+  const task = requireTask(db, taskId);
+  if (task.status !== "done") {
+    throw new ServiceError("task is not completed — nothing to undo");
+  }
+  const lastMarked = [...listEvents(db, task.applicationId)]
+    .reverse()
+    .find((e) => e.kind === "marked-submitted");
+  const payload = (lastMarked?.payload ?? {}) as {
+    prevStep?: unknown;
+    prevApplicationStatus?: unknown;
+  };
+  const prevStep =
+    typeof payload.prevStep === "number" &&
+    payload.prevStep >= 0 &&
+    payload.prevStep < PIPELINE_STEPS.length
+      ? payload.prevStep
+      : stepIndex("submit");
+  const prevApplicationStatus =
+    typeof payload.prevApplicationStatus === "string" &&
+    UNDOABLE_APP_STATUSES.has(payload.prevApplicationStatus)
+      ? (payload.prevApplicationStatus as "saved" | "applying")
+      : "applying";
+  updateApplication(db, task.applicationId, { status: prevApplicationStatus, appliedAt: null });
+  const result = persist(db, taskId, { status: "awaiting_user", step: prevStep });
+  appendEvent(db, { applicationId: task.applicationId, kind: "submission-undone" });
   return result;
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { PIPELINE_STEPS, type Artifact, type FieldReport, type Profile } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import {
@@ -24,6 +24,7 @@ import {
   applyFillReport,
   resolveFill,
   completeSubmitted,
+  undoSubmitted,
   startInstantFill,
   ServiceError,
 } from "../fill-service";
@@ -578,6 +579,63 @@ describe("completeSubmitted", () => {
     completeSubmitted(db, taskId);
     const events = listEvents(db, applicationId);
     expect(events.map((e) => e.kind)).toEqual(["marked-submitted"]);
+  });
+});
+
+describe("undoSubmitted", () => {
+  it("throws when the task isn't completed", () => {
+    const { taskId } = seedTaskAtFillForm();
+    expect(() => undoSubmitted(db, taskId)).toThrow(ServiceError);
+  });
+
+  it("restores an applied-manually completion to the fill-form gate and un-applies the application", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    resolveFill(db, taskId, "applied-manually");
+
+    const task = undoSubmitted(db, taskId);
+    expect(task.status).toBe("awaiting_user");
+    expect(task.step).toBe(FILL_FORM_STEP);
+    const application = getApplication(db, applicationId);
+    // Restored from the ledger payload: the application returns to the exact
+    // status it held before the mis-click (the seed creates it as "saved").
+    expect(application?.status).toBe("saved");
+    expect(application?.appliedAt).toBeUndefined();
+    expect(listEvents(db, applicationId).map((e) => e.kind)).toEqual([
+      "marked-submitted",
+      "submission-undone",
+    ]);
+  });
+
+  it("restores a submit-gate completion to the submit gate", () => {
+    const { taskId } = seedTaskAtFillForm();
+    updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    completeSubmitted(db, taskId);
+
+    const task = undoSubmitted(db, taskId);
+    expect(task.status).toBe("awaiting_user");
+    expect(task.step).toBe(SUBMIT_STEP);
+  });
+
+  it("legacy completions without a payload restore to the submit gate", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    resolveFill(db, taskId, "applied-manually");
+    // Simulate a pre-payload ledger: strip the payloads from the recorded events.
+    for (const e of listEvents(db, applicationId)) {
+      db.run(sql`UPDATE application_events SET payload = NULL WHERE id = ${e.id}`);
+    }
+    const task = undoSubmitted(db, taskId);
+    expect(task.status).toBe("awaiting_user");
+    expect(task.step).toBe(SUBMIT_STEP);
+    expect(getApplication(db, applicationId)?.status).toBe("applying");
+  });
+
+  it("mark → undo → mark again round-trips cleanly", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    resolveFill(db, taskId, "applied-manually");
+    undoSubmitted(db, taskId);
+    const again = resolveFill(db, taskId, "applied-manually");
+    expect(again.status).toBe("done");
+    expect(getApplication(db, applicationId)?.status).toBe("applied");
   });
 });
 

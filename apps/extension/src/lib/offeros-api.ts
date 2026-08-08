@@ -324,6 +324,14 @@ export function resolveFillAction(
   return call<unknown>(`/agent/tasks/${taskId}/fill/resolve`, json("POST", { action }), fetchImpl);
 }
 
+/** Undo a mark-as-submitted: the task returns to its pre-completion gate. */
+export function undoSubmission(
+  taskId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<unknown>> {
+  return call<unknown>(`/agent/tasks/${taskId}/fill/undo`, json("POST", {}), fetchImpl);
+}
+
 /** In-panel "Tailor résumé for this job": run the tailor step out of band for a
  *  task parked at the fill/submit gate. Long-running (an LLM call) — resolves
  *  when the resume artifact exists, ready for `fetchArtifactPdf` preview. */

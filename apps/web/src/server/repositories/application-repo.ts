@@ -86,9 +86,11 @@ export function createApplication(
 export function updateApplication(
   db: Db,
   id: string,
-  patch: Partial<
-    Pick<Application, "status" | "notes" | "jdText" | "resumeId" | "attachResume" | "appliedAt">
-  >,
+  // appliedAt additionally accepts null = clear (undoing a mark-as-submitted);
+  // undefined still means "leave unchanged" like every other field.
+  patch: Partial<Pick<Application, "status" | "notes" | "jdText" | "resumeId" | "attachResume">> & {
+    appliedAt?: number | null;
+  },
 ): Application | null {
   const existing = db.select().from(applications).where(eq(applications.id, id)).get();
   if (!existing) return null;
@@ -99,7 +101,7 @@ export function updateApplication(
       jdText: patch.jdText ?? existing.jdText,
       resumeId: patch.resumeId ?? existing.resumeId,
       attachResume: patch.attachResume ?? existing.attachResume,
-      appliedAt: patch.appliedAt ?? existing.appliedAt,
+      appliedAt: patch.appliedAt === null ? null : (patch.appliedAt ?? existing.appliedAt),
       updatedAt: Date.now(),
     })
     .where(eq(applications.id, id))

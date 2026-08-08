@@ -4,7 +4,13 @@ import type { FillValue } from "./dom-fill";
 
 export type ScanResponse =
   | { ok: true; atsId: AtsId; url: string; company: string; title: string; descriptors: FieldDescriptor[] }
-  | { ok: false; reason: "not_supported" | "no_form" };
+  | {
+      ok: false;
+      reason: "not_supported" | "no_form";
+      /** no_form only: the page reads like a submission confirmation ("Thank
+       *  you for applying…") — evidence for the mark-as-applied suggestion. */
+      submittedLikely?: boolean;
+    };
 
 export interface FillResponse {
   ok: true;

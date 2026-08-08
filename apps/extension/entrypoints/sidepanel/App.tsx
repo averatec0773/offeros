@@ -28,6 +28,7 @@ import {
   postReport,
   resolveFillAction,
   tailorResume,
+  undoSubmission,
   updateAnswer,
 } from "../../src/lib/offeros-api";
 import { settings } from "../../src/lib/settings";
@@ -59,6 +60,7 @@ const api = {
   getFit,
   computeFit,
   resolveFillAction,
+  undoSubmission,
   fetchResumeFile,
   fetchArtifactPdf,
   listAnswers,
