@@ -6,6 +6,7 @@ import { listAgentTasks } from "@/server/repositories/agent-task-repo";
 import { getProfile } from "@/server/repositories/profile-repo";
 import { listFits } from "@/server/repositories/fit-repo";
 import { ApplicationRow } from "@/components/agent/application-row";
+import { QueueBar } from "@/components/agent/queue-bar";
 import { EmptyState } from "@/components/empty-state";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,20 @@ export default function HomePage() {
           New application
         </Link>
       </header>
+
+      {applications.length > 0 && (
+        <QueueBar
+          eligible={active
+            .filter((a) => taskByApplication.get(a.id)?.status !== "done")
+            .map((a) => a.id)}
+          jobs={active.map((a) => ({
+            id: a.id,
+            title: a.jobInfo.jobTitle,
+            company: a.jobInfo.companyName,
+            status: a.status,
+          }))}
+        />
+      )}
 
       {applications.length === 0 ? (
         <div className="space-y-4">

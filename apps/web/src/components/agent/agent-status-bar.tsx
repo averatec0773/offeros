@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Play, Pause, List, Settings } from "lucide-react";
 
-type AgentState = "standby-empty" | "standby-queued" | "running" | "action-required";
+type AgentState = "standby-empty" | "standby-queued" | "running" | "paused" | "action-required";
 
 /** One row of the queue popover — an application the agent knows about. */
 export type QueueJob = {
@@ -45,8 +45,18 @@ function config(state: AgentState, jobCount: number) {
       return {
         dot: "bg-brand",
         label: "Running",
-        message: "Applying… working through your queue.",
+        message:
+          jobCount > 0
+            ? `Applying… ${jobCount} in the queue.`
+            : "Applying… working through your queue.",
         action: "pause" as const,
+      };
+    case "paused":
+      return {
+        dot: "bg-warn",
+        label: "Paused",
+        message: jobCount > 0 ? `Paused — ${jobCount} waiting. Start to resume.` : "Paused.",
+        action: "start" as const,
       };
     case "action-required":
       return {

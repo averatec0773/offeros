@@ -17,6 +17,7 @@ import type {
 } from "@offeros/core";
 import type { ParsedResume } from "@offeros/llm";
 import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
+import type { QueueStatus } from "@/server/services/queue-service";
 import type { LineDiff } from "./diff";
 
 export class ApiError extends Error {
@@ -112,6 +113,15 @@ export const api = {
     fillResolve: (id: string, action: "fixed" | "applied-manually") =>
       request<AgentTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
     fillUndo: (id: string) => request<AgentTask>(`/agent/tasks/${id}/fill/undo`, json("POST", {})),
+  },
+  queue: {
+    status: () => request<QueueStatus>(`/agent/queue`),
+    start: (applicationIds: string[]) =>
+      request<{ status: QueueStatus; skipped: { applicationId: string; reason: string }[] }>(
+        `/agent/queue`,
+        json("POST", { applicationIds }),
+      ),
+    pause: () => request<QueueStatus>(`/agent/queue/pause`, json("POST", {})),
   },
   fit: {
     recompute: (applicationId: string) =>

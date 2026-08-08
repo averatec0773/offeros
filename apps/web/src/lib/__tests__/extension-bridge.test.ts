@@ -1,40 +1,53 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { extensionPresent, openFillTabViaExtension } from "../extension-bridge";
+import {
+  extensionPresent,
+  openFillTabViaExtension,
+  __resetBridgeStateForTests,
+} from "../extension-bridge";
 
 afterEach(() => {
-  delete document.documentElement.dataset.offerosExtension;
+  __resetBridgeStateForTests();
 });
 
+// happy-dom's postMessage doesn't stamp event.source, so bridge replies are
+// dispatched as explicit MessageEvents carrying source: window — the same
+// shape a real same-window postMessage delivers in a browser.
+const dispatchFromBridge = (data: unknown) => {
+  window.dispatchEvent(
+    new MessageEvent("message", { data, origin: window.location.origin, source: window }),
+  );
+};
+
 describe("extensionPresent", () => {
-  it("is false without the bridge marker and true with it", () => {
+  it("is false before the bridge announces and true after READY", () => {
     expect(extensionPresent()).toBe(false);
-    document.documentElement.dataset.offerosExtension = "1.0.0";
+    dispatchFromBridge({
+      source: "offeros-extension",
+      type: "OFFEROS_EXTENSION_READY",
+      version: "1.0.0",
+    });
     expect(extensionPresent()).toBe(true);
+  });
+
+  it("ignores READY-shaped messages from other sources", () => {
+    expect(extensionPresent()).toBe(false);
+    dispatchFromBridge({ source: "someone-else", type: "OFFEROS_EXTENSION_READY" });
+    expect(extensionPresent()).toBe(false);
   });
 });
 
 describe("openFillTabViaExtension", () => {
   it("resolves true when the bridge replies ok to the matching request", async () => {
-    // Fake the bridge content script: echo the requestId back with ok:true.
-    // happy-dom's postMessage doesn't stamp event.source, so the reply is
-    // dispatched as an explicit MessageEvent carrying source: window — the
-    // same shape a real same-window postMessage delivers in a browser.
     const bridge = (event: MessageEvent) => {
       const d = event.data as { source?: string; type?: string; requestId?: string };
       if (d?.source !== "offeros-web" || d.type !== "OFFEROS_OPEN_FILL_TAB") return;
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: {
-            source: "offeros-extension",
-            type: "OFFEROS_OPEN_FILL_TAB_RESULT",
-            requestId: d.requestId,
-            ok: true,
-          },
-          origin: window.location.origin,
-          source: window,
-        }),
-      );
+      dispatchFromBridge({
+        source: "offeros-extension",
+        type: "OFFEROS_OPEN_FILL_TAB_RESULT",
+        requestId: d.requestId,
+        ok: true,
+      });
     };
     window.addEventListener("message", bridge);
     try {
@@ -48,15 +61,12 @@ describe("openFillTabViaExtension", () => {
     const bridge = (event: MessageEvent) => {
       const d = event.data as { source?: string; type?: string };
       if (d?.source !== "offeros-web" || d.type !== "OFFEROS_OPEN_FILL_TAB") return;
-      window.postMessage(
-        {
-          source: "offeros-extension",
-          type: "OFFEROS_OPEN_FILL_TAB_RESULT",
-          requestId: "someone-elses-request",
-          ok: true,
-        },
-        window.location.origin,
-      );
+      dispatchFromBridge({
+        source: "offeros-extension",
+        type: "OFFEROS_OPEN_FILL_TAB_RESULT",
+        requestId: "someone-elses-request",
+        ok: true,
+      });
     };
     window.addEventListener("message", bridge);
     try {
