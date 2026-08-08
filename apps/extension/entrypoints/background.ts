@@ -11,6 +11,13 @@ export default defineBackground(() => {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   }
 
+  // Per-tab sidePanel enablement does NOT survive a browser restart, and
+  // without a startup-time event the worker stays dormant until a tab switch
+  // or navigation — first click of the day would hit a disabled panel and do
+  // nothing. Registering onStartup guarantees this whole body (behavior +
+  // enable sweep + orphan reinjection) runs when Chrome launches.
+  chrome.runtime.onStartup?.addListener(() => {});
+
   // The panel only lives on supported ATS tabs. Chrome quirk: with a global
   // default_path, a user-opened panel is "global" and per-tab enabled:false
   // does NOT close it — the documented recipe is to disable the panel
@@ -69,6 +76,19 @@ export default defineBackground(() => {
     }
   };
   void reinjectOrphanedTabs();
+
+  // Self-healing click: with openPanelOnActionClick, onClicked only fires
+  // when the panel could NOT open — i.e. the tab's enablement got lost (fresh
+  // session, missed event). Re-enable and open inside the user gesture on
+  // apply pages; on unsupported pages a silent click is the designed behavior.
+  chrome.action?.onClicked?.addListener((tab) => {
+    if (tab.id === undefined || !tab.url || matchAts(tab.url) === null) return;
+    const tabId = tab.id;
+    void chrome.sidePanel
+      .setOptions({ tabId, path: "sidepanel.html", enabled: true })
+      .then(() => chrome.sidePanel.open({ tabId }))
+      .catch(() => {});
+  });
 
   // Panel → native host bridge: only the background may talk to the native
   // messaging host, so the panel's "Start OfferOS" routes through here.
