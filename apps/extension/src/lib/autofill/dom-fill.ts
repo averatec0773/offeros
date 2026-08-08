@@ -90,7 +90,19 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
     placeholder: el.getAttribute("placeholder") ?? "",
     ariaLabel: el.getAttribute("aria-label") ?? "",
     required: isRequired(el, label) || titleRequired,
+    currentValue: currentValueOf(el, type),
   };
+}
+
+/** The control's live value at scan time. File inputs report the chosen file
+ *  name (value is a fakepath); everything else the raw value property. */
+function currentValueOf(el: HTMLElement, type: string): string {
+  if (type === "file") {
+    const f = (el as HTMLInputElement).files?.[0];
+    return f ? f.name : "";
+  }
+  const v = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
+  return typeof v === "string" ? v : "";
 }
 
 function isScannable(el: HTMLElement): boolean {
@@ -164,6 +176,11 @@ function describeGroup(
       /\*/.test(question) ||
       (title?.required ?? false),
     options,
+    currentValue: members
+      .filter((m) => (m as HTMLInputElement).checked)
+      .map((m) => labelFor(m))
+      .filter((t) => t !== "")
+      .join(", "),
   };
 }
 

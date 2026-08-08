@@ -11,6 +11,10 @@ export interface FieldDescriptor {
   /** Choice-group descriptors only ("radio-group"/"checkbox-group"): the
    *  visible label of every option, in DOM order. */
   options?: string[];
+  /** The control's CURRENT value at scan time (text/select value; for groups
+   *  the checked option labels). Lets the panel distinguish "we filled this
+   *  earlier and it's still there" from "the page reloaded and it's gone". */
+  currentValue?: string;
 }
 
 export type CanonicalField =

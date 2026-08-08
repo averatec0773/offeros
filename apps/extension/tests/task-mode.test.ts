@@ -64,10 +64,28 @@ describe("matchHandoff", () => {
     expect(matchHandoff(tickets, page, jobIdFromUrl)?.id).toBe("hB");
   });
 
-  it("falls back to the single open ticket when nothing else matches", () => {
-    const tickets = [ticket({ id: "only", applyLink: "https://jobs.lever.co/foo/aaaa" })];
+  it("never claims a ticket for another tenant on a multi-tenant board host", () => {
+    // Real incident: a pending ticket for another company's Ashby posting was
+    // claimed on jobs.ashbyhq.com/<other-company> because bare hostnames match.
+    const tickets = [ticket({ id: "hA", applyLink: "https://jobs.ashbyhq.com/forward/1111" })];
+    const page = "https://jobs.ashbyhq.com/sentilink/2222/application";
+    expect(matchHandoff(tickets, page, jobIdFromUrl)).toBeNull();
+  });
+
+  it("matches same tenant on a multi-tenant board host (slug compared case-insensitively)", () => {
+    const tickets = [ticket({ id: "hB", applyLink: "https://jobs.ashbyhq.com/SentiLink/1111" })];
+    const page = "https://jobs.ashbyhq.com/sentilink/2222/application";
+    expect(matchHandoff(tickets, page, jobIdFromUrl)?.id).toBe("hB");
+  });
+
+  it("falls back to the single open ticket only when it has no applyLink to compare", () => {
+    const linkless = [ticket({ id: "only", applyLink: undefined })];
     const page = "https://boards.greenhouse.io/acme/jobs/12345";
-    expect(matchHandoff(tickets, page, jobIdFromUrl)?.id).toBe("only");
+    expect(matchHandoff(linkless, page, jobIdFromUrl)?.id).toBe("only");
+
+    // A linkable ticket that didn't match by id or tenant belongs elsewhere.
+    const linked = [ticket({ id: "only", applyLink: "https://jobs.lever.co/foo/aaaa" })];
+    expect(matchHandoff(linked, page, jobIdFromUrl)).toBeNull();
   });
 
   it("returns null when multiple tickets are ambiguous (no id/host match)", () => {
@@ -86,7 +104,7 @@ describe("matchHandoff", () => {
   it("ignores completed/cancelled tickets for the single-open fallback", () => {
     const tickets = [
       ticket({ id: "done", status: "completed", applyLink: "https://jobs.lever.co/foo/aaaa" }),
-      ticket({ id: "live", status: "pending", applyLink: "https://jobs.ashbyhq.com/bar/bbbb" }),
+      ticket({ id: "live", status: "pending", applyLink: undefined }),
     ];
     const page = "https://boards.greenhouse.io/acme/jobs/12345";
     expect(matchHandoff(tickets, page, jobIdFromUrl)?.id).toBe("live");

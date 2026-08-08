@@ -171,7 +171,7 @@ export default function App() {
       <header className="mb-3 flex items-center gap-2 px-1">
         <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-brand" />
         <h1 className="text-body font-semibold">OfferOS</h1>
-        <span className="text-caption text-text-tertiary">Side panel</span>
+        <span className="text-caption text-text-tertiary">Apply copilot</span>
       </header>
 
       {!webReachable && (

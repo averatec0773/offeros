@@ -1,5 +1,6 @@
 import { matchAts } from "../src/lib/autofill/recipes";
 import { registerEngine } from "../src/lib/engine/engine-service";
+import { createPanelOverlay } from "../src/lib/overlay/panel-overlay";
 
 export default defineContentScript({
   matches: [
@@ -29,15 +30,25 @@ export default defineContentScript({
     document.head.appendChild(style);
 
     // The DOM fill engine, driven by the side panel over messaging (SCAN/FILL/
-    // CAPTURE_JD over runtime.onMessage + a page-change push). No on-page UI.
+    // CAPTURE_JD over runtime.onMessage + a page-change push).
     registerEngine(document, ctx);
 
+    // In-page overlay: a collapsed badge on the right edge that expands into
+    // the panel app in an extension-origin iframe. The Chrome Side Panel stays
+    // available from the toolbar — two shells, one panel.
+    const overlay = createPanelOverlay(document, {
+      panelUrl: browser.runtime.getURL("/sidepanel.html"),
+      logoUrl: browser.runtime.getURL("/icon/48.png"),
+    });
+    ctx.onInvalidated(() => overlay.destroy());
+
     // Keep-alive: Greenhouse job boards hydrate <html>; a hydration mismatch
-    // rebuilds the whole tree and silently drops foreign DOM — our style tag.
-    // Re-append it idempotently. Debounced to stay cheap.
+    // rebuilds the whole tree and silently drops foreign DOM — our style tag
+    // and the overlay host. Re-append both idempotently. Debounced to stay cheap.
     let styleTimer: ReturnType<typeof setTimeout> | undefined;
     const ensureStyle = () => {
       if (!style.isConnected && document.head) document.head.appendChild(style);
+      overlay.ensureAttached();
     };
     const keepAlive = new MutationObserver(() => {
       clearTimeout(styleTimer);

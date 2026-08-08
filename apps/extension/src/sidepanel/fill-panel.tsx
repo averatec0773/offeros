@@ -610,12 +610,22 @@ export function FillPanel({
     if (anyFilled) setFilledOnce(true);
   };
 
-  // Live writes first; else a rehydrated report for THIS page signature.
+  // fieldId → the control's DOM value at the latest scan. Gates rehydrated
+  // checkmarks: a report may say "filled" from an earlier session, but if the
+  // page reloaded since, the value is gone — showing the check would claim
+  // the page holds a value it doesn't, exactly the state that reads as
+  // "OfferOS can't fill this".
+  const pageValuesRef = useRef<Map<string, string>>(new Map());
+
+  // Live writes first; else a rehydrated report for THIS page signature —
+  // honored only while the field still holds a value on the page.
   const writtenValueFor = (fieldId: string): string | undefined => {
     const live = writtenFields.get(fieldId);
     if (live !== undefined) return live;
     const hydrated = reportsRef.current.get(`${pageSigRef.current ?? ""} ${fieldId}`);
-    return hydrated?.outcome === "filled" ? (hydrated.value ?? "") : undefined;
+    if (hydrated?.outcome !== "filled") return undefined;
+    if ((pageValuesRef.current.get(fieldId) ?? "") === "") return undefined;
+    return hydrated.value ?? "";
   };
   const resetTaskMode = () => {
     bundleRef.current = null;
@@ -965,6 +975,7 @@ export function FillPanel({
       const { plan: newPlan, trace: newTrace } = explainFillPlan(res.descriptors, bundleRef.current?.fillProfile ?? null);
       setPlan(newPlan);
       traceRef.current = newTrace;
+      pageValuesRef.current = new Map(res.descriptors.map((d) => [d.fieldId, d.currentValue ?? ""]));
 
       const pageSig = res.descriptors.map((d) => d.fieldId).join("|");
       // Wizard steps retitle the page, so the ATS job id is the identity when present.

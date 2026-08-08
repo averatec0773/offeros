@@ -554,7 +554,16 @@ describe("FillPanel", () => {
           ],
         },
       }));
-      renderPanel({ api });
+      // The page still HOLDS the previously written value — only then may the
+      // rehydrated report paint the row.
+      const scanHoldingValue: ScanResponse = {
+        ...scanOk,
+        descriptors: [
+          { ...scanOk.descriptors[0]!, currentValue: "a@b.com" },
+          scanOk.descriptors[1]!,
+        ],
+      };
+      renderPanel({ api, scan: async () => scanHoldingValue });
       await screen.findByText("Engineer · Acme");
       await waitFor(() =>
         expect(screen.getByRole("button", { name: /Email/ }).getAttribute("data-written")).toBe(
@@ -564,6 +573,37 @@ describe("FillPanel", () => {
       expect(
         screen.getByRole("button", { name: /Why do you want/ }).getAttribute("data-written"),
       ).toBeNull();
+    });
+
+    it("drops a rehydrated checkmark when the page no longer holds the value (reloaded page)", async () => {
+      const api = claimedApi();
+      api.claim = vi.fn(async () => ({
+        ok: true as const,
+        value: {
+          ...bundle,
+          fieldReports: [
+            {
+              fieldId: "f1",
+              label: "Email",
+              classifiedType: "email",
+              status: "fillable",
+              value: "a@b.com",
+              source: "personal" as const,
+              reason: "",
+              outcome: "filled" as const,
+              required: true,
+              page: "f1|q1",
+            },
+          ],
+        },
+      }));
+      // scanOk's descriptors carry no currentValue — the reload wiped the DOM.
+      renderPanel({ api });
+      await screen.findByText("Engineer · Acme");
+      // Claim + rescan settle with the row still unwritten: the report says
+      // filled, the page says empty, and the page wins.
+      await screen.findByRole("button", { name: "Fill 1 field" });
+      expect(screen.getByRole("button", { name: /Email/ }).getAttribute("data-written")).toBeNull();
     });
 
     it("expands the fit strip to the full narrative and every gap", async () => {

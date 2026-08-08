@@ -19,6 +19,21 @@ export default defineConfig({
       'https://*.icims.com/*',
       'https://*.myworkdayjobs.com/*',
     ],
+    // The in-page overlay embeds sidepanel.html in an iframe on apply pages;
+    // the page can only load extension resources that are declared here.
+    web_accessible_resources: [
+      {
+        resources: ['sidepanel.html', 'chunks/*', 'assets/*', 'icon/*'],
+        matches: [
+          'https://*.greenhouse.io/*',
+          'https://jobs.lever.co/*',
+          'https://jobs.eu.lever.co/*',
+          'https://*.ashbyhq.com/*',
+          'https://*.icims.com/*',
+          'https://*.myworkdayjobs.com/*',
+        ],
+      },
+    ],
     ...(devExtKey ? { key: devExtKey } : {}),
   },
 });

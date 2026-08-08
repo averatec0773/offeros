@@ -39,9 +39,26 @@ function applyLinkOf(t: FillTicket): string | undefined {
   return t.applyLink ?? t.job.applyLink;
 }
 
-function hostOf(url: string): string | null {
+// Board hosts that serve MANY companies, where the first path segment is the
+// company (tenant) slug. A bare hostname match on these would claim a ticket
+// for a completely different employer's posting.
+const MULTI_TENANT_HOSTS: ReadonlySet<string> = new Set([
+  "jobs.ashbyhq.com",
+  "boards.greenhouse.io",
+  "job-boards.greenhouse.io",
+  "jobs.lever.co",
+  "jobs.eu.lever.co",
+]);
+
+/** Host plus, on multi-tenant board hosts, the company slug — the unit two
+ *  URLs must share before a same-site fallback claim is allowed. */
+function tenantOf(url: string): string | null {
   try {
-    return new URL(url).hostname;
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if (!MULTI_TENANT_HOSTS.has(host)) return host;
+    const slug = u.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? "";
+    return slug ? `${host}/${slug}` : host;
   } catch {
     return null;
   }
@@ -50,8 +67,12 @@ function hostOf(url: string): string | null {
 /**
  * Pick the handoff a claimed page belongs to. Precedence:
  *   1) a ticket whose applyLink parses to the same ATS job id as the page URL,
- *   2) else a ticket whose applyLink shares the page's hostname,
- *   3) else, if exactly one open ticket exists, that ticket,
+ *   2) else a ticket whose applyLink shares the page's tenant (hostname, plus
+ *      the company slug on multi-tenant board hosts like jobs.ashbyhq.com —
+ *      a bare host match would hand another employer's ticket to this page),
+ *   3) else, if exactly one open ticket exists AND it carries no applyLink to
+ *      compare (a linkable ticket that didn't match above belongs elsewhere),
+ *      that ticket,
  *   4) else null (ambiguous → no handoff claimed).
  * `jobIdFromUrl` is injected (the extension's recipes.jobIdFromUrl); it returns
  * "" or null when no id can be parsed, both treated as "no id".
@@ -75,16 +96,17 @@ export function matchHandoff(
     if (byId) return byId;
   }
 
-  const pageHost = hostOf(pageUrl);
-  if (pageHost) {
-    const byHost = open.find((t) => {
+  const pageTenant = tenantOf(pageUrl);
+  if (pageTenant) {
+    const byTenant = open.find((t) => {
       const link = applyLinkOf(t);
-      return link ? hostOf(link) === pageHost : false;
+      return link ? tenantOf(link) === pageTenant : false;
     });
-    if (byHost) return byHost;
+    if (byTenant) return byTenant;
   }
 
-  return open.length === 1 ? open[0]! : null;
+  if (open.length === 1 && !applyLinkOf(open[0]!)) return open[0]!;
+  return null;
 }
 
 /** True when a field label reads like a cover-/motivation-letter free-text box.
