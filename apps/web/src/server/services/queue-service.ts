@@ -1,11 +1,13 @@
 import { PIPELINE_STEPS, type AgentTask } from "@offeros/core";
 import type { Db } from "../db/client";
 import type { PipelineContext } from "../pipeline/types";
-import { startTask, advance, choose, failureReasonFor } from "../pipeline/runner";
+import { startTask, advance, choose } from "../pipeline/runner";
 import { getAgentTaskByApplicationId } from "../repositories/agent-task-by-application";
 import { createAgentTask } from "../repositories/agent-task-repo";
 import { getApplication } from "../repositories/application-repo";
 import { appendEvent } from "../repositories/application-event-repo";
+import { runTool } from "../agent/run-tool";
+import type { Tool } from "../agent/types";
 
 /**
  * The run queue: batch-apply over many applications, one at a time. Each item
@@ -68,6 +70,35 @@ export interface QueueDeps {
 }
 
 const HUMAN_GATES = new Set(["fill-form", "submit"]);
+
+/**
+ * One queue item, expressed as a tool so the batch run lands on the agent
+ * trace like everything else: what it did to each application, whether the
+ * task actually moved, and where it stopped.
+ */
+const queueItemTool: Tool<{ deps: QueueDeps }, { stoppedAt: string; taskStatus: string }> = {
+  id: "queue_item",
+  description: "Run one queued application forward to its next human gate.",
+  parse: (input) => input as { deps: QueueDeps },
+  run: async (ctx, { deps }) => {
+    const t = await runItemToGate(ctx.db, ctx.applicationId, deps);
+    const stoppedAt = PIPELINE_STEPS[t.step]?.key ?? "end";
+    if (t.status === "failed") {
+      return {
+        ok: false,
+        summary: `stopped: ${t.failureReason ?? "step failed"}`,
+        failure: { kind: "dependency", reason: t.failureReason ?? "step failed" },
+      };
+    }
+    return {
+      ok: true,
+      summary: atHumanGate(t) ? `waiting for you at ${stoppedAt}` : `ran to ${stoppedAt}`,
+      result: { stoppedAt, taskStatus: t.status },
+    };
+  },
+  // The task row is the durable record of where the item landed.
+  verify: async (ctx) => getAgentTaskByApplicationId(ctx.db, ctx.applicationId) !== null,
+};
 
 export function queueStatus(): QueueStatus {
   return {
@@ -183,35 +214,34 @@ async function runLoop(db: Db, deps: QueueDeps): Promise<void> {
     while (q.state === "running" && q.queued.length > 0) {
       const applicationId = q.queued.shift()!;
       q.current = applicationId;
-      try {
-        const t = await runItemToGate(db, applicationId, deps);
-        // The runner swallows step-body errors: it persists `failed` and
-        // RETURNS the task rather than throwing (only a missing API key
-        // propagates). Reading the returned status is therefore the only way
-        // to tell a real failure from a completed run — without it the bar
-        // counts failures as successes.
-        if (t.status === "failed") {
-          const reason = t.failureReason ?? "step failed";
-          q.failed.push({ applicationId, reason });
-          appendEvent(db, { applicationId, kind: "queue-item-failed", payload: { reason } });
-        } else {
-          q.done.push(applicationId);
-          appendEvent(db, {
-            applicationId,
-            kind: "queue-processed",
-            payload: {
-              stoppedAt: PIPELINE_STEPS[t.step]?.key ?? "end",
-              taskStatus: t.status,
-            },
-          });
-        }
-      } catch (error) {
-        const reason = failureReasonFor(error);
+      // Every queue item runs as a tool, so the batch lands on the agent trace
+      // and inherits the contract: a thrown error and a task that persisted
+      // `failed` both arrive here as the same failure observation, and the
+      // loop no longer needs its own try/catch to tell them apart. (The runner
+      // swallows step-body errors and RETURNS a failed task; only a missing
+      // API key propagates — reading one channel used to miss the other.)
+      const obs = await runTool(
+        queueItemTool,
+        { db, applicationId, reason: "run queue" },
+        { deps },
+      );
+      if (obs.ok) {
+        const t = getAgentTaskByApplicationId(db, applicationId);
+        q.done.push(applicationId);
+        appendEvent(db, {
+          applicationId,
+          kind: "queue-processed",
+          payload: {
+            stoppedAt: t ? (PIPELINE_STEPS[t.step]?.key ?? "end") : "end",
+            taskStatus: t?.status ?? "unknown",
+          },
+        });
+      } else {
+        const reason = obs.failure?.reason ?? "step failed";
         q.failed.push({ applicationId, reason });
         appendEvent(db, { applicationId, kind: "queue-item-failed", payload: { reason } });
-      } finally {
-        q.current = null;
       }
+      q.current = null;
     }
   } finally {
     q.looping = false;

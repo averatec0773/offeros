@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS fill_handoffs (
 CREATE TABLE IF NOT EXISTS application_events (
   id TEXT PRIMARY KEY, application_id TEXT NOT NULL, kind TEXT NOT NULL,
   at INTEGER NOT NULL, payload TEXT);
+CREATE TABLE IF NOT EXISTS agent_trace (
+  id TEXT PRIMARY KEY, application_id TEXT NOT NULL, task_id TEXT,
+  tool TEXT NOT NULL, reason TEXT, ok INTEGER NOT NULL, summary TEXT NOT NULL,
+  failure_kind TEXT, failure_reason TEXT, verified INTEGER,
+  duration_ms INTEGER NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS style_memories (
   kind TEXT PRIMARY KEY, notes TEXT NOT NULL DEFAULT '',
   enabled INTEGER NOT NULL DEFAULT 1, source_count INTEGER NOT NULL DEFAULT 0,
@@ -55,6 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_fit_analyses_application ON fit_analyses(applicat
 CREATE INDEX IF NOT EXISTS idx_artifacts_task ON artifacts(task_id);
 CREATE INDEX IF NOT EXISTS idx_fill_handoffs_task ON fill_handoffs(task_id);
 CREATE INDEX IF NOT EXISTS idx_application_events_application ON application_events(application_id);
+CREATE INDEX IF NOT EXISTS idx_agent_trace_application ON agent_trace(application_id);
 `;
 
 /** SQLite errors on `ALTER TABLE ADD COLUMN` if the column already exists, so

@@ -18,6 +18,7 @@ import type {
 import type { ParsedResume } from "@offeros/llm";
 import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
 import type { QueueStatus } from "@/server/services/queue-service";
+import type { TraceEntry } from "@/server/agent/types";
 import type { LineDiff } from "./diff";
 
 export class ApiError extends Error {
@@ -88,6 +89,7 @@ export const api = {
       }>,
     ) => request<Application>(`/applications/${id}`, json("PATCH", patch)),
     events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
+    trace: (id: string) => request<TraceEntry[]>(`/applications/${id}/trace`),
   },
   agentTasks: {
     create: (input: { applicationId: string }) =>

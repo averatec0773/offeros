@@ -122,6 +122,24 @@ export const applicationEvents = sqliteTable("application_events", {
   payload: text("payload", { mode: "json" }).$type<Record<string, unknown>>(),
 });
 
+/** The agent's machine-readable trace: one row per tool call. The human
+ *  timeline stays `application_events`; this is what a policy replays, what
+ *  the console renders as "what it tried", and what an eval harness scores. */
+export const agentTrace = sqliteTable("agent_trace", {
+  id: text("id").primaryKey(),
+  applicationId: text("application_id").notNull(),
+  taskId: text("task_id"),
+  tool: text("tool").notNull(),
+  reason: text("reason"),
+  ok: integer("ok", { mode: "boolean" }).notNull(),
+  summary: text("summary").notNull(),
+  failureKind: text("failure_kind"),
+  failureReason: text("failure_reason"),
+  verified: integer("verified", { mode: "boolean" }),
+  durationMs: integer("duration_ms").notNull(),
+  at: integer("at").notNull(),
+});
+
 /** One row per style-memory kind ("resume" | "cover-letter"), keyed by `kind`.
  *  Owned by `style-memory-repo.ts`; see `server/memory/style-memory.ts` for
  *  the pluggable contract this backs. */
@@ -146,5 +164,6 @@ export const schema = {
   templates,
   fillHandoffs,
   applicationEvents,
+  agentTrace,
   styleMemories,
 };
