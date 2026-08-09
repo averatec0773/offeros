@@ -6,6 +6,8 @@ import { getAgentTaskByApplicationId } from "../repositories/agent-task-by-appli
 import { createAgentTask } from "../repositories/agent-task-repo";
 import { getApplication } from "../repositories/application-repo";
 import { appendEvent } from "../repositories/application-event-repo";
+import { findConflicts, type ApplicantConstraints } from "@offeros/autofill";
+import { listAnswerBank } from "./fill-service";
 import { runTool } from "../agent/run-tool";
 import type { Tool } from "../agent/types";
 
@@ -70,6 +72,20 @@ export interface QueueDeps {
 }
 
 const HUMAN_GATES = new Set(["fill-form", "submit"]);
+
+/**
+ * The applicant's dealbreakers, read from answers they already committed to.
+ * Derived rather than configured: they answered "do you require sponsorship"
+ * once, and that answer is the constraint — asking again in a settings screen
+ * would be a second place for the same fact to go stale.
+ */
+function applicantConstraints(db: Db): ApplicantConstraints {
+  const bank = listAnswerBank(db);
+  const sponsorship = bank.find((a) => a.questionPatterns.some((p) => /sponsor/i.test(p)));
+  return {
+    needsSponsorship: sponsorship ? /^\s*yes\b/i.test(sponsorship.answer) : false,
+  };
+}
 
 /**
  * One queue item, expressed as a tool so the batch run lands on the agent
@@ -148,6 +164,22 @@ export function startQueue(
     const task = getAgentTaskByApplicationId(db, id);
     if (task && (task.status === "done" || task.status === "failed")) {
       skipped.push({ applicationId: id, reason: `task already ${task.status}` });
+      continue;
+    }
+    // Dealbreakers before effort: a posting that rules the applicant out is
+    // not worth a tailoring call. Said out loud with the posting's own words —
+    // postings are sometimes wrong, and the user can still open it by hand.
+    const conflicts = findConflicts(
+      `${application.jobInfo.jobTitle} ${application.jdText ?? ""}`,
+      applicantConstraints(db),
+    );
+    if (conflicts.length > 0) {
+      skipped.push({ applicationId: id, reason: conflicts[0]!.reason });
+      appendEvent(db, {
+        applicationId: id,
+        kind: "constraint-conflict",
+        payload: { kind: conflicts[0]!.kind, evidence: conflicts[0]!.evidence },
+      });
       continue;
     }
     if (task && atHumanGate(task)) {

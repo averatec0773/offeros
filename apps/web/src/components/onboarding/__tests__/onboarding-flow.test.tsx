@@ -32,6 +32,7 @@ function settings(provider: "anthropic" | "openai" = "anthropic"): ClientSetting
       enableCustomizeCoverLetter: true,
       useOriginalResume: false,
       autoConfirm: false,
+      autoSubmit: false,
     },
     llm: { provider, promptOverrides: {}, modelOverrides: {} },
   };

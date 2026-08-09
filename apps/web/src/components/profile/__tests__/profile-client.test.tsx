@@ -41,6 +41,7 @@ beforeEach(() => {
       enableCustomizeCoverLetter: true,
       useOriginalResume: false,
       autoConfirm: false,
+      autoSubmit: false,
     },
     llm: { provider: "anthropic", promptOverrides: {}, modelOverrides: {} },
   });

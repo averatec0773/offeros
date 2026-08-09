@@ -8,6 +8,8 @@ import { createApplication, updateApplication } from "../../repositories/applica
 import { getAgentTaskByApplicationId } from "../../repositories/agent-task-by-application";
 import { updateAgentTask } from "../../repositories/agent-task-repo";
 import { listEvents } from "../../repositories/application-event-repo";
+import { randomUUID } from "node:crypto";
+import { answers } from "../../db/schema";
 import {
   startQueue,
   queueStatus,
@@ -34,6 +36,21 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
+
+/** Store one answer-bank entry the way the answers route does. */
+function saveAnswerForTest(
+  database: Db,
+  input: { questionPatterns: string[]; answer: string },
+): void {
+  const doc = {
+    id: randomUUID(),
+    questionPatterns: input.questionPatterns,
+    answer: input.answer,
+    type: "enum" as const,
+    category: "eeo" as const,
+  };
+  database.insert(answers).values({ id: doc.id, doc, updatedAt: Date.now() }).run();
+}
 
 function seedApplication(status: "saved" | "applying" | "applied" = "saved"): string {
   const app = createApplication(db, {
@@ -178,5 +195,39 @@ describe("queue loop", () => {
     await waitForIdle();
     status = queueStatus();
     expect(status.done).toEqual([a, b]);
+  });
+});
+
+describe("dealbreaker screening at the door", () => {
+  it("refuses a posting that rules the applicant out, quoting the posting", () => {
+    // The applicant already answered that they need sponsorship; the posting
+    // says it isn't offered. Spending a tailoring call on it is waste.
+    saveAnswerForTest(db, {
+      questionPatterns: ["Will you require visa sponsorship?", "sponsorship"],
+      answer: "Yes",
+    });
+    const appId = seedApplication();
+    updateApplication(db, appId, {
+      jdText: "Great role. We do not sponsor employment visas. Apply today.",
+    });
+
+    const { skipped } = startQueue(db, [appId], fakeDeps());
+    expect(skipped[0]?.reason).toContain("sponsorship");
+    expect(queueStatus().queued).toEqual([]);
+    // Said out loud on the timeline, with the posting's own words, because a
+    // posting can be wrong and the user may still want to apply.
+    const event = listEvents(db, appId).find((e) => e.kind === "constraint-conflict");
+    expect(event?.payload).toMatchObject({ kind: "no-sponsorship" });
+    expect(String(event?.payload?.evidence)).toContain("do not sponsor");
+  });
+
+  it("lets the same job through when the applicant needs no sponsorship", () => {
+    saveAnswerForTest(db, {
+      questionPatterns: ["Will you require visa sponsorship?", "sponsorship"],
+      answer: "No",
+    });
+    const appId = seedApplication();
+    updateApplication(db, appId, { jdText: "We do not sponsor employment visas." });
+    expect(startQueue(db, [appId], fakeDeps()).skipped).toEqual([]);
   });
 });

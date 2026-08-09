@@ -34,3 +34,6 @@ export {
   formatEvidence,
   matchSelfAssessment,
 } from "./evidence-match";
+
+export type { ApplicantConstraints, Conflict, ConflictKind } from "./constraints";
+export { findConflicts } from "./constraints";

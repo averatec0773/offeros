@@ -274,7 +274,9 @@ function toFillPersonal(profile: Profile | null): FillPersonalInfo {
 }
 
 /** All saved answers, mapped to the engine's AnswerEntry (structurally identical to core's). */
-function listAnswerBank(db: Db): AnswerEntry[] {
+/** The user's stored answers. Exported because the queue's dealbreaker check
+ *  reads the same commitments (sponsorship) rather than keeping its own copy. */
+export function listAnswerBank(db: Db): AnswerEntry[] {
   return db
     .select()
     .from(answers)
