@@ -30,7 +30,12 @@ export interface Engine {
   scan(): Promise<ScanResponse>;
   fill(values: FillValue[]): Promise<FillResponse>;
   capture(): CaptureJdResponse;
-  attachFile(fieldId: string, fileName: string, mimeType: string, bytesBase64: string): Promise<AttachFileResponse>;
+  attachFile(
+    fieldId: string,
+    fileName: string,
+    mimeType: string,
+    bytesBase64: string,
+  ): Promise<AttachFileResponse>;
   scrollToField(fieldId: string): ScrollToFieldResponse;
   watch(cb: () => void): () => void;
 }
@@ -104,7 +109,8 @@ export function createEngine(doc: Document): Engine {
       } catch {
         continue;
       }
-      if (resolved.origin !== doc.location.origin || !POSTING_PATH.test(resolved.pathname)) continue;
+      if (resolved.origin !== doc.location.origin || !POSTING_PATH.test(resolved.pathname))
+        continue;
       const text = (a.textContent ?? "").replace(/\s+/g, " ").trim();
       if (!text || text.length > 120) continue;
       const href = resolved.toString();
@@ -121,7 +127,14 @@ export function createEngine(doc: Document): Engine {
   // list of postings — without this check a directory reads as a form with a
   // handful of junk fields (observed live: 4 filter selects on a real board),
   // which is precisely the state that leaves a task stuck with nothing to fill.
-  const IDENTITY_FIELDS = new Set(["fullName", "firstName", "lastName", "email", "phone", "resume"]);
+  const IDENTITY_FIELDS = new Set([
+    "fullName",
+    "firstName",
+    "lastName",
+    "email",
+    "phone",
+    "resume",
+  ]);
   const looksLikeApplication = (descriptors: FieldDescriptor[]): boolean =>
     descriptors.some((d) => {
       const canonical = classifyField(d);
@@ -248,7 +261,8 @@ export function registerEngine(doc: Document, ctx: EngineContext): Engine {
     if (isEngineAttachFileRequest(msg)) {
       return engine.attachFile(msg.fieldId, msg.fileName, msg.mimeType, msg.bytesBase64);
     }
-    if (isEngineScrollToFieldRequest(msg)) return Promise.resolve(engine.scrollToField(msg.fieldId));
+    if (isEngineScrollToFieldRequest(msg))
+      return Promise.resolve(engine.scrollToField(msg.fieldId));
     return undefined;
   };
   browser.runtime.onMessage.addListener(listener);

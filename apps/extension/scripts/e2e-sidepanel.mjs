@@ -55,12 +55,17 @@ try {
 
   // 1) content script injected on a real greenhouse host → highlight style present
   const hasHighlight = await page.evaluate(
-    () => !![...document.querySelectorAll("style")].find((s) => s.textContent.includes(".offeros-filled")),
+    () =>
+      !![...document.querySelectorAll("style")].find((s) =>
+        s.textContent.includes(".offeros-filled"),
+      ),
   );
   log("content_script_injected", hasHighlight);
 
   // 2) reach the MV3 service worker to drive the engine over messaging
-  let sw = ctx.serviceWorkers()[0] || (await ctx.waitForEvent("serviceworker", { timeout: 8000 }).catch(() => null));
+  let sw =
+    ctx.serviceWorkers()[0] ||
+    (await ctx.waitForEvent("serviceworker", { timeout: 8000 }).catch(() => null));
   log("service_worker", !!sw);
 
   if (sw) {
@@ -80,7 +85,10 @@ try {
     const emailId = scan?.ok ? scan.descriptors.find((d) => d.name === "email")?.fieldId : null;
     const fill = await sw.evaluate(
       async ({ id, fid }) =>
-        await chrome.tabs.sendMessage(id, { kind: "OFFEROS_ENGINE_FILL", values: [{ fieldId: fid, value: "a@b.com" }] }),
+        await chrome.tabs.sendMessage(id, {
+          kind: "OFFEROS_ENGINE_FILL",
+          values: [{ fieldId: fid, value: "a@b.com" }],
+        }),
       { id: tabId, fid: emailId },
     );
     log("fill_filled", fill?.filled);
@@ -88,7 +96,9 @@ try {
 
     const written = await page.evaluate(() => document.querySelector('input[name="email"]').value);
     log("dom_value_written", written);
-    const highlighted = await page.evaluate(() => document.querySelector('input[name="email"]').classList.contains("offeros-filled"));
+    const highlighted = await page.evaluate(() =>
+      document.querySelector('input[name="email"]').classList.contains("offeros-filled"),
+    );
     log("field_highlighted", highlighted);
 
     // 2b) file attach. Task-mode file attach lives in the side panel's
@@ -106,7 +116,9 @@ try {
       : null;
     log("resume_field_scanned", resumeFieldId != null);
 
-    const fakePdfBase64 = Buffer.from("%PDF-1.4\n% synthetic fixture PDF for E2E\n%%EOF").toString("base64");
+    const fakePdfBase64 = Buffer.from("%PDF-1.4\n% synthetic fixture PDF for E2E\n%%EOF").toString(
+      "base64",
+    );
     const attach = await sw.evaluate(
       async ({ id, fid, b64 }) =>
         await chrome.tabs.sendMessage(id, {
@@ -132,9 +144,13 @@ try {
   if (sw) {
     const extId = new URL(sw.url()).host;
     const sp = await ctx.newPage();
-    await sp.goto(`chrome-extension://${extId}/sidepanel.html`, { waitUntil: "load" }).catch(() => {});
+    await sp
+      .goto(`chrome-extension://${extId}/sidepanel.html`, { waitUntil: "load" })
+      .catch(() => {});
     await sp.waitForTimeout(800);
-    const heading = await sp.evaluate(() => document.body.innerText.includes("OfferOS")).catch(() => false);
+    const heading = await sp
+      .evaluate(() => document.body.innerText.includes("OfferOS"))
+      .catch(() => false);
     log("sidepanel_renders", heading);
   }
 

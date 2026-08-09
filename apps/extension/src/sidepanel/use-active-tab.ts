@@ -39,7 +39,8 @@ export function useActiveTab(): ActiveTab | null {
       tab: { active?: boolean },
     ) => {
       // Only the active tab drives the panel; react when it finishes loading or its url changes.
-      if (tab?.active && (changeInfo.status === "complete" || changeInfo.url !== undefined)) void refresh();
+      if (tab?.active && (changeInfo.status === "complete" || changeInfo.url !== undefined))
+        void refresh();
     };
     browser.tabs.onActivated.addListener(onActivated);
     browser.tabs.onUpdated.addListener(onUpdated);

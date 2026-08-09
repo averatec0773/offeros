@@ -17,3 +17,14 @@ const twMerge = extendTailwindMerge({
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+/** Read a File's bytes as base64 (no data-URL prefix). Shared by the résumé
+ *  upload paths, which both need to hand bytes to the JSON API. */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.readAsDataURL(file);
+  });
+}

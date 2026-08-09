@@ -27,7 +27,8 @@ export default defineContentScript({
     // root, so it cannot read var(--brand)). #00f0a0 is the web app's brand green
     // (apps/web/src/app/globals.css --brand).
     const style = document.createElement("style");
-    style.textContent = ".offeros-filled{outline:2px solid #00f0a0 !important;transition:outline .2s}";
+    style.textContent =
+      ".offeros-filled{outline:2px solid #00f0a0 !important;transition:outline .2s}";
     document.head.appendChild(style);
 
     // The DOM fill engine, driven by the side panel over messaging (SCAN/FILL/

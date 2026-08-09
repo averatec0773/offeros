@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { companyFromDocTitle, companyFromUrl, jobIdFromUrl, matchAts, RECIPES } from "../src/lib/autofill/recipes";
+import {
+  companyFromDocTitle,
+  companyFromUrl,
+  jobIdFromUrl,
+  matchAts,
+  RECIPES,
+} from "../src/lib/autofill/recipes";
 
 describe("matchAts", () => {
   it("matches greenhouse boards and job-boards hosts", () => {
@@ -79,7 +85,9 @@ describe("companyFromUrl", () => {
   });
 
   it("uses ?for= on the greenhouse embedded apply route (embed is never a company)", () => {
-    expect(companyFromUrl("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=123")).toBe("acme");
+    expect(
+      companyFromUrl("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=123"),
+    ).toBe("acme");
     expect(companyFromUrl("https://boards.greenhouse.io/embed/job_app?token=123")).toBe("");
   });
 
@@ -91,7 +99,9 @@ describe("companyFromUrl", () => {
 describe("companyFromDocTitle", () => {
   it("parses the greenhouse job-application title convention", () => {
     expect(companyFromDocTitle("Job Application for AI Engineer at Forward")).toBe("Forward");
-    expect(companyFromDocTitle("Job application for Staff Engineer at Acme Cloud")).toBe("Acme Cloud");
+    expect(companyFromDocTitle("Job application for Staff Engineer at Acme Cloud")).toBe(
+      "Acme Cloud",
+    );
   });
 
   it("splits on the last ' at ' so job titles containing ' at ' survive", () => {
@@ -112,10 +122,14 @@ describe("jobIdFromUrl", () => {
   });
 
   it("extracts the lever/ashby path uuid", () => {
-    expect(jobIdFromUrl("https://jobs.lever.co/acme/398186bb-457d-453f-a747-57c72217e12e/apply"))
-      .toBe("398186bb-457d-453f-a747-57c72217e12e");
-    expect(jobIdFromUrl("https://jobs.ashbyhq.com/acme/cc0af88a-2a19-493d-93cf-c5090f986f1f/application"))
-      .toBe("cc0af88a-2a19-493d-93cf-c5090f986f1f");
+    expect(
+      jobIdFromUrl("https://jobs.lever.co/acme/398186bb-457d-453f-a747-57c72217e12e/apply"),
+    ).toBe("398186bb-457d-453f-a747-57c72217e12e");
+    expect(
+      jobIdFromUrl(
+        "https://jobs.ashbyhq.com/acme/cc0af88a-2a19-493d-93cf-c5090f986f1f/application",
+      ),
+    ).toBe("cc0af88a-2a19-493d-93cf-c5090f986f1f");
   });
 
   it("extracts the icims job id after the jobs segment", () => {
@@ -123,10 +137,12 @@ describe("jobIdFromUrl", () => {
   });
 
   it("falls back to greenhouse query params (gh_jid / embed token)", () => {
-    expect(jobIdFromUrl("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=7822161003")).toBe(
-      "7822161003",
+    expect(
+      jobIdFromUrl("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=7822161003"),
+    ).toBe("7822161003");
+    expect(jobIdFromUrl("https://boards.greenhouse.io/embed/job_board?for=acme&gh_jid=456")).toBe(
+      "456",
     );
-    expect(jobIdFromUrl("https://boards.greenhouse.io/embed/job_board?for=acme&gh_jid=456")).toBe("456");
   });
 
   it("never trusts a token param off greenhouse hosts", () => {

@@ -30,7 +30,9 @@ function setNativeValue(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
   if (setter) setter.call(input, value);
   else input.value = value;
-  input.dispatchEvent(new (win as unknown as { Event: typeof Event }).Event("input", { bubbles: true }));
+  input.dispatchEvent(
+    new (win as unknown as { Event: typeof Event }).Event("input", { bubbles: true }),
+  );
 }
 
 function optionText(el: Element): string {

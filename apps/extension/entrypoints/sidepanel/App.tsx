@@ -123,7 +123,8 @@ export default function App() {
         await new Promise((r) => setTimeout(r, 1500));
         await ping();
       }
-      if (!wasReachableRef.current) setStartError("Started, but it isn't answering yet — Retry in a moment.");
+      if (!wasReachableRef.current)
+        setStartError("Started, but it isn't answering yet — Retry in a moment.");
     } finally {
       setStarting(false);
     }
@@ -166,7 +167,10 @@ export default function App() {
 
   const tabId = activeTab?.id ?? -1;
   const scan = useCallback(() => sendEngineScan(tabId), [tabId]);
-  const fill = useCallback((values: Parameters<typeof sendEngineFill>[1]) => sendEngineFill(tabId, values), [tabId]);
+  const fill = useCallback(
+    (values: Parameters<typeof sendEngineFill>[1]) => sendEngineFill(tabId, values),
+    [tabId],
+  );
   const capture = useCallback(() => sendEngineCaptureJd(tabId), [tabId]);
   const attachFile = useCallback(
     (fieldId: string, file: { fileName: string; mimeType: string; bytesBase64: string }) =>
@@ -187,9 +191,13 @@ export default function App() {
     },
     [tabId],
   );
-  const openWebApp = useMemo(() => () => void browser.tabs.create({ url: apiBase || undefined }), [apiBase]);
+  const openWebApp = useMemo(
+    () => () => void browser.tabs.create({ url: apiBase || undefined }),
+    [apiBase],
+  );
   const openApplication = useCallback(
-    (applicationId: string) => void browser.tabs.create({ url: `${apiBase}/applications/${applicationId}` }),
+    (applicationId: string) =>
+      void browser.tabs.create({ url: `${apiBase}/applications/${applicationId}` }),
     [apiBase],
   );
 

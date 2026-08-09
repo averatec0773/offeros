@@ -149,7 +149,9 @@ describe("engine ATTACH_FILE handler", () => {
   it("decodes the base64 payload, attaches it to the file input, and verifies", async () => {
     seedFileForm();
     registerEngine(document, ctx());
-    const scan = (await browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })) as ScanResponse;
+    const scan = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_SCAN",
+    })) as ScanResponse;
     expect(scan.ok).toBe(true);
     if (!scan.ok) return;
     const resumeId = scan.descriptors.find((d) => d.name === "resume")!.fieldId;
@@ -172,7 +174,9 @@ describe("engine ATTACH_FILE handler", () => {
   it("returns ok:false for a fieldId that doesn't resolve to a file input", async () => {
     seedFileForm();
     registerEngine(document, ctx());
-    const scan = (await browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })) as ScanResponse;
+    const scan = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_SCAN",
+    })) as ScanResponse;
     expect(scan.ok).toBe(true);
     if (!scan.ok) return;
     const nameId = scan.descriptors.find((d) => d.name === "name")!.fieldId;
@@ -207,7 +211,9 @@ describe("engine SCROLL_TO_FIELD handler", () => {
   it("resolves the field, applies the highlight, and returns ok", async () => {
     seedForm();
     registerEngine(document, ctx());
-    const scan = (await browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })) as ScanResponse;
+    const scan = (await browser.runtime.sendMessage({
+      kind: "OFFEROS_ENGINE_SCAN",
+    })) as ScanResponse;
     expect(scan.ok).toBe(true);
     if (!scan.ok) return;
     const emailId = scan.descriptors.find((d) => d.name === "email")!.fieldId;

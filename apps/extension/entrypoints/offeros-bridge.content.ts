@@ -32,9 +32,13 @@ export default defineContentScript({
 
     const onMessage = (event: MessageEvent) => {
       if (event.source !== window || event.origin !== window.location.origin) return;
-      const d = event.data as
-        | { source?: unknown; type?: unknown; requestId?: unknown; handoffId?: unknown; url?: unknown }
-        | null;
+      const d = event.data as {
+        source?: unknown;
+        type?: unknown;
+        requestId?: unknown;
+        handoffId?: unknown;
+        url?: unknown;
+      } | null;
       if (!d || d.source !== "offeros-web") return;
 
       if (d.type === "OFFEROS_WEB_HELLO") {
@@ -43,7 +47,12 @@ export default defineContentScript({
       }
 
       if (d.type !== "OFFEROS_OPEN_FILL_TAB") return;
-      if (typeof d.requestId !== "string" || typeof d.handoffId !== "string" || typeof d.url !== "string") return;
+      if (
+        typeof d.requestId !== "string" ||
+        typeof d.handoffId !== "string" ||
+        typeof d.url !== "string"
+      )
+        return;
 
       const requestId = d.requestId;
       const reply = (ok: boolean) =>

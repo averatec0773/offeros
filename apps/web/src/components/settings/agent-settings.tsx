@@ -84,9 +84,14 @@ export function AgentSettingsSection() {
             <span className="flex items-center gap-1.5 text-body font-semibold text-foreground">
               <AlertTriangle aria-hidden className="size-4 text-warn" />
               Submit applications without asking me
+              <span className="rounded-full bg-muted px-2 py-0.5 text-caption font-normal text-muted-foreground">
+                not active yet
+              </span>
             </span>
             <span className="block text-body text-foreground/80">
-              OfferOS will press submit on the application site itself.
+              Your answer is recorded, but nothing reads it yet — OfferOS still stops at the submit
+              button and waits for you. This is here so the preference is yours before the behaviour
+              lands, not after.
             </span>
             <span className="mt-2 block text-caption leading-relaxed text-muted-foreground">
               A sent application cannot be recalled, edited, or withdrawn — companies see exactly

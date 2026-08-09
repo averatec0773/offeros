@@ -7,7 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
-import type { ScanResponse, FillResponse, CaptureJdResponse } from "../../src/lib/autofill/autofill-messaging";
+import type {
+  ScanResponse,
+  FillResponse,
+  CaptureJdResponse,
+} from "../../src/lib/autofill/autofill-messaging";
 import type { FillValue } from "../../src/lib/autofill/dom-fill";
 import type {
   AnswerEntry,
@@ -64,8 +68,14 @@ const api = (bundle: FillTaskBundle): FillApi => ({
   claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "Yes" } })),
-  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
-  createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
+  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
+    ok: true,
+    value: [],
+  })),
+  createTaskFromJd: vi.fn(async () => ({
+    ok: true as const,
+    value: { id: "t2", applicationId: "a2" },
+  })),
   instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   tailorResume: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   generateCoverLetter: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
@@ -98,7 +108,11 @@ const scanOf = (descriptors: OkScanResponse["descriptors"]): ScanResponse => ({
   descriptors,
 });
 
-const mount = async (scan: ScanResponse, used: FillApi, fill = vi.fn(async (v: FillValue[]) => okFill(v))) => {
+const mount = async (
+  scan: ScanResponse,
+  used: FillApi,
+  fill = vi.fn(async (v: FillValue[]) => okFill(v)),
+) => {
   render(
     <FillPanel
       scan={async () => scan}

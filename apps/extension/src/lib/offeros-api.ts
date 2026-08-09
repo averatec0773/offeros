@@ -186,7 +186,11 @@ export function claim(
   handoffId: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<FillTaskBundle>> {
-  return call<FillTaskBundle>(`/agent/fill/handoffs/${handoffId}/claim`, json("POST", {}), fetchImpl);
+  return call<FillTaskBundle>(
+    `/agent/fill/handoffs/${handoffId}/claim`,
+    json("POST", {}),
+    fetchImpl,
+  );
 }
 
 export function postReport(
@@ -213,7 +217,11 @@ export function generateAnswer(
   },
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<{ answer: string }>> {
-  return call<{ answer: string }>(`/agent/tasks/${taskId}/fill/answer`, json("POST", body), fetchImpl);
+  return call<{ answer: string }>(
+    `/agent/tasks/${taskId}/fill/answer`,
+    json("POST", body),
+    fetchImpl,
+  );
 }
 
 /** The full answer bank (`GET /answers`) — used to dedup an accepted AI answer against
@@ -339,7 +347,11 @@ export function postRepairEvent(
   payload: { failure: string; action: string; detail?: string },
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<unknown>> {
-  return call<unknown>(`/agent/tasks/${taskId}/repair-event`, json("POST", { kind, payload }), fetchImpl);
+  return call<unknown>(
+    `/agent/tasks/${taskId}/repair-event`,
+    json("POST", { kind, payload }),
+    fetchImpl,
+  );
 }
 
 /** In-panel "Tailor résumé for this job": run the tailor step out of band for a

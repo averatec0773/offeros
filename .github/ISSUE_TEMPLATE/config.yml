@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security or privacy issue
+    url: https://github.com/averatec0773/offeros/security/advisories/new
+    about: Report privately. Please do not open a public issue for these.

@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
-import type { ScanResponse, FillResponse, CaptureJdResponse } from "../../src/lib/autofill/autofill-messaging";
+import type {
+  ScanResponse,
+  FillResponse,
+  CaptureJdResponse,
+} from "../../src/lib/autofill/autofill-messaging";
 import type { FillValue } from "../../src/lib/autofill/dom-fill";
 import type {
   AnswerEntry,
@@ -73,11 +77,22 @@ const scan: ScanResponse = {
   company: "Acme",
   title: "Engineer",
   descriptors: [
-    { fieldId: "f1", label: "Email", name: "email", autocomplete: "email", type: "email", placeholder: "", ariaLabel: "" },
+    {
+      fieldId: "f1",
+      label: "Email",
+      name: "email",
+      autocomplete: "email",
+      type: "email",
+      placeholder: "",
+      ariaLabel: "",
+    },
     // Exactly the questions the choice-group guardrails refuse — but rendered
     // as free text, which many ATSes do.
     text("q1", "Are you legally authorized to work in the United States without visa sponsorship?"),
-    text("q2", "Please describe any disability or accommodation you need for the interview process."),
+    text(
+      "q2",
+      "Please describe any disability or accommodation you need for the interview process.",
+    ),
     text("q3", "Why do you want to work at this company and what excites you about the role?"),
   ],
 };
@@ -86,9 +101,18 @@ const api = (): FillApi => ({
   getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
   claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
-  generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "Yes, I am authorized." } })),
-  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
-  createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
+  generateAnswer: vi.fn(async () => ({
+    ok: true as const,
+    value: { answer: "Yes, I am authorized." },
+  })),
+  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
+    ok: true,
+    value: [],
+  })),
+  createTaskFromJd: vi.fn(async () => ({
+    ok: true as const,
+    value: { id: "t2", applicationId: "a2" },
+  })),
   instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   tailorResume: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   generateCoverLetter: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
@@ -134,12 +158,15 @@ describe("AI-answering guardrails on FREE-TEXT questions", () => {
       await userEvent.click(btn);
     });
     // Harness sanity: the benign open-ended question IS AI-answered.
-    expect(used.generateAnswer).toHaveBeenCalledWith("t1", expect.objectContaining({
-      question: "Why do you want to work at this company and what excites you about the role?",
-    }));
-    const asked = (used.generateAnswer as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
-      (c) => (c[1] as { question: string }).question,
+    expect(used.generateAnswer).toHaveBeenCalledWith(
+      "t1",
+      expect.objectContaining({
+        question: "Why do you want to work at this company and what excites you about the role?",
+      }),
     );
+    const asked = (
+      used.generateAnswer as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls.map((c) => (c[1] as { question: string }).question);
     expect(asked).toEqual([
       "Why do you want to work at this company and what excites you about the role?",
     ]);
@@ -159,7 +186,8 @@ describe("policy acknowledgments", () => {
     descriptors: [
       {
         fieldId: "consent",
-        label: "Do you acknowledge and agree to comply with our AI use policy during the interview process?",
+        label:
+          "Do you acknowledge and agree to comply with our AI use policy during the interview process?",
         name: "",
         autocomplete: "",
         type: "radio-group",

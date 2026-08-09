@@ -19,7 +19,11 @@ import type {
   FillTicket,
   FitSummary,
 } from "../../src/lib/offeros-api";
-import { NO_FILE_REASON, CUSTOM_UPLOADER_REASON, RENDER_FAILED_REASON } from "../../src/lib/autofill/task-mode";
+import {
+  NO_FILE_REASON,
+  CUSTOM_UPLOADER_REASON,
+  RENDER_FAILED_REASON,
+} from "../../src/lib/autofill/task-mode";
 
 const scanOk: ScanResponse = {
   ok: true,
@@ -28,8 +32,24 @@ const scanOk: ScanResponse = {
   company: "Acme",
   title: "Engineer",
   descriptors: [
-    { fieldId: "f1", label: "Email", name: "email", autocomplete: "email", type: "email", placeholder: "", ariaLabel: "" },
-    { fieldId: "q1", label: "Why do you want to work here?", name: "why", autocomplete: "", type: "textarea", placeholder: "", ariaLabel: "" },
+    {
+      fieldId: "f1",
+      label: "Email",
+      name: "email",
+      autocomplete: "email",
+      type: "email",
+      placeholder: "",
+      ariaLabel: "",
+    },
+    {
+      fieldId: "q1",
+      label: "Why do you want to work here?",
+      name: "why",
+      autocomplete: "",
+      type: "textarea",
+      placeholder: "",
+      ariaLabel: "",
+    },
   ],
 };
 
@@ -67,7 +87,11 @@ const bundle: FillTaskBundle = {
   taskId: "t1",
   applicationId: "a1",
   job: { title: "Engineer", company: "Acme" },
-  fillProfile: { personal: { name: "Jordan Rivera", email: "a@b.com", phone: "", address: "", links: {} }, skills: [], answerBank: [] },
+  fillProfile: {
+    personal: { name: "Jordan Rivera", email: "a@b.com", phone: "", address: "", links: {} },
+    skills: [],
+    answerBank: [],
+  },
   resumeText: null,
   coverLetterText: null,
   jdSummary: null,
@@ -75,7 +99,12 @@ const bundle: FillTaskBundle = {
 };
 
 const ticket: FillTicket = {
-  id: "h1", taskId: "t1", applicationId: "a1", status: "pending", createdAt: 1, updatedAt: 1,
+  id: "h1",
+  taskId: "t1",
+  applicationId: "a1",
+  status: "pending",
+  createdAt: 1,
+  updatedAt: 1,
   job: { title: "Engineer", company: "Acme" },
 };
 
@@ -101,8 +130,14 @@ const emptyApi = (): FillApi => ({
   claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
-  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
-  createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
+  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
+    ok: true,
+    value: [],
+  })),
+  createTaskFromJd: vi.fn(async () => ({
+    ok: true as const,
+    value: { id: "t2", applicationId: "a2" },
+  })),
   instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   tailorResume: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   generateCoverLetter: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
@@ -196,7 +231,8 @@ describe("FillPanel", () => {
     let calls = 0;
     const scan = vi.fn(async (): Promise<ScanResponse> => {
       calls += 1;
-      if (calls < 3) throw new Error("Could not establish connection. Receiving end does not exist.");
+      if (calls < 3)
+        throw new Error("Could not establish connection. Receiving end does not exist.");
       return scanOk;
     });
     renderPanel({ scan, scanRetryTries: 5, scanRetryDelayMs: 10 });
@@ -214,7 +250,9 @@ describe("FillPanel", () => {
     renderPanel({ scan, scanRetryTries: 2, scanRetryDelayMs: 10 });
     expect(await screen.findByText("Can't reach this page yet")).toBeInTheDocument();
     // The heartbeat probe (delay × 6) eventually connects and the panel recovers.
-    expect(await screen.findByText("Acme · Engineer", undefined, { timeout: 2000 })).toBeInTheDocument();
+    expect(
+      await screen.findByText("Acme · Engineer", undefined, { timeout: 2000 }),
+    ).toBeInTheDocument();
   });
 
   it("no_form scan shows a small message", async () => {
@@ -252,7 +290,11 @@ describe("FillPanel", () => {
     // The claim lands on the ok scan; the bundle survives the rescan below.
     await screen.findByText("Engineer · Acme");
     view.rerender(
-      <FillPanel scan={async () => ({ ok: false, reason: "no_form" })} rescanNonce={1} {...props} />,
+      <FillPanel
+        scan={async () => ({ ok: false, reason: "no_form" })}
+        rescanNonce={1}
+        {...props}
+      />,
     );
     await screen.findByText("No form detected");
     expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
@@ -300,7 +342,10 @@ describe("FillPanel", () => {
       jdText: captureOk.jd,
     });
     // The claimed bundle's profile drove the fill: the email field got its value.
-    expect(fill.mock.calls.flatMap((c) => c[0])).toContainEqual({ fieldId: "f1", value: "a@b.com" });
+    expect(fill.mock.calls.flatMap((c) => c[0])).toContainEqual({
+      fieldId: "f1",
+      value: "a@b.com",
+    });
     // Ordinary task mode took over: cumulative report posted, task chip shown.
     await waitFor(() => expect(usedApi.postReport).toHaveBeenCalled());
     expect(await screen.findByText("Engineer · Acme")).toBeInTheDocument();
@@ -429,7 +474,8 @@ describe("FillPanel", () => {
       const api = claimedApi();
       api.tailorResume = vi.fn(async () => ({
         ok: false as const,
-        error: "Your AI provider rejected the request — check your API key and model in Settings → AI.",
+        error:
+          "Your AI provider rejected the request — check your API key and model in Settings → AI.",
       }));
       renderPanel({ api, scan: async () => scanWithResumeFile });
       await userEvent.click(
@@ -460,14 +506,12 @@ describe("FillPanel", () => {
           _file: { fileName: string; mimeType: string; bytesBase64: string },
         ): Promise<AttachFileResponse> => ({ ok: true }),
       );
-      api.fetchArtifactPdf = vi.fn(
-        async (): Promise<FileFetchResult> => ({
-          ok: true,
-          bytes: new TextEncoder().encode("%PDF cover").buffer as ArrayBuffer,
-          fileName: "cover-letter.pdf",
-          mimeType: "application/pdf",
-        }),
-      );
+      api.fetchArtifactPdf = vi.fn(async (): Promise<FileFetchResult> => ({
+        ok: true,
+        bytes: new TextEncoder().encode("%PDF cover").buffer as ArrayBuffer,
+        fileName: "cover-letter.pdf",
+        mimeType: "application/pdf",
+      }));
       renderPanel({ api, attachFile, scan: async () => scanWithBothFiles });
       await userEvent.click(await screen.findByRole("button", { name: "Write cover letter" }));
       expect(api.generateCoverLetter).toHaveBeenCalledWith("t1");
@@ -679,7 +723,9 @@ describe("FillPanel", () => {
       await screen.findByText("already tracked in OfferOS — open the application workspace"),
     ).toBeInTheDocument();
     // Still no bundle: the instant entry stays available.
-    expect(screen.getByRole("button", { name: "Fill this page with my profile" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Fill this page with my profile" }),
+    ).toBeInTheDocument();
   });
 
   it("a tab-bound handoff is claimed directly, beating URL heuristics that would refuse", async () => {
@@ -693,7 +739,10 @@ describe("FillPanel", () => {
         ok: true,
         value: [{ ...ticket, id: "other", applyLink: "https://jobs.ashbyhq.com/other-co/1" }],
       })),
-      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: boundBundle })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({
+        ok: true,
+        value: boundBundle,
+      })),
     };
     renderPanel({
       api,
@@ -730,7 +779,10 @@ describe("FillPanel", () => {
     expect(api.claim).not.toHaveBeenCalled();
 
     // Server push: a ticket now exists → nonce bump → re-check + claim.
-    api.getPending = vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] }));
+    api.getPending = vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+      ok: true,
+      value: [ticket],
+    }));
     rerender(<FillPanel {...props} claimNonce={1} />);
     await screen.findByText("Engineer · Acme");
     expect(api.claim).toHaveBeenCalledWith("h1");
@@ -739,7 +791,10 @@ describe("FillPanel", () => {
   it("an unbound tab still falls back to the URL-heuristic ticket match", async () => {
     const api: FillApi = {
       ...emptyApi(),
-      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [ticket],
+      })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
     };
     renderPanel({ api, getBoundHandoff: async () => null });
@@ -750,10 +805,16 @@ describe("FillPanel", () => {
   it("claims a matching handoff, fills the fillable field, generates open-ended answers, and reports", async () => {
     const api: FillApi = {
       ...emptyApi(),
-      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [ticket],
+      })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
-      generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "Because I build compilers." } })),
+      generateAnswer: vi.fn(async () => ({
+        ok: true as const,
+        value: { answer: "Because I build compilers." },
+      })),
     };
     const { fill } = renderPanel({ api });
 
@@ -832,7 +893,12 @@ describe("FillPanel", () => {
           placeholder: "",
           ariaLabel: "",
           required: false,
-          options: ["Person with disability", "Veteran", "None of the above", "I prefer not to answer"],
+          options: [
+            "Person with disability",
+            "Veteran",
+            "None of the above",
+            "I prefer not to answer",
+          ],
         },
         {
           // Legally-consequential fact — bank-only, never an AI guess.
@@ -850,7 +916,10 @@ describe("FillPanel", () => {
     };
     const api: FillApi = {
       ...emptyApi(),
-      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [ticket],
+      })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "Yes" } })),
     };
@@ -895,7 +964,10 @@ describe("FillPanel", () => {
   describe("self-recovery on form-less pages", () => {
     const heldTaskApi = (): FillApi => ({
       ...emptyApi(),
-      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [ticket],
+      })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
     });
 
@@ -957,7 +1029,9 @@ describe("FillPanel", () => {
         />,
       );
       await waitFor(() =>
-        expect(navigateTab).toHaveBeenCalledWith("https://boards.greenhouse.io/acme/jobs/1/application"),
+        expect(navigateTab).toHaveBeenCalledWith(
+          "https://boards.greenhouse.io/acme/jobs/1/application",
+        ),
       );
       expect(api.postRepairEvent).toHaveBeenCalledWith(
         "t1",
@@ -1057,7 +1131,10 @@ describe("FillPanel", () => {
     it("suggests mark-as-applied on a confirmation page while a task is held, with undo after", async () => {
       const api: FillApi = {
         ...emptyApi(),
-        getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+        getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+          ok: true,
+          value: [ticket],
+        })),
         claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       };
       const scan = claimedThenConfirmation();
@@ -1125,10 +1202,16 @@ describe("FillPanel", () => {
 
     const apiWithGeneratedAnswer = (overrides: Partial<FillApi> = {}): FillApi => ({
       ...emptyApi(),
-      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [ticket],
+      })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
-      generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: generatedAnswer } })),
+      generateAnswer: vi.fn(async () => ({
+        ok: true as const,
+        value: { answer: generatedAnswer },
+      })),
       ...overrides,
     });
 
@@ -1142,7 +1225,10 @@ describe("FillPanel", () => {
 
     it("accept with no normalized match in the bank creates a new answer entry", async () => {
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [],
+        })),
       });
       renderPanel({ api });
       await fillAndGetTextarea();
@@ -1152,9 +1238,14 @@ describe("FillPanel", () => {
       });
 
       expect(api.listAnswers).toHaveBeenCalledTimes(1);
-      expect(api.createAnswer).toHaveBeenCalledWith({ question: answerLabel, answer: generatedAnswer });
+      expect(api.createAnswer).toHaveBeenCalledWith({
+        question: answerLabel,
+        answer: generatedAnswer,
+      });
       expect(api.updateAnswer).not.toHaveBeenCalled();
-      expect(await screen.findByText("Saved — reused next time this question appears.")).toBeInTheDocument();
+      expect(
+        await screen.findByText("Saved — reused next time this question appears."),
+      ).toBeInTheDocument();
     });
 
     it("accept when a normalized match exists updates that entry instead of creating one", async () => {
@@ -1166,7 +1257,10 @@ describe("FillPanel", () => {
         category: "custom",
       };
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [existing] })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [existing],
+        })),
       });
       renderPanel({ api });
       await fillAndGetTextarea();
@@ -1179,7 +1273,9 @@ describe("FillPanel", () => {
       // multi-pattern regression test below for why).
       expect(api.updateAnswer).toHaveBeenCalledWith("ans-1", { answer: generatedAnswer });
       expect(api.createAnswer).not.toHaveBeenCalled();
-      expect(await screen.findByText("Saved — reused next time this question appears.")).toBeInTheDocument();
+      expect(
+        await screen.findByText("Saved — reused next time this question appears."),
+      ).toBeInTheDocument();
     });
 
     it("a matched curated entry with multiple patterns is never clobbered: update carries no questionPatterns", async () => {
@@ -1191,7 +1287,10 @@ describe("FillPanel", () => {
         category: "custom",
       };
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [existing] })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [existing],
+        })),
       });
       renderPanel({ api });
       await fillAndGetTextarea();
@@ -1210,7 +1309,10 @@ describe("FillPanel", () => {
 
     it("edited-then-accepted text is what gets saved, not the original generated text", async () => {
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [],
+        })),
       });
       renderPanel({ api });
       const textarea = await fillAndGetTextarea();
@@ -1230,8 +1332,14 @@ describe("FillPanel", () => {
 
     it("shows no caption when the save fails (silent degrade)", async () => {
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
-        createAnswer: vi.fn(async (): Promise<ApiResult<AnswerEntry>> => ({ ok: false, error: "network error" })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [],
+        })),
+        createAnswer: vi.fn(async (): Promise<ApiResult<AnswerEntry>> => ({
+          ok: false,
+          error: "network error",
+        })),
       });
       renderPanel({ api });
       await fillAndGetTextarea();
@@ -1241,12 +1349,17 @@ describe("FillPanel", () => {
       });
 
       expect(api.createAnswer).toHaveBeenCalledTimes(1);
-      expect(screen.queryByText("Saved — reused next time this question appears.")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Saved — reused next time this question appears."),
+      ).not.toBeInTheDocument();
     });
 
     it("regenerate never calls the answer-bank APIs", async () => {
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [],
+        })),
       });
       renderPanel({ api });
       await fillAndGetTextarea();
@@ -1262,7 +1375,10 @@ describe("FillPanel", () => {
 
     it("generating an answer alone (no accept click) never calls the answer-bank APIs", async () => {
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [],
+        })),
       });
       renderPanel({ api });
       await fillAndGetTextarea();
@@ -1274,7 +1390,10 @@ describe("FillPanel", () => {
 
     it("emptying the textarea disables Accept and blocks the save (no blank overwrite)", async () => {
       const api = apiWithGeneratedAnswer({
-        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({ ok: true, value: [] })),
+        listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+          ok: true,
+          value: [],
+        })),
       });
       renderPanel({ api });
       const textarea = await fillAndGetTextarea();
@@ -1306,7 +1425,10 @@ describe("FillPanel", () => {
   it("renders canon idioms: lucide status icons + a black pill primary button, no raw glyphs", async () => {
     const api: FillApi = {
       ...emptyApi(),
-      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [ticket],
+      })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
       generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
@@ -1394,7 +1516,10 @@ describe("FillPanel", () => {
       const api: FillApi = {
         ...emptyApi(),
         getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
-        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const },
+        })),
         fetchArtifactPdf: vi.fn(async () => pdfBytes()),
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
@@ -1478,7 +1603,10 @@ describe("FillPanel", () => {
       const api: FillApi = {
         ...emptyApi(),
         getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
-        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const },
+        })),
         fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false })),
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
@@ -1502,7 +1630,10 @@ describe("FillPanel", () => {
       const api: FillApi = {
         ...emptyApi(),
         getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
-        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const },
+        })),
         fetchArtifactPdf: vi.fn(async () => pdfBytes()),
       };
       renderPanel({
@@ -1519,7 +1650,11 @@ describe("FillPanel", () => {
       expect(api.postReport).toHaveBeenCalledWith(
         "t1",
         expect.arrayContaining([
-          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON }),
+          expect.objectContaining({
+            fieldId: "r1",
+            outcome: "needs-user",
+            reason: CUSTOM_UPLOADER_REASON,
+          }),
         ]),
         false,
       );
@@ -1529,7 +1664,10 @@ describe("FillPanel", () => {
       const api: FillApi = {
         ...emptyApi(),
         getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
-        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const },
+        })),
         fetchArtifactPdf: vi.fn(async (): Promise<FileFetchResult> => ({ ok: false, status: 400 })),
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
@@ -1543,7 +1681,11 @@ describe("FillPanel", () => {
       expect(api.postReport).toHaveBeenCalledWith(
         "t1",
         expect.arrayContaining([
-          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: RENDER_FAILED_REASON }),
+          expect.objectContaining({
+            fieldId: "r1",
+            outcome: "needs-user",
+            reason: RENDER_FAILED_REASON,
+          }),
         ]),
         false,
       );
@@ -1553,7 +1695,10 @@ describe("FillPanel", () => {
       const api: FillApi = {
         ...emptyApi(),
         getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
-        claim: vi.fn(async () => ({ ok: true as const, value: { ...bundle, attachResume: "tailored" as const } })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const },
+        })),
         fetchArtifactPdf: vi.fn(async () => pdfBytes()),
       };
       renderPanel({
@@ -1572,7 +1717,11 @@ describe("FillPanel", () => {
       expect(api.postReport).toHaveBeenCalledWith(
         "t1",
         expect.arrayContaining([
-          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON }),
+          expect.objectContaining({
+            fieldId: "r1",
+            outcome: "needs-user",
+            reason: CUSTOM_UPLOADER_REASON,
+          }),
         ]),
         false,
       );
@@ -1607,11 +1756,20 @@ describe("FillPanel", () => {
         getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
         claim: vi.fn(async () => ({
           ok: true as const,
-          value: { ...bundle, attachResume: "tailored" as const, coverLetterText: "Dear hiring team," },
+          value: {
+            ...bundle,
+            attachResume: "tailored" as const,
+            coverLetterText: "Dear hiring team,",
+          },
         })),
         fetchArtifactPdf: vi.fn(async (_taskId: string, kind: "resume" | "cover-letter") =>
           kind === "cover-letter"
-            ? { ok: true as const, bytes: new Uint8Array([1]).buffer, fileName: "Cover_Letter.pdf", mimeType: "application/pdf" }
+            ? {
+                ok: true as const,
+                bytes: new Uint8Array([1]).buffer,
+                fileName: "Cover_Letter.pdf",
+                mimeType: "application/pdf",
+              }
             : pdfBytes(),
         ),
       };
@@ -1662,7 +1820,15 @@ describe("FillPanel", () => {
     });
 
     it("shows the none-state message with no Create button when source is none", async () => {
-      renderPanel({ capture: vi.fn(async () => ({ ...captureOk, jd: "", source: "none", structuredTitle: undefined, structuredCompany: undefined })) });
+      renderPanel({
+        capture: vi.fn(async () => ({
+          ...captureOk,
+          jd: "",
+          source: "none",
+          structuredTitle: undefined,
+          structuredCompany: undefined,
+        })),
+      });
       await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
 
       expect(
@@ -1684,7 +1850,9 @@ describe("FillPanel", () => {
       });
       await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
 
-      expect(await screen.findByLabelText("Job title")).toHaveValue("Backend Engineer — Acme Careers");
+      expect(await screen.findByLabelText("Job title")).toHaveValue(
+        "Backend Engineer — Acme Careers",
+      );
       expect(screen.getByLabelText("Company")).toHaveValue("Acme Corp");
     });
 
@@ -1706,7 +1874,10 @@ describe("FillPanel", () => {
     });
 
     it("dedups by job URL: Create checks first, then renders Open existing + Create anyway", async () => {
-      const existing: ApplicationSummary = { id: "existing-1", jobInfo: { jobTitle: "Backend Engineer", companyName: "Acme", applyLink: captureOk.url } };
+      const existing: ApplicationSummary = {
+        id: "existing-1",
+        jobInfo: { jobTitle: "Backend Engineer", companyName: "Acme", applyLink: captureOk.url },
+      };
       const api: FillApi = {
         ...emptyApi(),
         findApplicationsByJobUrl: vi.fn(async () => ({ ok: true as const, value: [existing] })),
@@ -1730,7 +1901,10 @@ describe("FillPanel", () => {
     it("creates with a POST shape carrying edited title/company + captured JD, then offers Open in OfferOS", async () => {
       const api: FillApi = {
         ...emptyApi(),
-        createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t9", applicationId: "a9" } })),
+        createTaskFromJd: vi.fn(async () => ({
+          ok: true as const,
+          value: { id: "t9", applicationId: "a9" },
+        })),
       };
       const { openApplication } = renderPanel({ api });
       await userEvent.click(await screen.findByRole("button", { name: "Add this job" }));
@@ -1754,7 +1928,10 @@ describe("FillPanel", () => {
     });
 
     it("the dedup card's Back control dismisses it back to the initial Add-this-job state", async () => {
-      const existing: ApplicationSummary = { id: "existing-1", jobInfo: { jobTitle: "Backend Engineer", companyName: "Acme", applyLink: captureOk.url } };
+      const existing: ApplicationSummary = {
+        id: "existing-1",
+        jobInfo: { jobTitle: "Backend Engineer", companyName: "Acme", applyLink: captureOk.url },
+      };
       const api: FillApi = {
         ...emptyApi(),
         findApplicationsByJobUrl: vi.fn(async () => ({ ok: true as const, value: [existing] })),

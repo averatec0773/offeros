@@ -2,6 +2,13 @@
   "name": "@offeros/autofill",
   "version": "0.0.0",
   "private": true,
+  "description": "Pure, DOM-free job-application fill engine: field classification, fill planning, option matching, answer guards.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/offeros.git",
+    "directory": "packages/autofill"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

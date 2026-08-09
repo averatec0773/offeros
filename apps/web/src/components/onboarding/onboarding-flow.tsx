@@ -1,4 +1,5 @@
 "use client";
+import { fileToBase64 } from "@/lib/utils";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -37,13 +38,6 @@ export function mapParsedToProfile(parsed: ParsedResume): Profile {
     education: parsed.education.map((e) => ({ id: crypto.randomUUID(), ...e })),
     experience: parsed.experience.map((e) => ({ id: crypto.randomUUID(), ...e })),
   };
-}
-
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
 
 type Phase = "idle" | "extracting" | "parsing" | "review" | "applying" | "error";

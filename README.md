@@ -10,9 +10,10 @@ SQLite database and is where you build your profile, track applications, and run
 the AI workspace. `apps/extension` (a Chrome **Side Panel**) is the **fill arm**:
 on a supported ATS page it fills the form from your profile, tailors your
 résumé and writes a cover letter in place (generation runs server-side in the
-web app), and reports every field back to the workspace. **Submitting is yours by
-default** — OfferOS stops at the submit button and waits for you; an opt-in
-setting can hand it that last step, and it ships off. As currently built, field
+web app), and reports every field back to the workspace. **Submitting is yours** —
+OfferOS stops at the submit button and waits for you. (A preference for handing
+it that step exists in Settings → Agent, off by default, but nothing reads it
+yet: the behaviour is not implemented.) As currently built, field
 classification runs on-device, no page HTML is uploaded anywhere, and the only
 files attached to a form are your own OfferOS-managed ones — it never reads
 files from the page.
@@ -195,10 +196,11 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
 
 ## Privacy & safety — how it behaves today
 
-- **Submitting is yours by default** — OfferOS stops at the submit button; you
-  take that action on the page and mark it applied. **Settings → Agent** has an
-  opt-in switch that lets it submit for you; it is off until you turn it on, and
-  it says plainly that a sent application cannot be recalled.
+- **Submitting is yours** — OfferOS stops at the submit button; you take that
+  action on the page and mark it applied. **Settings → Agent** carries an
+  opt-in preference for letting it submit, off by default and **not wired to
+  anything yet** — the setting is there so the choice is recorded before the
+  behaviour exists, and both it and this line say so until that changes.
 - **Attaches only your own OfferOS-managed files** (the tailored résumé PDF,
   your stored original résumé, or the cover-letter PDF) to file inputs, never
   reads files from the page, and uploads no page HTML anywhere — field

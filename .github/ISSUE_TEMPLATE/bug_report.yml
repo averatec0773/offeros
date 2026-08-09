@@ -1,0 +1,40 @@
+name: Bug report
+description: Something behaved differently from how it is documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        OfferOS runs on your own machine against third-party application sites,
+        so the details below are usually what makes a report reproducible.
+
+        **Please do not paste personal data** — your résumé, a real application,
+        or an API key. A redacted field label is enough.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Which surface — the web app, the side panel, the in-page overlay — and which page (the ATS name is enough; no need for the URL).
+      placeholder: side panel on a Greenhouse application page
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of `node --version`, your OS, your browser version, and the commit you are on (`git rev-parse --short HEAD`).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything in the console
+      description: Errors from the browser console or the terminal running the web app. Redact anything personal.
+      render: text

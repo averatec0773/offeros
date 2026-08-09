@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest something OfferOS should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to get done, and where does OfferOS get in the way today? Describe the situation rather than the solution — the best answer is often not the one either of us thought of first.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you had in mind
+      description: Optional. If you have a shape in mind, describe it.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Does this fit the project?
+      options:
+        - label: This keeps working without an account or a cloud service.
+        - label: This does not require sending my data anywhere I did not choose.

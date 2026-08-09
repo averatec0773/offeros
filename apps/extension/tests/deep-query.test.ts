@@ -24,7 +24,8 @@ if (!customElements.get("dq-item")) customElements.define("dq-item", Item);
 
 describe("deepQuery — pierces shadow roots", () => {
   beforeEach(() => {
-    document.body.innerHTML = "<h2>Skills</h2><dq-host></dq-host><dq-item></dq-item><dq-item></dq-item>";
+    document.body.innerHTML =
+      "<h2>Skills</h2><dq-host></dq-host><dq-item></dq-item><dq-item></dq-item>";
   });
 
   it("finds an element inside a shadow root that a light-DOM query misses", () => {
@@ -54,5 +55,4 @@ describe("deepQuery — pierces shadow roots", () => {
     expect(deepQuery(document, "textarea")).toBeNull();
     expect(deepQueryAll(document, "textarea")).toEqual([]);
   });
-
 });

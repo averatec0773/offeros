@@ -27,11 +27,13 @@ export const NO_FILE_REASON = "No file available to attach — attach it manuall
  *  exists but failed to render into a PDF. Distinct from NO_FILE_REASON (404,
  *  nothing stored at all): this tells the user to go check the artifact
  *  instead of implying there's simply nothing to attach. */
-export const RENDER_FAILED_REASON = "Couldn't generate the file to attach — check the artifact in OfferOS.";
+export const RENDER_FAILED_REASON =
+  "Couldn't generate the file to attach — check the artifact in OfferOS.";
 
 /** A file field whose programmatic attach didn't verify (the site ignored or
  *  cleared the assignment), or any file field OfferOS never attempts to manage. */
-export const CUSTOM_UPLOADER_REASON = "This site uses a custom uploader — attach the file manually.";
+export const CUSTOM_UPLOADER_REASON =
+  "This site uses a custom uploader — attach the file manually.";
 
 const CLOSED: ReadonlySet<FillTicket["status"]> = new Set(["completed", "cancelled"]);
 
@@ -182,7 +184,12 @@ export type WriteOutcome =
     };
 
 function normalize(w: WriteOutcome | undefined):
-  | { outcome: "filled" | "failed" | "needs-user"; value?: string; source?: FieldReportSource; reason?: string }
+  | {
+      outcome: "filled" | "failed" | "needs-user";
+      value?: string;
+      source?: FieldReportSource;
+      reason?: string;
+    }
   | undefined {
   if (w === undefined) return undefined;
   return typeof w === "string" ? { outcome: w } : w;

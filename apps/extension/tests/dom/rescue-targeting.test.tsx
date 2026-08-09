@@ -5,7 +5,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { createEngine } from "../../src/lib/engine/engine-service";
 import { pickPostingLink } from "../../src/lib/autofill/rescue";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
-import type { ScanResponse, FillResponse, CaptureJdResponse } from "../../src/lib/autofill/autofill-messaging";
+import type {
+  ScanResponse,
+  FillResponse,
+  CaptureJdResponse,
+} from "../../src/lib/autofill/autofill-messaging";
 import type { FillValue } from "../../src/lib/autofill/dom-fill";
 import type {
   AnswerEntry,
@@ -110,8 +114,14 @@ const heldTaskApi = (): FillApi => ({
   claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
-  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({ ok: true, value: [] })),
-  createTaskFromJd: vi.fn(async () => ({ ok: true as const, value: { id: "t2", applicationId: "a2" } })),
+  findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
+    ok: true,
+    value: [],
+  })),
+  createTaskFromJd: vi.fn(async () => ({
+    ok: true as const,
+    value: { id: "t2", applicationId: "a2" },
+  })),
   instantFill: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   tailorResume: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
   generateCoverLetter: vi.fn(async (): Promise<ApiResult<unknown>> => ({ ok: true, value: {} })),
@@ -196,7 +206,9 @@ describe("rescue jump target on a directory page", () => {
     await waitFor(() => expect(navigateTab).toHaveBeenCalled());
     // The held job is /42. Jumping to /11's form means the panel is about to
     // fill (and report on) a completely different job.
-    expect(navigateTab).not.toHaveBeenCalledWith("https://boards.greenhouse.io/acme/jobs/11/application");
+    expect(navigateTab).not.toHaveBeenCalledWith(
+      "https://boards.greenhouse.io/acme/jobs/11/application",
+    );
   });
 });
 

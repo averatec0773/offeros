@@ -20,7 +20,10 @@ const OUT = join(ROOT, ".output/e2e-resumes");
 mkdirSync(OUT, { recursive: true });
 
 const CORPUS = JSON.parse(
-  readFileSync(join(ROOT, "../../packages/autofill/src/__tests__/adaptation/resume-corpus.json"), "utf8"),
+  readFileSync(
+    join(ROOT, "../../packages/autofill/src/__tests__/adaptation/resume-corpus.json"),
+    "utf8",
+  ),
 );
 
 // --- Ported line reconstruction (mirror of src/lib/pdf-extract.ts) ----------
@@ -74,7 +77,16 @@ async function extractPdfText(pdfjs, path) {
     const content = await page.getTextContent();
     const items = content.items.flatMap((it) =>
       "str" in it
-        ? [{ str: it.str, x: it.transform[4] ?? 0, y: it.transform[5] ?? 0, width: it.width ?? 0, height: it.height ?? 0, hasEOL: it.hasEOL ?? false }]
+        ? [
+            {
+              str: it.str,
+              x: it.transform[4] ?? 0,
+              y: it.transform[5] ?? 0,
+              width: it.width ?? 0,
+              height: it.height ?? 0,
+              hasEOL: it.hasEOL ?? false,
+            },
+          ]
         : [],
     );
     pages.push(reconstructText(items));
@@ -130,7 +142,9 @@ function resumeHtml(r) {
 // (contact, links, skills) beside a wider experience column. This is where
 // pdf.js reading order is most likely to interleave rows across columns.
 function resumeHtmlTwoColumn(r) {
-  const links = Object.values(r.links).map((l) => `<div>${esc(l)}</div>`).join("");
+  const links = Object.values(r.links)
+    .map((l) => `<div>${esc(l)}</div>`)
+    .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     * { box-sizing: border-box; }
     body { font-family: Helvetica, Arial, sans-serif; color: #111; margin: 40px 48px; font-size: 10.5pt; line-height: 1.4; }
@@ -193,7 +207,10 @@ function scoreExtract(r, text) {
   add("fullName", text.includes(r.fullName));
   // name isolated on its own line (parseable header)
   const lines = text.split("\n");
-  add("name-line", lines.some((l) => l.trim() === r.fullName.trim()));
+  add(
+    "name-line",
+    lines.some((l) => l.trim() === r.fullName.trim()),
+  );
 
   add("email", text.includes(r.email));
   // phone digit-run survives (spacing/format may reflow, digits must not)
@@ -208,11 +225,18 @@ function scoreExtract(r, text) {
   }
 
   const passed = checks.filter((c) => c.ok).length;
-  return { checks, passed, total: checks.length, percent: Math.round((passed / checks.length) * 1000) / 10 };
+  return {
+    checks,
+    passed,
+    total: checks.length,
+    percent: Math.round((passed / checks.length) * 1000) / 10,
+  };
 }
 
 // --- Run --------------------------------------------------------------------
-const pdfjs = await import(pathToFileURL(join(ROOT, "node_modules/pdfjs-dist/legacy/build/pdf.mjs")).href);
+const pdfjs = await import(
+  pathToFileURL(join(ROOT, "node_modules/pdfjs-dist/legacy/build/pdf.mjs")).href
+);
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -232,7 +256,9 @@ await browser.close();
 const byLayout = new Map(LAYOUTS.map((l) => [l.id, { passed: 0, total: 0 }]));
 let totalPassed = 0;
 let totalChecks = 0;
-console.log(`\nReal-PDF extraction adaptation (${CORPUS.length} resumes × ${LAYOUTS.length} layouts, rendered → pdfjs):\n`);
+console.log(
+  `\nReal-PDF extraction adaptation (${CORPUS.length} resumes × ${LAYOUTS.length} layouts, rendered → pdfjs):\n`,
+);
 for (const { r, layout, score } of results) {
   totalPassed += score.passed;
   totalChecks += score.total;
@@ -241,15 +267,21 @@ for (const { r, layout, score } of results) {
   agg.total += score.total;
   const fails = score.checks.filter((c) => !c.ok).map((c) => c.name);
   const tag = fails.length ? `  MISS: ${fails.join(", ")}` : "";
-  console.log(`  ${r.id.padEnd(18)} ${layout.padEnd(5)} ${String(score.percent).padStart(5)}%  (${score.passed}/${score.total})${tag}`);
+  console.log(
+    `  ${r.id.padEnd(18)} ${layout.padEnd(5)} ${String(score.percent).padStart(5)}%  (${score.passed}/${score.total})${tag}`,
+  );
 }
 console.log("");
 for (const [id, agg] of byLayout) {
   const pct = Math.round((agg.passed / agg.total) * 1000) / 10;
-  console.log(`  ${("LAYOUT " + id).padEnd(24)} ${String(pct).padStart(5)}%  (${agg.passed}/${agg.total})`);
+  console.log(
+    `  ${("LAYOUT " + id).padEnd(24)} ${String(pct).padStart(5)}%  (${agg.passed}/${agg.total})`,
+  );
 }
 const aggregate = Math.round((totalPassed / totalChecks) * 1000) / 10;
-console.log(`  ${"AGGREGATE".padEnd(24)} ${String(aggregate).padStart(5)}%  (${totalPassed}/${totalChecks})\n`);
+console.log(
+  `  ${"AGGREGATE".padEnd(24)} ${String(aggregate).padStart(5)}%  (${totalPassed}/${totalChecks})\n`,
+);
 console.log(`PDFs written to ${OUT}`);
 
 if (aggregate < 90) {

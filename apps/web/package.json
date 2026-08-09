@@ -4,6 +4,11 @@
   "private": true,
   "description": "OfferOS web app \u2014 AI job-application agent workspace",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/offeros.git",
+    "directory": "apps/web"
+  },
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
     "build": "next build",

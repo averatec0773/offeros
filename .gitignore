@@ -9,9 +9,6 @@ lerna-debug.log*
 
 # Dependencies
 node_modules
-vendor/
-__pycache__/
-*.pyc
 
 # Build output (WXT + generic)
 .output
@@ -19,7 +16,6 @@ __pycache__/
 dist/
 build/
 out/
-*.egg-info/
 stats.html
 stats-*.json
 web-ext.config.ts
@@ -31,8 +27,6 @@ web-ext.config.ts
 
 # Test coverage
 coverage/
-.coverage
-htmlcov/
 
 # Editor directories and files
 .vscode/*

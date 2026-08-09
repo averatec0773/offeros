@@ -36,9 +36,7 @@ export default defineBackground(() => {
   const updatePanelForTab = (tabId: number, url: string | undefined) => {
     if (!chrome.sidePanel?.setOptions) return;
     const enabled = !!url && matchAts(url) !== null;
-    void chrome.sidePanel
-      .setOptions({ tabId, path: "sidepanel.html", enabled })
-      .catch(() => {});
+    void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled }).catch(() => {});
   };
   chrome.tabs.onActivated.addListener(({ tabId }) => {
     chrome.tabs.get(tabId, (tab) => {

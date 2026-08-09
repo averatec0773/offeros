@@ -106,10 +106,7 @@ export function rankPostingLinks(links: PostingLink[], jobTitle: string): Ranked
  * scores full marks on all of them; picking the first in document order would
  * send the task to a different role. Ties fall through to the human list.
  */
-export function pickPostingLink(
-  links: PostingLink[],
-  jobTitle: string,
-): RankedPostingLink | null {
+export function pickPostingLink(links: PostingLink[], jobTitle: string): RankedPostingLink | null {
   const ranked = rankPostingLinks(links, jobTitle);
   const best = ranked[0];
   if (!best || best.score < 0.6) return null;

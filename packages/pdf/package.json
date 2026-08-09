@@ -2,6 +2,13 @@
   "name": "@offeros/pdf",
   "version": "0.0.0",
   "private": true,
+  "description": "PDF text extraction shared by the OfferOS web app and extension, with a per-bundler worker seam.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/offeros.git",
+    "directory": "packages/pdf"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

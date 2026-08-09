@@ -28,7 +28,9 @@ class SkillInput extends HTMLElement {
     this._clear();
     const q = query.trim().toLowerCase();
     if (!q) return;
-    for (const label of TAXONOMY.filter((t) => t.toLowerCase().includes(q) && !this.selected.has(t))) {
+    for (const label of TAXONOMY.filter(
+      (t) => t.toLowerCase().includes(q) && !this.selected.has(t),
+    )) {
       const item = document.createElement("sugg-item");
       const sr = item.attachShadow({ mode: "open" });
       sr.innerHTML = '<span role="option"></span>';

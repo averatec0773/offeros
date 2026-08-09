@@ -1,4 +1,5 @@
-:root, :host {
+:root,
+:host {
   /* tier 1 — primitives (components never use these directly)
      The app's light theme. Values are
      the extension's own primitives; matched to apps/web/src/app/globals.css

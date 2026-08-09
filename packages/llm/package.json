@@ -2,6 +2,13 @@
   "name": "@offeros/llm",
   "version": "0.0.0",
   "private": true,
+  "description": "Provider-agnostic LLM task layer for OfferOS: task registry, prompt resolution, and untrusted-text fencing. IO-free.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/offeros.git",
+    "directory": "packages/llm"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

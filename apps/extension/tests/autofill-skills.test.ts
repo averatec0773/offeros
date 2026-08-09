@@ -34,9 +34,9 @@ function withSkills(skills: string[]): FillProfile {
 
 describe("myworkday recipe", () => {
   it("matches a real Workday external host", () => {
-    expect(
-      matchAts("https://intel.wd1.myworkdayjobs.com/External/job/x/apply")?.atsId,
-    ).toBe("myworkday");
+    expect(matchAts("https://intel.wd1.myworkdayjobs.com/External/job/x/apply")?.atsId).toBe(
+      "myworkday",
+    );
   });
 
   it("does not match the unrelated jobs.workday.com host", () => {

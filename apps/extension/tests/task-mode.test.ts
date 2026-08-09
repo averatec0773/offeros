@@ -124,7 +124,16 @@ const trace = (over: Partial<FieldTrace>): FieldTrace => ({
 
 describe("buildFieldReports", () => {
   it("maps a filled personal field to outcome filled + source personal", () => {
-    const t = [trace({ fieldId: "f1", label: "Email", classifiedType: "email", status: "fillable", chosenValue: "a@b.c", source: "personal" })];
+    const t = [
+      trace({
+        fieldId: "f1",
+        label: "Email",
+        classifiedType: "email",
+        status: "fillable",
+        chosenValue: "a@b.c",
+        source: "personal",
+      }),
+    ];
     const r = buildFieldReports(t, new Map([["f1", "filled"]]), new Set(["f1"]), "page-1")[0]!;
     expect(r).toMatchObject({
       fieldId: "f1",
@@ -137,7 +146,15 @@ describe("buildFieldReports", () => {
   });
 
   it("maps a file input (needs-answer, unwritten) to needs-user with no value", () => {
-    const t = [trace({ fieldId: "f1", label: "Resume", classifiedType: "resume", status: "needs-answer", chosenValue: "" })];
+    const t = [
+      trace({
+        fieldId: "f1",
+        label: "Resume",
+        classifiedType: "resume",
+        status: "needs-answer",
+        chosenValue: "",
+      }),
+    ];
     const r = buildFieldReports(t, new Map(), new Set(["f1"]), "p")[0]!;
     expect(r.outcome).toBe("needs-user");
     expect(r.value).toBeUndefined();
@@ -150,7 +167,9 @@ describe("buildFieldReports", () => {
   });
 
   it("maps a generated free-text answer to filled + source ai-generated", () => {
-    const t = [trace({ fieldId: "f1", label: "Why us?", status: "needs-answer", source: "generate" })];
+    const t = [
+      trace({ fieldId: "f1", label: "Why us?", status: "needs-answer", source: "generate" }),
+    ];
     const r = buildFieldReports(
       t,
       new Map([["f1", { outcome: "filled", value: "Because…", source: "ai-generated" }]]),
@@ -167,7 +186,9 @@ describe("buildFieldReports", () => {
   });
 
   it("labels a cover-letter write via an explicit source override", () => {
-    const t = [trace({ fieldId: "f1", label: "Cover letter", status: "needs-answer", source: "generate" })];
+    const t = [
+      trace({ fieldId: "f1", label: "Cover letter", status: "needs-answer", source: "generate" }),
+    ];
     const r = buildFieldReports(
       t,
       new Map([["f1", { outcome: "filled", value: "Dear team", source: "cover-letter" }]]),
@@ -178,14 +199,18 @@ describe("buildFieldReports", () => {
   });
 
   it("maps a failed DOM write to outcome failed", () => {
-    const t = [trace({ fieldId: "f1", classifiedType: "skills", status: "fillable", source: "personal" })];
+    const t = [
+      trace({ fieldId: "f1", classifiedType: "skills", status: "fillable", source: "personal" }),
+    ];
     const r = buildFieldReports(t, new Map([["f1", "failed"]]), new Set(), "p")[0]!;
     expect(r.outcome).toBe("failed");
     expect(r.source).toBe("skills");
   });
 
   it("maps an answer-bank hit to source answer-bank", () => {
-    const t = [trace({ fieldId: "f1", status: "fillable", source: "answerBank", chosenValue: "Yes" })];
+    const t = [
+      trace({ fieldId: "f1", status: "fillable", source: "answerBank", chosenValue: "Yes" }),
+    ];
     const r = buildFieldReports(t, new Map([["f1", "filled"]]), new Set(), "p")[0]!;
     expect(r.source).toBe("answer-bank");
   });
@@ -202,7 +227,9 @@ describe("buildFieldReports", () => {
     ];
     const r = buildFieldReports(
       t,
-      new Map([["f1", { outcome: "filled", value: "Jordan_Rivera_Resume.pdf", source: "resume-file" }]]),
+      new Map([
+        ["f1", { outcome: "filled", value: "Jordan_Rivera_Resume.pdf", source: "resume-file" }],
+      ]),
       new Set(["f1"]),
       "p",
     )[0]!;
@@ -225,11 +252,17 @@ describe("buildFieldReports", () => {
     ];
     const r = buildFieldReports(
       t,
-      new Map([["f1", { outcome: "filled", value: "Cover_Letter.pdf", source: "cover-letter-file" }]]),
+      new Map([
+        ["f1", { outcome: "filled", value: "Cover_Letter.pdf", source: "cover-letter-file" }],
+      ]),
       new Set(),
       "p",
     )[0]!;
-    expect(r).toMatchObject({ outcome: "filled", source: "cover-letter-file", value: "Cover_Letter.pdf" });
+    expect(r).toMatchObject({
+      outcome: "filled",
+      source: "cover-letter-file",
+      value: "Cover_Letter.pdf",
+    });
   });
 
   it("a write outcome's explicit reason overrides the trace's default reason", () => {
@@ -255,7 +288,12 @@ describe("buildFieldReports", () => {
     const t = [trace({ fieldId: "f1", classifiedType: "coverLetter", status: "needs-answer" })];
     const r = buildFieldReports(
       t,
-      new Map([["f1", { outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON, source: "cover-letter-file" }]]),
+      new Map([
+        [
+          "f1",
+          { outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON, source: "cover-letter-file" },
+        ],
+      ]),
       new Set(),
       "p",
     )[0]!;
@@ -264,7 +302,14 @@ describe("buildFieldReports", () => {
   });
 
   it("without a write override, reason falls back to the trace's classify-time reason unchanged", () => {
-    const t = [trace({ fieldId: "f1", status: "unknown", source: "none", reason: "no classifier match → left unknown" })];
+    const t = [
+      trace({
+        fieldId: "f1",
+        status: "unknown",
+        source: "none",
+        reason: "no classifier match → left unknown",
+      }),
+    ];
     const r = buildFieldReports(t, new Map(), new Set(), "p")[0]!;
     expect(r.reason).toBe("no classifier match → left unknown");
   });
@@ -319,7 +364,7 @@ describe("isTextAnswerTarget", () => {
     expect(isTextAnswerTarget({ type: "url" })).toBe(true);
     expect(isTextAnswerTarget({ type: "search" })).toBe(true);
   });
-  it("accepts a bare <input> with no type attribute (describe() resolves it to the tag name \"input\")", () => {
+  it('accepts a bare <input> with no type attribute (describe() resolves it to the tag name "input")', () => {
     expect(isTextAnswerTarget({ type: "input" })).toBe(true);
   });
 });
@@ -329,8 +374,10 @@ describe("writeOne outcome mapping (caller-path contract)", () => {
   // entry entirely for fields it skips (file inputs, element gone) rather than
   // reporting "failed" — so an absent entry must map to "not filled", never to
   // a default success. This guards against re-introducing the `?? "filled"` bug.
-  const writeOneOutcome = (outcomes: Map<string, "filled" | "failed"> | undefined, fieldId: string): boolean =>
-    outcomes?.get(fieldId) === "filled";
+  const writeOneOutcome = (
+    outcomes: Map<string, "filled" | "failed"> | undefined,
+    fieldId: string,
+  ): boolean => outcomes?.get(fieldId) === "filled";
 
   it("treats an absent outcome (skipped field, e.g. a file input) as not filled", () => {
     expect(writeOneOutcome(new Map(), "f1")).toBe(false);

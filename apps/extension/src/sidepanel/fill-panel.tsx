@@ -84,7 +84,11 @@ function StatusIcon({ status, written }: { status: FillItem["status"]; written: 
 export interface FillApi {
   getPending: () => Promise<ApiResult<FillTicket[]>>;
   claim: (handoffId: string) => Promise<ApiResult<FillTaskBundle>>;
-  postReport: (taskId: string, reports: FieldReport[], complete?: boolean) => Promise<ApiResult<unknown>>;
+  postReport: (
+    taskId: string,
+    reports: FieldReport[],
+    complete?: boolean,
+  ) => Promise<ApiResult<unknown>>;
   generateAnswer: (
     taskId: string,
     body: {
@@ -461,7 +465,9 @@ function FieldGroup({
   if (items.length === 0) return null;
   return (
     <div className="mt-3">
-      <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">{title}</p>
+      <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+        {title}
+      </p>
       <ul className="space-y-0.5 text-body">
         {items.map((i, index) => {
           const written = writtenValue?.(i.fieldId);
@@ -881,10 +887,14 @@ export function FillPanel({
       const fillable = planForFill.filter((i) => i.status === "fillable");
       const res = await fill(
         fillable.map((i) =>
-          i.values ? { fieldId: i.fieldId, values: i.values } : { fieldId: i.fieldId, value: i.value },
+          i.values
+            ? { fieldId: i.fieldId, values: i.values }
+            : { fieldId: i.fieldId, value: i.value },
         ),
       );
-      const valueById = new Map(fillable.map((i) => [i.fieldId, i.value ?? i.values?.join(", ") ?? ""]));
+      const valueById = new Map(
+        fillable.map((i) => [i.fieldId, i.value ?? i.values?.join(", ") ?? ""]),
+      );
       for (const [id, o] of res.outcomes ?? []) {
         writes.set(id, o);
         if (o === "filled") markWritten(id, valueById.get(id) ?? "");
@@ -894,7 +904,8 @@ export function FillPanel({
       const coverText = b.coverLetterText?.trim() ? b.coverLetterText : null;
       if (coverText) {
         for (const cf of planForFill.filter(
-          (i) => i.status === "needs-answer" && isCoverLetterField(i.label) && isTextTarget(i.fieldId),
+          (i) =>
+            i.status === "needs-answer" && isCoverLetterField(i.label) && isTextTarget(i.fieldId),
         )) {
           if (await writeOne(cf.fieldId, coverText)) {
             writes.set(cf.fieldId, { outcome: "filled", value: coverText, source: "cover-letter" });
@@ -931,7 +942,11 @@ export function FillPanel({
         });
         if (!ans.ok) continue;
         if (await writeOne(q.fieldId, ans.value.answer)) {
-          writes.set(q.fieldId, { outcome: "filled", value: ans.value.answer, source: "ai-generated" });
+          writes.set(q.fieldId, {
+            outcome: "filled",
+            value: ans.value.answer,
+            source: "ai-generated",
+          });
           markWritten(q.fieldId, ans.value.answer);
           collected.push({ fieldId: q.fieldId, label: q.label, answer: ans.value.answer });
         }
@@ -968,13 +983,20 @@ export function FillPanel({
         });
         if (!ans.ok) continue;
         if (await writeOne(g.fieldId, ans.value.answer)) {
-          writes.set(g.fieldId, { outcome: "filled", value: ans.value.answer, source: "ai-generated" });
+          writes.set(g.fieldId, {
+            outcome: "filled",
+            value: ans.value.answer,
+            source: "ai-generated",
+          });
           markWritten(g.fieldId, ans.value.answer);
           collected.push({ fieldId: g.fieldId, label: g.label, answer: ans.value.answer, options });
         }
       }
       if (collected.length > 0) {
-        setAiAnswers((prev) => [...prev.filter((e) => !collected.some((c) => c.fieldId === e.fieldId)), ...collected]);
+        setAiAnswers((prev) => [
+          ...prev.filter((e) => !collected.some((c) => c.fieldId === e.fieldId)),
+          ...collected,
+        ]);
       }
 
       // Everything this run committed to a policy question, whatever answered
@@ -1072,7 +1094,12 @@ export function FillPanel({
     });
     for (const [k, r] of reportsRef.current) {
       if (r.fieldId === entry.fieldId) {
-        reportsRef.current.set(k, { ...r, value: answer, outcome: "filled", source: "ai-generated" });
+        reportsRef.current.set(k, {
+          ...r,
+          value: answer,
+          outcome: "filled",
+          source: "ai-generated",
+        });
       }
     }
     await api.postReport(b.taskId, allReports(), false);
@@ -1091,7 +1118,12 @@ export function FillPanel({
       markWritten(entry.fieldId, entry.answer);
       for (const [k, r] of reportsRef.current) {
         if (r.fieldId === entry.fieldId) {
-          reportsRef.current.set(k, { ...r, value: entry.answer, outcome: "filled", source: "ai-generated" });
+          reportsRef.current.set(k, {
+            ...r,
+            value: entry.answer,
+            outcome: "filled",
+            source: "ai-generated",
+          });
         }
       }
       await api.postReport(b.taskId, allReports(), false);
@@ -1102,7 +1134,9 @@ export function FillPanel({
     const list = await api.listAnswers();
     if (!list.ok) return;
     const normalized = normalizeQuestion(entry.label);
-    const match = list.value.find((a) => a.questionPatterns.some((p) => normalizeQuestion(p) === normalized));
+    const match = list.value.find((a) =>
+      a.questionPatterns.some((p) => normalizeQuestion(p) === normalized),
+    );
     // Update is answer-only: the entry was already matched by an existing pattern, so
     // never send `questionPatterns` here — the web repo's PUT merges via object spread
     // and would clobber every other pattern a curated multi-pattern entry carries.
@@ -1176,10 +1210,15 @@ export function FillPanel({
       }
       // Plan against the claimed bundle's profile; before a claim there is no profile,
       // so everything reads as needs-answer/unknown until a bundle arrives.
-      const { plan: newPlan, trace: newTrace } = explainFillPlan(res.descriptors, bundleRef.current?.fillProfile ?? null);
+      const { plan: newPlan, trace: newTrace } = explainFillPlan(
+        res.descriptors,
+        bundleRef.current?.fillProfile ?? null,
+      );
       setPlan(newPlan);
       traceRef.current = newTrace;
-      pageValuesRef.current = new Map(res.descriptors.map((d) => [d.fieldId, d.currentValue ?? ""]));
+      pageValuesRef.current = new Map(
+        res.descriptors.map((d) => [d.fieldId, d.currentValue ?? ""]),
+      );
 
       const pageSig = res.descriptors.map((d) => d.fieldId).join("|");
       // Wizard steps retitle the page, so the ATS job id is the identity when present.
@@ -1276,7 +1315,10 @@ export function FillPanel({
     // "loading a form" instead of a bare sentence while the content script
     // finishes injecting on heavy pages.
     return (
-      <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4" data-testid="scan-skeleton">
+      <div
+        className="rounded-2xl border border-border-subtle bg-bg-elevated p-4"
+        data-testid="scan-skeleton"
+      >
         <div className="h-4 w-2/3 animate-pulse rounded bg-bg-base" />
         <div className="mt-2.5 h-3 w-1/2 animate-pulse rounded bg-bg-base" />
         <div className="mt-4 h-9 w-full animate-pulse rounded-full bg-bg-base" />
@@ -1378,7 +1420,12 @@ export function FillPanel({
             a form. jobKeyRef is never set here (only an ok scan sets it), so key on the
             tab URL directly. */}
         {noForm && !bundle && webReachable && (
-          <AddJobCard key={tabUrl || "no-job"} capture={capture} api={api} openApplication={openApplication} />
+          <AddJobCard
+            key={tabUrl || "no-job"}
+            capture={capture}
+            api={api}
+            openApplication={openApplication}
+          />
         )}
       </div>
     );
@@ -1453,7 +1500,9 @@ export function FillPanel({
       }
       const fetched = await api.fetchArtifactPdf(b.taskId, "resume");
       if (!fetched.ok) {
-        setTailorError("Tailored, but the PDF couldn't be rendered — check the artifact in OfferOS.");
+        setTailorError(
+          "Tailored, but the PDF couldn't be rendered — check the artifact in OfferOS.",
+        );
         return;
       }
       if (tailorUrlRef.current) URL.revokeObjectURL(tailorUrlRef.current);
@@ -1637,7 +1686,9 @@ export function FillPanel({
           <span className="min-w-0 flex-1 truncate text-caption font-semibold text-text-primary">
             {bundle.job.title} · {bundle.job.company}
           </span>
-          <span className="shrink-0 text-micro font-semibold uppercase tracking-wide text-text-tertiary">Task</span>
+          <span className="shrink-0 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+            Task
+          </span>
         </div>
       )}
       {bundle && webReachable && (
@@ -1659,7 +1710,11 @@ export function FillPanel({
                   </p>
                   {!fitExpanded && fit.notAlignedSkills.length > 0 && (
                     <p className="truncate text-caption text-text-secondary">
-                      Gaps: {fit.notAlignedSkills.slice(0, 2).map((s) => s.skill).join(" · ")}
+                      Gaps:{" "}
+                      {fit.notAlignedSkills
+                        .slice(0, 2)
+                        .map((s) => s.skill)
+                        .join(" · ")}
                     </p>
                   )}
                 </div>
@@ -1673,7 +1728,9 @@ export function FillPanel({
               {fitExpanded && (
                 <div className="mt-2 space-y-2 border-t border-border-subtle pt-2">
                   {fit.whyMatch && (
-                    <p className="text-caption leading-relaxed text-text-secondary">{fit.whyMatch}</p>
+                    <p className="text-caption leading-relaxed text-text-secondary">
+                      {fit.whyMatch}
+                    </p>
                   )}
                   <p className="text-micro text-text-tertiary">
                     Experience {Math.round(fit.subScores.experience)}% · Skills{" "}
@@ -1825,9 +1882,7 @@ export function FillPanel({
         )}
         {bundle && policyAnswers.length > 0 && (
           <div className="mt-3 rounded-2xl border border-warn-bg bg-warn-bg/40 p-3">
-            <p className="text-caption font-semibold text-text-primary">
-              Check what you agreed to
-            </p>
+            <p className="text-caption font-semibold text-text-primary">Check what you agreed to</p>
             <p className="mt-0.5 text-micro leading-relaxed text-text-secondary">
               These are agreements, not answers — read them on the page before you submit.
             </p>
@@ -1849,7 +1904,9 @@ export function FillPanel({
         )}
         {bundle && aiAnswers.length > 0 && (
           <div className="mt-3">
-            <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">AI answers</p>
+            <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+              AI answers
+            </p>
             <ul className="space-y-2 text-body">
               {aiAnswers.map((a) => (
                 <li key={a.fieldId} className="space-y-1">
@@ -1882,7 +1939,9 @@ export function FillPanel({
                         });
                       }}
                     >
-                      {!a.options.includes(a.answer) && <option value={a.answer}>{a.answer}</option>}
+                      {!a.options.includes(a.answer) && (
+                        <option value={a.answer}>{a.answer}</option>
+                      )}
                       {a.options.map((o) => (
                         <option key={o} value={o}>
                           {o}

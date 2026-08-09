@@ -18,12 +18,16 @@ const BOARD = [
 
 describe("scoreTitleMatch", () => {
   it("is 1 for an exact-token match and 0 for disjoint text", () => {
-    expect(scoreTitleMatch("Senior Software Engineer, Data", "Senior Software Engineer, Data")).toBe(1);
+    expect(
+      scoreTitleMatch("Senior Software Engineer, Data", "Senior Software Engineer, Data"),
+    ).toBe(1);
     expect(scoreTitleMatch("Senior Software Engineer, Data", "Head of Marketing")).toBe(0);
   });
 
   it("is punctuation- and case-insensitive", () => {
-    expect(scoreTitleMatch("senior software engineer data", "Senior Software Engineer, Data")).toBe(1);
+    expect(scoreTitleMatch("senior software engineer data", "Senior Software Engineer, Data")).toBe(
+      1,
+    );
   });
 });
 
@@ -51,8 +55,12 @@ describe("pickPostingLink", () => {
 
 describe("isSameTarget", () => {
   it("ignores trailing slashes and hashes so a self-link is recognized", () => {
-    expect(isSameTarget("https://x.test/co/1/application", "https://x.test/co/1/application/")).toBe(true);
-    expect(isSameTarget("https://x.test/co/1/application#top", "https://x.test/co/1/application")).toBe(true);
+    expect(
+      isSameTarget("https://x.test/co/1/application", "https://x.test/co/1/application/"),
+    ).toBe(true);
+    expect(
+      isSameTarget("https://x.test/co/1/application#top", "https://x.test/co/1/application"),
+    ).toBe(true);
     expect(isSameTarget("https://x.test/co/1/application", "https://x.test/co/1")).toBe(false);
   });
 });

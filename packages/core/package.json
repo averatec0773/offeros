@@ -2,6 +2,13 @@
   "name": "@offeros/core",
   "version": "0.0.0",
   "private": true,
+  "description": "Domain schemas and types shared by the OfferOS web app and extension. IO-free: zod only, no node: or DOM imports.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/offeros.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

@@ -43,7 +43,10 @@ export function startWebAppViaHost(): Promise<StartWebAppResponse> {
         const err = chrome.runtime.lastError;
         if (err) {
           const notFound = /not found|forbidden/i.test(err.message ?? "");
-          resolve({ ok: false, error: notFound ? NOT_INSTALLED_HINT : (err.message ?? "native host error") });
+          resolve({
+            ok: false,
+            error: notFound ? NOT_INSTALLED_HINT : (err.message ?? "native host error"),
+          });
           return;
         }
         const r = res as { ok?: boolean; error?: string } | undefined;

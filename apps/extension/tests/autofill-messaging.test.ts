@@ -35,11 +35,12 @@ describe("engine request guards", () => {
         bytesBase64: "AAA=",
       }),
     ).toBe(true);
-    expect(isEngineAttachFileRequest({ kind: "OFFEROS_ENGINE_ATTACH_FILE", fieldId: "f1" })).toBe(false);
+    expect(isEngineAttachFileRequest({ kind: "OFFEROS_ENGINE_ATTACH_FILE", fieldId: "f1" })).toBe(
+      false,
+    );
     expect(isEngineAttachFileRequest({ kind: "OFFEROS_ENGINE_SCAN" })).toBe(false);
     expect(isEngineAttachFileRequest(null)).toBe(false);
   });
-
 
   it("isEnginePageChanged matches only the page-changed push", () => {
     expect(isEnginePageChanged({ kind: "OFFEROS_ENGINE_PAGE_CHANGED" })).toBe(true);

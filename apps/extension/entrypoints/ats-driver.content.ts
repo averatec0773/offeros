@@ -39,11 +39,15 @@ function fiberSelect(input: HTMLInputElement, value: string): boolean {
 // strict=true (DOM fallback) requires seeing it; strict=false (fiber path)
 // tolerates non-react-select widgets that lack the node.
 function verifyCommitted(input: HTMLInputElement, value: string, strict: boolean): boolean {
-  const scope = input.closest('[class*="control"]')?.parentElement ?? input.parentElement ?? document.body;
+  const scope =
+    input.closest('[class*="control"]')?.parentElement ?? input.parentElement ?? document.body;
   const single = scope.querySelector('[class*="single-value"], [class*="singleValue"]');
   if (!single) return !strict;
   const shown = (single.textContent ?? "").trim().toLowerCase();
-  return shown !== "" && (shown.includes(value.trim().toLowerCase()) || value.trim().toLowerCase().includes(shown));
+  return (
+    shown !== "" &&
+    (shown.includes(value.trim().toLowerCase()) || value.trim().toLowerCase().includes(shown))
+  );
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -65,7 +69,9 @@ async function domFallback(input: HTMLInputElement, value: string): Promise<bool
     const hit = matched && typeof matched.value === "number" ? opts[matched.value] : undefined;
     if (hit) {
       // value-control interaction only — never a submit control (see Global Constraints)
-      hit.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+      hit.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }),
+      );
       hit.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
       hit.click();
       await sleep(200);
@@ -122,7 +128,12 @@ export default defineContentScript({
           : Promise.resolve({ filled: [] as string[], skipped: d.values });
         void run.then((res) => {
           window.postMessage(
-            { kind: SKILLS_RESULT, fieldId: d.fieldId, filled: res.filled.length, skipped: res.skipped.length },
+            {
+              kind: SKILLS_RESULT,
+              fieldId: d.fieldId,
+              filled: res.filled.length,
+              skipped: res.skipped.length,
+            },
             "*",
           );
         });

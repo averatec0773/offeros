@@ -23,9 +23,9 @@ describe("useActiveTab", () => {
   });
 
   it("re-reads the active tab on tabs.onActivated", async () => {
-    const q = vi.spyOn(browser.tabs, "query").mockResolvedValue([
-      { id: 1, url: "https://boards.greenhouse.io/a/jobs/1" },
-    ] as never);
+    const q = vi
+      .spyOn(browser.tabs, "query")
+      .mockResolvedValue([{ id: 1, url: "https://boards.greenhouse.io/a/jobs/1" }] as never);
     const { result } = renderHook(() => useActiveTab());
     await waitFor(() => expect(result.current?.id).toBe(1));
 
@@ -37,15 +37,19 @@ describe("useActiveTab", () => {
   });
 
   it("re-reads the active tab when it finishes loading / changes url", async () => {
-    const q = vi.spyOn(browser.tabs, "query").mockResolvedValue([
-      { id: 1, url: "https://boards.greenhouse.io/a/jobs/1" },
-    ] as never);
+    const q = vi
+      .spyOn(browser.tabs, "query")
+      .mockResolvedValue([{ id: 1, url: "https://boards.greenhouse.io/a/jobs/1" }] as never);
     const { result } = renderHook(() => useActiveTab());
     await waitFor(() => expect(result.current?.url).toContain("jobs/1"));
 
     q.mockResolvedValue([{ id: 1, url: "https://boards.greenhouse.io/a/jobs/2" }] as never);
     await act(async () => {
-      await tabsEvents.onUpdated.trigger(1, { url: "https://boards.greenhouse.io/a/jobs/2" }, { active: true });
+      await tabsEvents.onUpdated.trigger(
+        1,
+        { url: "https://boards.greenhouse.io/a/jobs/2" },
+        { active: true },
+      );
     });
     await waitFor(() => expect(result.current?.url).toContain("jobs/2"));
   });

@@ -190,10 +190,10 @@ function describeGroup(
 function hasAnySignal(el: HTMLElement): boolean {
   return Boolean(
     labelFor(el) ||
-      el.getAttribute("name") ||
-      el.id ||
-      el.getAttribute("aria-label") ||
-      el.getAttribute("placeholder"),
+    el.getAttribute("name") ||
+    el.id ||
+    el.getAttribute("aria-label") ||
+    el.getAttribute("placeholder"),
   );
 }
 
@@ -267,7 +267,8 @@ export function scanFields(
         ariaLabel: "",
         required: /\*/.test(question) || (title?.required ?? false),
         options,
-        currentValue: buttons.find((b) => /(^|\s)_active_/.test(b.className))?.textContent?.trim() ?? "",
+        currentValue:
+          buttons.find((b) => /(^|\s)_active_/.test(b.className))?.textContent?.trim() ?? "",
       },
       el: container,
     });
@@ -287,7 +288,9 @@ export function scanFields(
 function groupMembers(doc: Document, first: HTMLInputElement): HTMLInputElement[] {
   if (first.type === "radio" && first.name) {
     return Array.from(
-      doc.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${CSS.escape(first.name)}"]`),
+      doc.querySelectorAll<HTMLInputElement>(
+        `input[type="radio"][name="${CSS.escape(first.name)}"]`,
+      ),
     );
   }
   const m = /^(.+)-labeled-checkbox-\d+$/.exec(first.id);
@@ -304,7 +307,11 @@ function groupMembers(doc: Document, first: HTMLInputElement): HTMLInputElement[
  *  `value` (tolerant matching via matchOption). Verified via .checked — a
  *  real click that React observes natively. Null when no option matches
  *  or the click didn't take. */
-function fillChoiceGroup(doc: Document, first: HTMLInputElement, value: string): HTMLInputElement | null {
+function fillChoiceGroup(
+  doc: Document,
+  first: HTMLInputElement,
+  value: string,
+): HTMLInputElement | null {
   const members = groupMembers(doc, first);
   const labels = members.map((m) => labelFor(m));
   const target = matchOption(
@@ -450,9 +457,7 @@ function fillSkillsViaDriver(
   });
 }
 
-export type FillValue =
-  | { fieldId: string; value: string }
-  | { fieldId: string; values: string[] };
+export type FillValue = { fieldId: string; value: string } | { fieldId: string; values: string[] };
 
 /**
  * Fill the given values into the live page, returning the count of verified

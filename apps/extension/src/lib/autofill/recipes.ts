@@ -9,8 +9,7 @@ export interface AtsRecipe {
   pierceShadow?: boolean;
 }
 
-const FIELDS =
-  "input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea";
+const FIELDS = "input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea";
 
 export const RECIPES: AtsRecipe[] = [
   {
@@ -25,10 +24,7 @@ export const RECIPES: AtsRecipe[] = [
   },
   {
     atsId: "lever",
-    urlPatterns: [
-      /^https?:\/\/jobs\.lever\.co\//i,
-      /^https?:\/\/jobs\.eu\.lever\.co\//i,
-    ],
+    urlPatterns: [/^https?:\/\/jobs\.lever\.co\//i, /^https?:\/\/jobs\.eu\.lever\.co\//i],
     formSelector: "form#application-form, form[action*='apply'], main form",
     fieldSelector: FIELDS,
   },
@@ -36,10 +32,7 @@ export const RECIPES: AtsRecipe[] = [
     atsId: "ashby",
     // Ashby renders the application as a React SPA; scanFields falls back to
     // the document root when no <form> matches, so a plain form selector is safe.
-    urlPatterns: [
-      /^https?:\/\/jobs\.ashbyhq\.com\//i,
-      /^https?:\/\/[a-z0-9-]+\.ashbyhq\.com\//i,
-    ],
+    urlPatterns: [/^https?:\/\/jobs\.ashbyhq\.com\//i, /^https?:\/\/[a-z0-9-]+\.ashbyhq\.com\//i],
     formSelector: "form",
     fieldSelector: FIELDS,
   },

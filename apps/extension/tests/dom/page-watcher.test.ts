@@ -10,18 +10,21 @@ beforeEach(() => {
 // happy-dom doesn't fully support MutationObserver callbacks, so we mock it
 let mutationCallbacks: (() => void)[] = [];
 const OriginalMutationObserver = MutationObserver;
-vi.stubGlobal("MutationObserver", class MockMutationObserver {
-  constructor(callback: MutationCallback) {
-    mutationCallbacks.push(() => callback([], this as any));
-  }
-  observe() {}
-  disconnect() {
-    mutationCallbacks = [];
-  }
-  takeRecords() {
-    return [];
-  }
-} as any);
+vi.stubGlobal(
+  "MutationObserver",
+  class MockMutationObserver {
+    constructor(callback: MutationCallback) {
+      mutationCallbacks.push(() => callback([], this as any));
+    }
+    observe() {}
+    disconnect() {
+      mutationCallbacks = [];
+    }
+    takeRecords() {
+      return [];
+    }
+  } as any,
+);
 
 function triggerMutations() {
   mutationCallbacks.forEach((cb) => cb());

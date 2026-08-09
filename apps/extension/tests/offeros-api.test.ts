@@ -16,7 +16,10 @@ import {
   tailorResume,
 } from "../src/lib/offeros-api";
 
-interface Call { url: string; init: RequestInit }
+interface Call {
+  url: string;
+  init: RequestInit;
+}
 const fakeFetch = (status: number, body: unknown) => {
   const calls: Call[] = [];
   const fn = (async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -27,11 +30,26 @@ const fakeFetch = (status: number, body: unknown) => {
 };
 
 const ok = (result: unknown) => ({ success: true, errorCode: 10000, errorMsg: null, result });
-const err = (errorCode: number, errorMsg: string) => ({ success: false, errorCode, errorMsg, result: null });
+const err = (errorCode: number, errorMsg: string) => ({
+  success: false,
+  errorCode,
+  errorMsg,
+  result: null,
+});
 
 describe("getPending", () => {
   it("unwraps result on success", async () => {
-    const tickets = [{ id: "h1", taskId: "t1", applicationId: "a1", status: "pending", createdAt: 1, updatedAt: 1, job: { title: "SWE", company: "Acme" } }];
+    const tickets = [
+      {
+        id: "h1",
+        taskId: "t1",
+        applicationId: "a1",
+        status: "pending",
+        createdAt: 1,
+        updatedAt: 1,
+        job: { title: "SWE", company: "Acme" },
+      },
+    ];
     const f = fakeFetch(200, ok(tickets));
     const r = await getPending(f.fn);
     expect(r).toEqual({ ok: true, value: tickets });
@@ -45,7 +63,9 @@ describe("getPending", () => {
   });
 
   it("returns ok:false on a network throw", async () => {
-    const fn = (async () => { throw new Error("net down"); }) as typeof fetch;
+    const fn = (async () => {
+      throw new Error("net down");
+    }) as typeof fetch;
     const r = await getPending(fn);
     expect(r).toEqual({ ok: false, error: "network error" });
   });
@@ -64,7 +84,11 @@ describe("claim", () => {
       taskId: "t1",
       applicationId: "a1",
       job: { title: "SWE", company: "Acme" },
-      fillProfile: { personal: { name: "", email: "", phone: "", address: "", links: {} }, skills: [], answerBank: [] },
+      fillProfile: {
+        personal: { name: "", email: "", phone: "", address: "", links: {} },
+        skills: [],
+        answerBank: [],
+      },
       resumeText: null,
       coverLetterText: null,
       jdSummary: null,
@@ -81,7 +105,18 @@ describe("claim", () => {
 describe("postReport", () => {
   it("POSTs reports and complete flag", async () => {
     const f = fakeFetch(200, ok({ id: "t1" }));
-    const reports = [{ fieldId: "f1", label: "Name", classifiedType: "name", status: "filled", source: "personal", reason: "matched", outcome: "filled" as const, required: true }];
+    const reports = [
+      {
+        fieldId: "f1",
+        label: "Name",
+        classifiedType: "name",
+        status: "filled",
+        source: "personal",
+        reason: "matched",
+        outcome: "filled" as const,
+        required: true,
+      },
+    ];
     const r = await postReport("t1", reports, true, f.fn);
     expect(r).toEqual({ ok: true, value: { id: "t1" } });
     const body = JSON.parse(String(f.calls[0]!.init.body));
@@ -93,7 +128,11 @@ describe("postReport", () => {
 describe("generateAnswer", () => {
   it("POSTs the question payload and unwraps the answer", async () => {
     const f = fakeFetch(200, ok({ answer: "Yes" }));
-    const r = await generateAnswer("t1", { question: "Are you legally authorized?", label: "Authorized?" }, f.fn);
+    const r = await generateAnswer(
+      "t1",
+      { question: "Are you legally authorized?", label: "Authorized?" },
+      f.fn,
+    );
     expect(r).toEqual({ ok: true, value: { answer: "Yes" } });
     expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/fill/answer");
   });
@@ -101,7 +140,16 @@ describe("generateAnswer", () => {
 
 describe("findApplicationsByJobUrl", () => {
   it("GETs the applications endpoint with a jobUrl filter and unwraps the list", async () => {
-    const apps = [{ id: "a1", jobInfo: { jobTitle: "SWE", companyName: "Acme", applyLink: "https://boards.greenhouse.io/acme/jobs/1" } }];
+    const apps = [
+      {
+        id: "a1",
+        jobInfo: {
+          jobTitle: "SWE",
+          companyName: "Acme",
+          applyLink: "https://boards.greenhouse.io/acme/jobs/1",
+        },
+      },
+    ];
     const f = fakeFetch(200, ok(apps));
     const r = await findApplicationsByJobUrl("https://boards.greenhouse.io/acme/jobs/1", f.fn);
     expect(r).toEqual({ ok: true, value: apps });
@@ -111,13 +159,18 @@ describe("findApplicationsByJobUrl", () => {
   });
 
   it("returns ok:false on a network throw", async () => {
-    const fn = (async () => { throw new Error("net down"); }) as typeof fetch;
+    const fn = (async () => {
+      throw new Error("net down");
+    }) as typeof fetch;
     const r = await findApplicationsByJobUrl("https://example.com/job/1", fn);
     expect(r).toEqual({ ok: false, error: "network error" });
   });
 });
 
-interface RawCall { url: string; init: RequestInit | undefined }
+interface RawCall {
+  url: string;
+  init: RequestInit | undefined;
+}
 const fakeRawFetch = (status: number, body: Uint8Array, headers?: Record<string, string>) => {
   const calls: RawCall[] = [];
   const fn = (async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -132,7 +185,7 @@ describe("fetchResumeFile", () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const f = fakeRawFetch(200, bytes, {
       "content-type": "application/pdf",
-      "content-disposition": 'attachment; filename="Resume.pdf"; filename*=UTF-8\'\'Resume.pdf',
+      "content-disposition": "attachment; filename=\"Resume.pdf\"; filename*=UTF-8''Resume.pdf",
     });
     const r = await fetchResumeFile("r1", f.fn);
     expect(r.ok).toBe(true);
@@ -150,7 +203,9 @@ describe("fetchResumeFile", () => {
   });
 
   it("returns ok:false on a network throw", async () => {
-    const fn = (async () => { throw new Error("net down"); }) as typeof fetch;
+    const fn = (async () => {
+      throw new Error("net down");
+    }) as typeof fetch;
     expect(await fetchResumeFile("r1", fn)).toEqual({ ok: false });
   });
 
@@ -174,7 +229,9 @@ describe("fetchArtifactPdf", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.fileName).toBe("Acme_Cover_Letter.pdf");
-    expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/artifacts/cover-letter/pdf");
+    expect(f.calls[0]!.url).toBe(
+      "http://localhost:3000/api/v1/agent/tasks/t1/artifacts/cover-letter/pdf",
+    );
   });
 
   it("returns ok:false with status 404 (artifact absent)", async () => {
@@ -194,7 +251,12 @@ describe("createTaskFromJd", () => {
   it("POSTs the byJd payload with a generated uuid jobId and unwraps { id, applicationId }", async () => {
     const f = fakeFetch(200, ok({ id: "t1", applicationId: "a1" }));
     const r = await createTaskFromJd(
-      { jobTitle: "SWE", companyName: "Acme", jobUrl: "https://boards.greenhouse.io/acme/jobs/1", jdText: "We need a SWE." },
+      {
+        jobTitle: "SWE",
+        companyName: "Acme",
+        jobUrl: "https://boards.greenhouse.io/acme/jobs/1",
+        jdText: "We need a SWE.",
+      },
       f.fn,
     );
     expect(r).toEqual({ ok: true, value: { id: "t1", applicationId: "a1" } });
@@ -271,7 +333,12 @@ describe("instantFill", () => {
     const bundle = { handoffId: "h1", taskId: "t1", applicationId: "a1" };
     const f = fakeFetch(200, ok(bundle));
     const r = await instantFill(
-      { jobTitle: "SWE", companyName: "Acme", jobUrl: "https://boards.greenhouse.io/acme/jobs/1", jdText: "We need a SWE." },
+      {
+        jobTitle: "SWE",
+        companyName: "Acme",
+        jobUrl: "https://boards.greenhouse.io/acme/jobs/1",
+        jdText: "We need a SWE.",
+      },
       f.fn,
     );
     expect(r.ok).toBe(true);
@@ -289,11 +356,17 @@ describe("instantFill", () => {
   });
 
   it("maps a refused claim envelope to { ok: false } with the server's message", async () => {
-    const f = fakeFetch(200, err(40000, "already tracked in OfferOS — open the application workspace"));
+    const f = fakeFetch(
+      200,
+      err(40000, "already tracked in OfferOS — open the application workspace"),
+    );
     const r = await instantFill(
       { jobTitle: "SWE", companyName: "Acme", jobUrl: "https://x.greenhouse.io/1", jdText: "" },
       f.fn,
     );
-    expect(r).toEqual({ ok: false, error: "already tracked in OfferOS — open the application workspace" });
+    expect(r).toEqual({
+      ok: false,
+      error: "already tracked in OfferOS — open the application workspace",
+    });
   });
 });

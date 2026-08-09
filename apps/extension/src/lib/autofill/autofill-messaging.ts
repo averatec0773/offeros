@@ -3,7 +3,14 @@ import type { AtsId } from "./recipes";
 import type { FillValue } from "./dom-fill";
 
 export type ScanResponse =
-  | { ok: true; atsId: AtsId; url: string; company: string; title: string; descriptors: FieldDescriptor[] }
+  | {
+      ok: true;
+      atsId: AtsId;
+      url: string;
+      company: string;
+      title: string;
+      descriptors: FieldDescriptor[];
+    }
   | {
       ok: false;
       reason: "not_supported" | "no_form";
@@ -123,13 +130,20 @@ export function isEnginePageChanged(m: unknown): m is EnginePageChangedMessage {
 }
 
 export async function sendEngineScan(tabId: number): Promise<ScanResponse> {
-  return (await browser.tabs.sendMessage(tabId, { kind: "OFFEROS_ENGINE_SCAN" } satisfies EngineScanRequest)) as ScanResponse;
+  return (await browser.tabs.sendMessage(tabId, {
+    kind: "OFFEROS_ENGINE_SCAN",
+  } satisfies EngineScanRequest)) as ScanResponse;
 }
 export async function sendEngineFill(tabId: number, values: FillValue[]): Promise<FillResponse> {
-  return (await browser.tabs.sendMessage(tabId, { kind: "OFFEROS_ENGINE_FILL", values } satisfies EngineFillRequest)) as FillResponse;
+  return (await browser.tabs.sendMessage(tabId, {
+    kind: "OFFEROS_ENGINE_FILL",
+    values,
+  } satisfies EngineFillRequest)) as FillResponse;
 }
 export async function sendEngineCaptureJd(tabId: number): Promise<CaptureJdResponse> {
-  return (await browser.tabs.sendMessage(tabId, { kind: "OFFEROS_ENGINE_CAPTURE_JD" } satisfies EngineCaptureJdRequest)) as CaptureJdResponse;
+  return (await browser.tabs.sendMessage(tabId, {
+    kind: "OFFEROS_ENGINE_CAPTURE_JD",
+  } satisfies EngineCaptureJdRequest)) as CaptureJdResponse;
 }
 export async function sendEngineAttachFile(
   tabId: number,

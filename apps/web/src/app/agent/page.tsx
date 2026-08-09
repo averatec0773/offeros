@@ -1,6 +1,7 @@
 import { getDb } from "@/server/db/client";
 import { listApplications } from "@/server/repositories/application-repo";
 import { listAgentTasks } from "@/server/repositories/agent-task-repo";
+import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
 import { listRecentTrace } from "@/server/repositories/agent-trace-repo";
 import { buildInbox } from "@/server/services/attention-service";
 import { ConsoleClient } from "@/components/agent/console-client";
@@ -14,11 +15,7 @@ export default function AgentConsolePage() {
   const db = getDb();
   const applications = listApplications(db);
   const tasks = listAgentTasks(db);
-  // listAgentTasks is newest-first: keep the FIRST per application so a
-  // superseded run never decides whether a job is eligible.
-  const taskByApplication = new Map<string, (typeof tasks)[number]>();
-  for (const t of tasks)
-    if (!taskByApplication.has(t.applicationId)) taskByApplication.set(t.applicationId, t);
+  const taskByApplication = newestTaskByApplication(tasks);
   const active = applications.filter((a) => a.status === "saved" || a.status === "applying");
 
   return (

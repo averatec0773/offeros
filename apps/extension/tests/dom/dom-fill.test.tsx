@@ -52,7 +52,10 @@ describe("scanFields — shadow-aware (myworkday)", () => {
     const shadowHost = document.createElement("some-widget");
     shadowHost.attachShadow({ mode: "open" }).innerHTML = '<input name="draft" type="text" />';
     document.body.appendChild(shadowHost);
-    document.body.insertAdjacentHTML("afterbegin", "<form><input name='email' type='email' /></form>");
+    document.body.insertAdjacentHTML(
+      "afterbegin",
+      "<form><input name='email' type='email' /></form>",
+    );
     const found = scanFields(document.body, recipe); // greenhouse recipe, no pierceShadow
     const names = found.map((f) => f.descriptor.name);
     expect(names).toEqual(["email"]);
@@ -198,7 +201,9 @@ describe("attachFile", () => {
     const events: string[] = [];
     input.addEventListener("input", () => events.push("input"));
     input.addEventListener("change", () => events.push("change"));
-    const file = new File(["%PDF-1.4 fake"], "Jordan_Rivera_Resume.pdf", { type: "application/pdf" });
+    const file = new File(["%PDF-1.4 fake"], "Jordan_Rivera_Resume.pdf", {
+      type: "application/pdf",
+    });
 
     const ok = attachFile(input, file);
 

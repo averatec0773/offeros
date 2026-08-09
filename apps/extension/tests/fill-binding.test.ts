@@ -8,16 +8,26 @@ import {
 describe("fill-binding message guards", () => {
   it("accepts a well-formed open-fill-tab request", () => {
     expect(
-      isOpenFillTabRequest({ kind: "OFFEROS_OPEN_FILL_TAB", handoffId: "h1", url: "https://x.test/a" }),
+      isOpenFillTabRequest({
+        kind: "OFFEROS_OPEN_FILL_TAB",
+        handoffId: "h1",
+        url: "https://x.test/a",
+      }),
     ).toBe(true);
   });
 
   it("rejects malformed open-fill-tab requests", () => {
     expect(isOpenFillTabRequest(null)).toBe(false);
     expect(isOpenFillTabRequest({ kind: "OFFEROS_OPEN_FILL_TAB" })).toBe(false);
-    expect(isOpenFillTabRequest({ kind: "OFFEROS_OPEN_FILL_TAB", handoffId: "", url: "https://x.test" })).toBe(false);
-    expect(isOpenFillTabRequest({ kind: "OFFEROS_OPEN_FILL_TAB", handoffId: 7, url: "https://x.test" })).toBe(false);
-    expect(isOpenFillTabRequest({ kind: "SOMETHING_ELSE", handoffId: "h1", url: "https://x.test" })).toBe(false);
+    expect(
+      isOpenFillTabRequest({ kind: "OFFEROS_OPEN_FILL_TAB", handoffId: "", url: "https://x.test" }),
+    ).toBe(false);
+    expect(
+      isOpenFillTabRequest({ kind: "OFFEROS_OPEN_FILL_TAB", handoffId: 7, url: "https://x.test" }),
+    ).toBe(false);
+    expect(
+      isOpenFillTabRequest({ kind: "SOMETHING_ELSE", handoffId: "h1", url: "https://x.test" }),
+    ).toBe(false);
   });
 
   it("accepts get-binding requests with and without a tabId", () => {

@@ -46,13 +46,16 @@ function fromJsonLd(root: ParentNode): JsonLdCapture | null {
     } catch {
       continue;
     }
-    const nodes: JsonLdNode[] = Array.isArray(parsed) ? (parsed as JsonLdNode[]) : [parsed as JsonLdNode];
+    const nodes: JsonLdNode[] = Array.isArray(parsed)
+      ? (parsed as JsonLdNode[])
+      : [parsed as JsonLdNode];
     for (const node of nodes) {
       const type = node["@type"];
       const isJob = type === "JobPosting" || (Array.isArray(type) && type.includes("JobPosting"));
       if (!isJob || typeof node.description !== "string") continue;
       const title = typeof node.title === "string" ? node.title : "";
-      const org = typeof node.hiringOrganization?.name === "string" ? node.hiringOrganization.name : "";
+      const org =
+        typeof node.hiringOrganization?.name === "string" ? node.hiringOrganization.name : "";
       const text = [title, org, stripHtml(node.description)].filter((s) => s).join("\n");
       const sanitizedTitle = sanitizeLabel(title);
       const sanitizedCompany = sanitizeLabel(org);
@@ -75,7 +78,13 @@ const MAX_JD_LEN = 12000;
 
 export function captureJd(root: ParentNode, minChars = 120): JdCaptureResult {
   const ld = fromJsonLd(root);
-  if (ld) return { text: ld.text.slice(0, MAX_JD_LEN), source: "jsonld", title: ld.title, company: ld.company };
+  if (ld)
+    return {
+      text: ld.text.slice(0, MAX_JD_LEN),
+      source: "jsonld",
+      title: ld.title,
+      company: ld.company,
+    };
   const dom = fromDom(root);
   if (dom.length >= minChars) return { text: dom.slice(0, MAX_JD_LEN), source: "dom" };
   return { text: "", source: "none" };

@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { getDb } from "@/server/db/client";
 import { listApplications } from "@/server/repositories/application-repo";
 import { listAgentTasks } from "@/server/repositories/agent-task-repo";
+import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
 import { getProfile } from "@/server/repositories/profile-repo";
 import { listFits } from "@/server/repositories/fit-repo";
 import { ApplicationRow } from "@/components/agent/application-row";
@@ -17,12 +18,7 @@ export default function HomePage() {
   const tasks = listAgentTasks(db);
   const fits = listFits(db);
   const hasProfile = getProfile(db) !== null;
-  // Newest-first list: keep the FIRST task per application so a superseded run
-  // never decides what the row shows or whether the job is eligible.
-  const taskByApplication = new Map<string, (typeof tasks)[number]>();
-  for (const task of tasks) {
-    if (!taskByApplication.has(task.applicationId)) taskByApplication.set(task.applicationId, task);
-  }
+  const taskByApplication = newestTaskByApplication(tasks);
   const fitByApplication = new Map(fits.map((fit) => [fit.applicationId, fit]));
 
   const active = applications.filter((a) => a.status === "saved" || a.status === "applying");

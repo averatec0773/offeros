@@ -1,4 +1,5 @@
 "use client";
+import { fileToBase64 } from "@/lib/utils";
 
 import { useEffect, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
@@ -7,13 +8,6 @@ import { extractPdfText } from "@offeros/pdf";
 import { api } from "@/lib/api-client";
 import { ensurePdfWorker } from "@/lib/pdf-worker";
 import { inputClass } from "./fields";
-
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
 
 /**
  * Résumé management: upload (PDF only, sent as base64), set-primary, delete.

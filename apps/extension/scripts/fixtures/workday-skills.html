@@ -20,11 +20,29 @@
     <meta charset="utf-8" />
     <title>Workday Skills — shadow-DOM fixture</title>
     <style>
-      body { font-family: sans-serif; margin: 40px; }
-      h2 { font-size: 18px; }
-      ui5-input-xweb-skill-profiler { display: block; min-width: 460px; }
-      #chips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
-      .chip { background: #e3ecf7; border-radius: 3px; padding: 2px 8px; font-size: 14px; }
+      body {
+        font-family: sans-serif;
+        margin: 40px;
+      }
+      h2 {
+        font-size: 18px;
+      }
+      ui5-input-xweb-skill-profiler {
+        display: block;
+        min-width: 460px;
+      }
+      #chips {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .chip {
+        background: #e3ecf7;
+        border-radius: 3px;
+        padding: 2px 8px;
+        font-size: 14px;
+      }
     </style>
   </head>
   <body>
@@ -81,13 +99,9 @@
           this._clearSuggestions();
           const q = query.trim().toLowerCase();
           if (!q) return;
-          const matches = TAXONOMY.filter(
-            (t) => t.toLowerCase().includes(q) && !selected.has(t),
-          );
+          const matches = TAXONOMY.filter((t) => t.toLowerCase().includes(q) && !selected.has(t));
           for (const label of matches) {
-            const item = document.createElement(
-              "ui5-suggestion-item-xweb-skill-profiler",
-            );
+            const item = document.createElement("ui5-suggestion-item-xweb-skill-profiler");
             item.setAttribute("data-value", label);
             // clickable text lives in the item's OWN shadow root
             const r = item.attachShadow({ mode: "open" });
@@ -106,10 +120,7 @@
           chip.className = "chip";
           chip.textContent = label;
           chips.appendChild(chip);
-          const setter = Object.getOwnPropertyDescriptor(
-            HTMLInputElement.prototype,
-            "value",
-          ).set;
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
           setter.call(this._input, "");
           this._clearSuggestions();
         }

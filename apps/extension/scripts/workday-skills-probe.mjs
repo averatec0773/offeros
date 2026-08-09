@@ -62,7 +62,9 @@ const result = await page.evaluate(async (skills) => {
   return { res, chips: window.__offerosSelectedSkills() };
 }, RESUME_SKILLS);
 
-log(`Naive top-level [role="option"] query saw: ${naiveOptionCount} options (shadow DOM hides them)`);
+log(
+  `Naive top-level [role="option"] query saw: ${naiveOptionCount} options (shadow DOM hides them)`,
+);
 log(`Real fillSkills → filled: [${result.res.filled.join(", ")}]`);
 log(`Real fillSkills → skipped: [${result.res.skipped.join(", ")}]`);
 log(`Chips actually tagged in the widget: [${result.chips.join(", ")}]`);
@@ -71,7 +73,8 @@ await browser.close();
 
 const expectFilled = ["C", "C++", "Linux", "CUDA"];
 const problems = [];
-if (naiveOptionCount !== 0) problems.push(`naive query should see 0 options, saw ${naiveOptionCount}`);
+if (naiveOptionCount !== 0)
+  problems.push(`naive query should see 0 options, saw ${naiveOptionCount}`);
 if (JSON.stringify(result.chips.sort()) !== JSON.stringify([...expectFilled].sort())) {
   problems.push(`expected chips ${expectFilled} but widget has ${result.chips}`);
 }
@@ -88,5 +91,7 @@ if (problems.length) {
 
 log("");
 log("CAPABILITY CONFIRMED: shadow-piercing + verified per-skill selection tagged");
-log(`${result.chips.length}/${RESUME_SKILLS.length} skills; the taxonomy miss was reported, not silently dropped.`);
+log(
+  `${result.chips.length}/${RESUME_SKILLS.length} skills; the taxonomy miss was reported, not silently dropped.`,
+);
 process.exit(0);
