@@ -5,6 +5,39 @@
 import { describe, expect, it } from "vitest";
 import { guardClassOf, isAutoAnswerForbidden, needsPostFillReview } from "../guards";
 
+/**
+ * Why the fill path must hand these guards the real question.
+ *
+ * The guards match on the question text. Measured on a live Ashby form on
+ * 2026-08-09, the label-scraping path returned an EMPTY label for both work
+ * authorization and visa sponsorship — it had taken the first option, or found
+ * nothing — and an empty label matches nothing, so neither question was
+ * guarded and both were eligible for AI answering. The guards were right; they
+ * were being handed nothing.
+ *
+ * Reading the ATS's own field definition (packages/autofill/field-meta.ts) is
+ * what supplies the text. These two tests pin both halves so the dependency
+ * cannot be quietly broken again.
+ */
+describe("guards depend on being given the question", () => {
+  const YES_NO = ["Yes", "No"];
+
+  it("a blank label leaves the most consequential questions unguarded", () => {
+    expect(guardClassOf({ label: "", options: YES_NO })).toBeNull();
+    // And the first option is no better — that is what the scraper produced.
+    expect(guardClassOf({ label: "Yes", options: YES_NO })).toBeNull();
+  });
+
+  it("the real question text is guarded as truth", () => {
+    for (const q of [
+      "Will you require visa sponsorship now or in the future?",
+      "Are you authorized to work in the United States",
+    ]) {
+      expect(guardClassOf({ label: q, options: YES_NO })).toBe("truth");
+    }
+  });
+});
+
 describe("AUDIT guards: truth-required facts", () => {
   it("work-authorization/sponsorship is NEVER auto-answered — options are not inspected", () => {
     // A radio group whose LABEL is neutral (or absent, which real ATS forms do
