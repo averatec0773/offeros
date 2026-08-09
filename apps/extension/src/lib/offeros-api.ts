@@ -1,4 +1,12 @@
 import type { FillProfile } from "@offeros/autofill";
+import type {
+  AnswerEntry as CoreAnswerEntry,
+  Application,
+  FieldReport as CoreFieldReport,
+  FieldReportOutcome as CoreOutcome,
+  FillHandoff,
+  FitAnalysis,
+} from "@offeros/core";
 import { settings } from "./settings";
 
 /**
@@ -9,15 +17,17 @@ import { settings } from "./settings";
  */
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-/** Mirrors apps/web's `FillTicket` (FillHandoff + job header) structurally — no import across the app boundary. */
-export type FillTicket = {
-  id: string;
-  taskId: string;
-  applicationId: string;
-  applyLink?: string;
-  status: "pending" | "claimed" | "completed" | "cancelled";
-  createdAt: number;
-  updatedAt: number;
+/**
+ * A pending fill ticket: the web app's own `FillHandoff` row plus the job
+ * header it sends along.
+ *
+ * These types come from `@offeros/core` as TYPES ONLY. That keeps the compiler
+ * checking both sides against one definition — the shapes used to be
+ * hand-copied here, and nothing would have failed if one side had drifted —
+ * while `import type` is erased at build time, so no core runtime (zod
+ * included) reaches the extension bundle.
+ */
+export type FillTicket = FillHandoff & {
   job: { title: string; company: string; applyLink?: string };
 };
 
@@ -43,36 +53,18 @@ export type FillTaskBundle = {
   fieldReports?: FieldReport[];
 };
 
-/** Mirrors apps/web's `Application` structurally, trimmed to what the panel needs. */
-export type ApplicationSummary = {
-  id: string;
-  jobInfo: { jobTitle: string; companyName: string; applyLink?: string };
+/** An application, trimmed to what the panel shows. */
+export type ApplicationSummary = Pick<Application, "id"> & {
+  jobInfo: Pick<Application["jobInfo"], "jobTitle" | "companyName" | "applyLink">;
 };
 
-/** Mirrors apps/web's `AnswerEntry` (@offeros/core `answerSchema`) structurally. */
-export type AnswerEntry = {
-  id: string;
-  questionPatterns: string[];
-  answer: string;
-  type: "enum" | "text" | "number" | "boolean";
-  category: "eeo" | "screening" | "custom";
-};
+/** One stored answer from the answer bank. */
+export type AnswerEntry = CoreAnswerEntry;
 
-export type FieldReportOutcome = "filled" | "skipped" | "needs-user" | "failed";
+export type FieldReportOutcome = CoreOutcome;
 
-/** Mirrors @offeros/core's `FieldReport` structurally. */
-export type FieldReport = {
-  fieldId: string;
-  label: string;
-  classifiedType: string;
-  status: string;
-  value?: string;
-  source: string;
-  reason: string;
-  outcome: FieldReportOutcome;
-  required: boolean;
-  page?: string;
-};
+/** The per-field record the panel sends back to the workspace. */
+export type FieldReport = CoreFieldReport;
 
 type Envelope<T> = {
   success: boolean;
@@ -297,14 +289,11 @@ export function instantFill(
   );
 }
 
-/** Mirrors apps/web's `FitAnalysis` structurally, trimmed to what the panel shows. */
-export type FitSummary = {
-  overall: number;
-  label: string;
-  whyMatch: string;
-  subScores: { experience: number; skills: number; education: number };
-  notAlignedSkills: { skill: string; advice: string }[];
-};
+/** The fit read the panel shows, trimmed from the stored analysis. */
+export type FitSummary = Pick<
+  FitAnalysis,
+  "overall" | "label" | "whyMatch" | "subScores" | "notAlignedSkills"
+>;
 
 /** The stored fit for an application; `{ ok: false }` when none has been computed yet. */
 export function getFit(

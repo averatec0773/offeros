@@ -31,6 +31,8 @@ export const fieldReportSchema = z.object({
 export type FillHandoff = z.infer<typeof fillHandoffSchema>;
 export type FillHandoffStatus = (typeof FILL_HANDOFF_STATUSES)[number];
 export type FieldReport = z.infer<typeof fieldReportSchema>;
+/** The outcome vocabulary, as a type — both apps switch on it. */
+export type FieldReportOutcome = (typeof FIELD_REPORT_OUTCOMES)[number];
 
 function reportKey(report: FieldReport): string {
   return `${report.page ?? ""} ${report.fieldId}`;
