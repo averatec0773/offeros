@@ -3,7 +3,10 @@ import {
   isComboboxFillMsg,
   SKILLS_RESULT,
   isSkillsFillMsg,
+  READ_META_RESULT,
+  isReadMetaMsg,
 } from "../src/lib/autofill/combobox-protocol";
+import { annotateFieldMeta } from "../src/lib/autofill/read-field-meta";
 import { matchOptionValue, type SelectOption } from "@offeros/autofill";
 import { fillSkills } from "../src/lib/autofill/skills-fill";
 
@@ -119,6 +122,19 @@ export default defineContentScript({
         void driveCombobox(d.fieldId, d.value).then((ok) => {
           window.postMessage({ kind: COMBOBOX_RESULT, fieldId: d.fieldId, ok }, "*");
         });
+        return;
+      }
+      if (isReadMetaMsg(d)) {
+        // Annotating can throw on a page whose React internals differ from
+        // anything seen; a scan that yields no metadata must degrade to the
+        // heuristics rather than take the whole scan down.
+        let described = 0;
+        try {
+          described = annotateFieldMeta(document, d.selector);
+        } catch {
+          described = 0;
+        }
+        window.postMessage({ kind: READ_META_RESULT, described, nonce: d.nonce }, "*");
         return;
       }
       if (isSkillsFillMsg(d)) {

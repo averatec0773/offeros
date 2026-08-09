@@ -64,3 +64,36 @@ export function isSkillsResultMsg(d: unknown): d is SkillsResultMsg {
     typeof m.skipped === "number"
   );
 }
+
+// Field metadata: the isolated world asks the MAIN world to annotate the page
+// with what the ATS says about its own fields, because `__reactFiber$` is
+// invisible from an isolated world. The reply carries only a count — the data
+// itself travels through the DOM, which both worlds share.
+export const READ_META = "offeros:read-meta";
+export const READ_META_RESULT = "offeros:read-meta-result";
+
+export interface ReadMetaMsg {
+  kind: typeof READ_META;
+  selector: string;
+  nonce: number;
+}
+
+export interface ReadMetaResultMsg {
+  kind: typeof READ_META_RESULT;
+  described: number;
+  nonce: number;
+}
+
+export function isReadMetaMsg(d: unknown): d is ReadMetaMsg {
+  if (typeof d !== "object" || d === null) return false;
+  const m = d as ReadMetaMsg;
+  return m.kind === READ_META && typeof m.selector === "string" && typeof m.nonce === "number";
+}
+
+export function isReadMetaResultMsg(d: unknown): d is ReadMetaResultMsg {
+  if (typeof d !== "object" || d === null) return false;
+  const m = d as ReadMetaResultMsg;
+  return (
+    m.kind === READ_META_RESULT && typeof m.described === "number" && typeof m.nonce === "number"
+  );
+}

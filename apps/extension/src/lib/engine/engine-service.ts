@@ -8,6 +8,7 @@ import {
   highlight,
   type FillValue,
 } from "../autofill/dom-fill";
+import { readFieldMeta } from "../autofill/field-meta-bridge";
 import { captureJd, sanitizeLabel } from "../autofill/jd-capture";
 import { base64ToBytes } from "../autofill/base64";
 import { effectiveDocOf, watchPage } from "./page-watcher";
@@ -145,7 +146,11 @@ export function createEngine(doc: Document): Engine {
     const href = url();
     const recipe = matchAts(href);
     if (!recipe) return { ok: false, reason: "not_supported" };
-    const scanned = scanFields(edoc().body, recipe);
+    // Ask the page what its fields are before falling back to reading them.
+    // Sites that expose nothing (Lever is server-rendered jQuery) return an
+    // empty map and the scan proceeds exactly as it always has.
+    const fieldMeta = await readFieldMeta(edoc(), recipe.fieldSelector);
+    const scanned = scanFields(edoc().body, recipe, fieldMeta);
     const d0 = edoc();
     const postingLinks = listPostingLinks(d0);
     const isDirectory =

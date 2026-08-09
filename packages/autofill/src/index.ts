@@ -37,3 +37,6 @@ export {
 
 export type { ApplicantConstraints, Conflict, ConflictKind } from "./constraints";
 export { findConflicts } from "./constraints";
+
+export type { FieldMeta, MetaControl, MetaSource, RawFieldMeta } from "./field-meta";
+export { toControl, fromSemanticId, toFieldMeta, groupFieldMeta } from "./field-meta";

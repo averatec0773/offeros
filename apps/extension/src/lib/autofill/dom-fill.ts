@@ -1,4 +1,10 @@
-import { matchOption, matchOptionValue, type FieldDescriptor } from "@offeros/autofill";
+import {
+  matchOption,
+  matchOptionValue,
+  type FieldDescriptor,
+  type FieldMeta,
+} from "@offeros/autofill";
+import { groupByMeta } from "./field-meta-bridge";
 import type { AtsRecipe } from "./recipes";
 import { deepQueryAll } from "./deep-query";
 import {
@@ -197,9 +203,59 @@ function hasAnySignal(el: HTMLElement): boolean {
   );
 }
 
+/**
+ * Build one descriptor from what the ATS itself said about a question.
+ *
+ * Everything here is read, not inferred: the question text is the platform's
+ * own, the option list is the platform's own, and requiredness came from the
+ * field definition rather than from spotting an asterisk in a label.
+ */
+function describeFromMeta(
+  meta: FieldMeta,
+  members: HTMLElement[],
+  used: Map<string, number>,
+): FieldDescriptor {
+  const first = members[0]!;
+  const single = members.length === 1;
+  const choice = meta.control === "single-select" || meta.control === "multi-select";
+  // Options the platform enumerated beat labels scraped off the members; fall
+  // back to the members' own text only when it enumerated nothing.
+  const options =
+    meta.options ?? (single ? undefined : members.map((m) => labelFor(m)).filter((t) => t !== ""));
+  const fieldId = stableFieldId(`meta|${meta.groupId}`, used);
+  first.setAttribute("data-offeros-id", fieldId);
+  const type =
+    !single || (choice && options?.length)
+      ? meta.control === "multi-select"
+        ? "checkbox-group"
+        : "radio-group"
+      : (first.getAttribute("type") ?? first.tagName.toLowerCase());
+  return {
+    fieldId,
+    label: meta.question,
+    name: meta.groupId,
+    autocomplete: first.getAttribute("autocomplete") ?? "",
+    type,
+    placeholder: first.getAttribute("placeholder") ?? "",
+    ariaLabel: first.getAttribute("aria-label") ?? "",
+    required: meta.required,
+    ...(options?.length ? { options } : {}),
+    currentValue: single
+      ? currentValueOf(first, type)
+      : members
+          .filter((m) => (m as HTMLInputElement).checked)
+          .map((m) => labelFor(m))
+          .filter((t) => t !== "")
+          .join(", "),
+  };
+}
+
 export function scanFields(
   root: ParentNode,
   recipe: AtsRecipe,
+  /** What the ATS says about its own fields, when the page exposes it. Absent
+   *  or empty leaves every heuristic below exactly as it was. */
+  metaByEl?: Map<Element, FieldMeta>,
 ): { descriptor: FieldDescriptor; el: HTMLElement }[] {
   const form = root.querySelector(recipe.formSelector) ?? root;
   // Workday renders inputs inside web-component shadow roots; pierce them when
@@ -217,8 +273,22 @@ export function scanFields(
   // City Office" → city).
   const out: { descriptor: FieldDescriptor; el: HTMLElement }[] = [];
   const usedIds = new Map<string, number>();
+
+  // Fields the ATS described itself are settled before any guessing starts, and
+  // are removed from what follows. This is the whole point: grouping by the
+  // platform's own field id cannot mistake eight race checkboxes for eight
+  // questions the way DOM proximity did.
+  const describedByMeta = new Set<HTMLElement>();
+  if (metaByEl?.size) {
+    for (const { meta, members } of groupByMeta(metaByEl, els)) {
+      out.push({ descriptor: describeFromMeta(meta, members, usedIds), el: members[0]! });
+      for (const m of members) describedByMeta.add(m);
+    }
+  }
+
   const grouped = new Map<string, HTMLElement[]>();
   for (const el of els) {
+    if (describedByMeta.has(el)) continue;
     const key = choiceGroupKey(el);
     if (key) {
       const list = grouped.get(key) ?? [];
@@ -228,6 +298,7 @@ export function scanFields(
   }
   const seenGroups = new Set<string>();
   for (const el of els) {
+    if (describedByMeta.has(el)) continue;
     const key = choiceGroupKey(el);
     if (key && (grouped.get(key)?.length ?? 0) >= 2) {
       if (!seenGroups.has(key)) {
