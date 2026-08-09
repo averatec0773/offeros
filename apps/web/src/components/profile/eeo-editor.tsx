@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { LabeledInput, LabeledSelect } from "./fields";
 
@@ -19,12 +19,6 @@ export type EeoPreset = {
   patterns: string[];
   type: "enum" | "text";
   options?: string[];
-  /**
-   * Decline-style answer applied by the one-click defaults action. Only on
-   * voluntary self-identification questions; work authorization and visa
-   * sponsorship intentionally have none — those need the user's true answer.
-   */
-  privacyDefault?: string;
 };
 
 /**
@@ -65,7 +59,6 @@ export const EEO_PRESETS: EeoPreset[] = [
       "No, I do not have a disability and have not had one in the past",
       "I do not want to answer",
     ],
-    privacyDefault: "I do not want to answer",
   },
   {
     label: "What is your gender?",
@@ -74,7 +67,6 @@ export const EEO_PRESETS: EeoPreset[] = [
     type: "enum",
     // Standard EEOC gender self-identification categories.
     options: ["Male", "Female", "Non-binary", "Decline to self-identify"],
-    privacyDefault: "Decline to self-identify",
   },
   {
     label: "Will you now or in the future require sponsorship for employment visa status? (Yes/No)",
@@ -93,7 +85,6 @@ export const EEO_PRESETS: EeoPreset[] = [
     patterns: ["Do you identify as LGBTQ+?", "lgbtq"],
     type: "enum",
     options: ["Yes", "No"],
-    privacyDefault: "Prefer not to say",
   },
   {
     label: "Are you a veteran?",
@@ -106,7 +97,6 @@ export const EEO_PRESETS: EeoPreset[] = [
       "I identify as one or more of the classifications of a protected veteran",
       "I don't wish to answer",
     ],
-    privacyDefault: "I don't wish to answer",
   },
   {
     label: "How would you identify your race?",
@@ -124,7 +114,6 @@ export const EEO_PRESETS: EeoPreset[] = [
       "Two or More Races",
       "Decline to self-identify",
     ],
-    privacyDefault: "Decline to self-identify",
   },
   {
     label: "Are you Hispanic or Latino? (Yes/No)",
@@ -132,40 +121,65 @@ export const EEO_PRESETS: EeoPreset[] = [
     patterns: ["Are you Hispanic or Latino?", "hispanic or latino"],
     type: "enum",
     options: ["Yes", "No"],
-    privacyDefault: "Decline to self-identify",
   },
   {
-    label: "Sexual orientation (mark all that apply)",
+    label: "Sexual orientation",
+    // The stored pattern keeps the "(mark all that apply)" wording real forms
+    // use; only the UI label is shortened, since this control offers one choice
+    // plus Other… rather than checkboxes.
     pattern: "Sexual orientation (mark all that apply)",
     patterns: ["Sexual orientation (mark all that apply)", "sexual orientation"],
-    type: "text",
-    privacyDefault: "Prefer not to say",
+    type: "enum",
+    // The option set voluntary self-ID sections present. Anything outside it
+    // goes through Other…, which is also where someone picking more than one
+    // writes them.
+    options: [
+      "Heterosexual / Straight",
+      "Gay",
+      "Lesbian",
+      "Bisexual",
+      "Queer",
+      "Asexual",
+      "Prefer not to say",
+    ],
   },
   {
     label: "What are your pronouns?",
     pattern: "What are your pronouns?",
     patterns: ["What are your pronouns?", "pronouns"],
-    type: "text",
-    privacyDefault: "Prefer not to say",
+    type: "enum",
+    options: [
+      "He / Him",
+      "She / Her",
+      "They / Them",
+      "He / They",
+      "She / They",
+      "Prefer not to say",
+    ],
   },
 ];
 
 /** Sentinel select value that reveals the custom-value text input. */
 const OTHER = "__other__";
 
+type RowStatus = "idle" | "saving" | "saved" | "error";
+
 type RowState = {
   value: string;
   entryId: string | null;
   patterns: string[];
-  saving: boolean;
-  saved: boolean;
+  status: RowStatus;
   /** Enum preset in "Other…" custom-value mode (value isn't one of the standard options). */
   other: boolean;
 };
 
 function initialRow(): RowState {
-  return { value: "", entryId: null, patterns: [], saving: false, saved: false, other: false };
+  return { value: "", entryId: null, patterns: [], status: "idle", other: false };
 }
+
+/** How long a typed custom value settles before it is written. Picking an
+ *  option writes immediately — there is nothing to wait for. */
+const TYPING_SETTLE_MS = 700;
 
 /**
  * The 10 standard Equal Employment questions, each backed by its own answer-bank
@@ -177,8 +191,6 @@ export function EeoEditor() {
     Object.fromEntries(EEO_PRESETS.map((p) => [p.pattern, initialRow()])),
   );
   const [error, setError] = useState<string | null>(null);
-  const [applying, setApplying] = useState(false);
-  const [appliedCount, setAppliedCount] = useState<number | null>(null);
 
   useEffect(() => {
     api.answers
@@ -197,12 +209,15 @@ export function EeoEditor() {
                 value: match.answer,
                 entryId: match.id,
                 patterns: match.questionPatterns,
-                saving: false,
-                saved: false,
+                status: "idle",
                 other:
                   preset.type === "enum" &&
                   !!preset.options &&
                   !preset.options.includes(match.answer),
+              };
+              boundRef.current[preset.pattern] = {
+                entryId: match.id,
+                patterns: match.questionPatterns,
               };
             }
           }
@@ -212,131 +227,104 @@ export function EeoEditor() {
       .catch(() => setError("Couldn't load Equal Employment answers."));
   }, []);
 
-  function setValue(pattern: string, value: string) {
-    setRows((r) => ({ ...r, [pattern]: { ...r[pattern]!, value, saved: false } }));
-  }
+  /**
+   * The entry each row is bound to, updated the moment a write returns.
+   *
+   * State cannot serve here: two edits to the same row can overlap, and the
+   * second would still read `entryId: null` from a render that has not
+   * happened yet — creating a second answer-bank entry for a question that
+   * already had one. The ref is written synchronously, and `pending` keeps a
+   * row's writes in order so the second one updates what the first created.
+   */
+  const boundRef = useRef<Record<string, { entryId: string | null; patterns: string[] }>>(
+    Object.fromEntries(
+      EEO_PRESETS.map((preset) => [preset.pattern, { entryId: null, patterns: [] }]),
+    ),
+  );
+  const pendingRef = useRef<Record<string, Promise<unknown>>>({});
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  function selectOption(pattern: string, selected: string) {
-    if (selected === OTHER) {
-      setRows((r) => ({ ...r, [pattern]: { ...r[pattern]!, other: true, saved: false } }));
-    } else {
-      setRows((r) => ({
-        ...r,
-        [pattern]: { ...r[pattern]!, other: false, value: selected, saved: false },
-      }));
-    }
-  }
+  // A typed value still settling when the page goes away would be lost
+  // silently, which is the failure an autosaving form must not have.
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      for (const t of Object.values(timers)) clearTimeout(t);
+    };
+  }, []);
 
-  async function save(preset: EeoPreset) {
-    const row = rows[preset.pattern]!;
-    if (!row.value.trim()) return;
-    setRows((r) => ({ ...r, [preset.pattern]: { ...row, saving: true, saved: false } }));
+  const commit = (preset: EeoPreset, value: string) => {
+    if (!value.trim()) return;
+    setRows((r) => ({ ...r, [preset.pattern]: { ...r[preset.pattern]!, status: "saving" } }));
     setError(null);
-    try {
-      // On update, preserve any other patterns already on the shared entry and
-      // union in this preset's full variant set. Never truncate to just our own.
-      const patterns = row.entryId
-        ? [...new Set([...row.patterns, ...preset.patterns])]
-        : preset.patterns;
-      const input = {
-        questionPatterns: patterns,
-        answer: row.value,
-        type: preset.type,
-        category: "eeo" as const,
-      };
-      const saved = row.entryId
-        ? await api.answers.update(row.entryId, input)
-        : await api.answers.create(input);
-      setRows((r) => ({
-        ...r,
-        [preset.pattern]: {
-          value: saved.answer,
-          entryId: saved.id,
-          patterns: saved.questionPatterns,
-          saving: false,
-          saved: true,
-          other: row.other,
-        },
-      }));
-    } catch {
-      setError("Couldn't save that answer.");
-      setRows((r) => ({ ...r, [preset.pattern]: { ...row, saving: false } }));
-    }
-  }
-
-  // One click seeds every voluntary self-ID question that's still blank with a
-  // decline-style answer. Never touches rows that already have an entry, and
-  // never invents answers for work authorization / sponsorship — those two
-  // need the user's true answer and stay highlighted until saved.
-  async function applyDefaults() {
-    setApplying(true);
-    setError(null);
-    let applied = 0;
-    try {
-      for (const preset of EEO_PRESETS) {
-        if (!preset.privacyDefault) continue;
-        const row = rows[preset.pattern]!;
-        if (row.entryId) continue;
-        const saved = await api.answers.create({
-          questionPatterns: preset.patterns,
-          answer: preset.privacyDefault,
+    const run = async () => {
+      const bound = boundRef.current[preset.pattern]!;
+      try {
+        // On update, preserve any other patterns already on the shared entry and
+        // union in this preset's full variant set. Never truncate to just our own.
+        const patterns = bound.entryId
+          ? [...new Set([...bound.patterns, ...preset.patterns])]
+          : preset.patterns;
+        const input = {
+          questionPatterns: patterns,
+          answer: value,
           type: preset.type,
           category: "eeo" as const,
-        });
-        applied += 1;
+        };
+        const saved = bound.entryId
+          ? await api.answers.update(bound.entryId, input)
+          : await api.answers.create(input);
+        boundRef.current[preset.pattern] = {
+          entryId: saved.id,
+          patterns: saved.questionPatterns,
+        };
         setRows((r) => ({
           ...r,
           [preset.pattern]: {
-            value: saved.answer,
+            ...r[preset.pattern]!,
             entryId: saved.id,
             patterns: saved.questionPatterns,
-            saving: false,
-            saved: true,
-            other:
-              preset.type === "enum" && !!preset.options && !preset.options.includes(saved.answer),
+            status: "saved",
           },
         }));
+      } catch {
+        setError("Couldn't save that answer. Your other answers are unaffected.");
+        setRows((r) => ({ ...r, [preset.pattern]: { ...r[preset.pattern]!, status: "error" } }));
       }
-      setAppliedCount(applied);
-    } catch {
-      setError("Couldn't apply the default answers.");
-    } finally {
-      setApplying(false);
-    }
+    };
+    // Chain behind whatever this row is already writing, so an update can never
+    // overtake the create it depends on.
+    const prior = pendingRef.current[preset.pattern] ?? Promise.resolve();
+    pendingRef.current[preset.pattern] = prior.then(run, run);
+  };
+
+  /** A typed custom value: write once typing settles. */
+  function setValue(preset: EeoPreset, value: string) {
+    setRows((r) => ({ ...r, [preset.pattern]: { ...r[preset.pattern]!, value, status: "idle" } }));
+    clearTimeout(timersRef.current[preset.pattern]);
+    timersRef.current[preset.pattern] = setTimeout(() => commit(preset, value), TYPING_SETTLE_MS);
   }
 
-  const truthNeeded = EEO_PRESETS.filter((p) => !p.privacyDefault && !rows[p.pattern]!.entryId);
+  /** A chosen option: nothing to wait for, so write it now. */
+  function selectOption(preset: EeoPreset, selected: string) {
+    clearTimeout(timersRef.current[preset.pattern]);
+    if (selected === OTHER) {
+      // Reveal the text box; there is no value to save until something is typed.
+      setRows((r) => ({
+        ...r,
+        [preset.pattern]: { ...r[preset.pattern]!, other: true, status: "idle" },
+      }));
+      return;
+    }
+    setRows((r) => ({
+      ...r,
+      [preset.pattern]: { ...r[preset.pattern]!, other: false, value: selected, status: "idle" },
+    }));
+    commit(preset, selected);
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col">
-          <p className="text-body-sm font-medium text-foreground">
-            Answer the optional self-identification questions once
-          </p>
-          <p className="text-caption text-muted-foreground">
-            Fills every blank voluntary question with a &ldquo;prefer not to answer&rdquo; response.
-            {truthNeeded.length > 0 &&
-              " Work authorization and visa sponsorship still need your real answer below."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {appliedCount !== null && (
-            <span className="text-caption text-muted-foreground">
-              {appliedCount === 0 ? "Nothing to fill." : `Saved ${appliedCount}.`}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={applyDefaults}
-            disabled={applying}
-            className="inline-flex shrink-0 items-center rounded-full bg-primary px-3 py-1.5 text-caption font-semibold text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50"
-          >
-            {applying ? "Applying…" : "Apply privacy-preserving defaults"}
-          </button>
-        </div>
-      </div>
-
       {error && <p className="text-caption text-destructive">{error}</p>}
 
       {EEO_PRESETS.map((preset) => {
@@ -346,47 +334,44 @@ export function EeoEditor() {
             key={preset.pattern}
             className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3 sm:flex-row sm:items-end sm:gap-3"
           >
-            {preset.type === "enum" ? (
-              <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
-                <LabeledSelect
-                  label={preset.label}
-                  value={row.other ? OTHER : row.value}
-                  onChange={(v) => selectOption(preset.pattern, v)}
-                  options={[
-                    { value: "", label: "Select…" },
-                    ...(preset.options ?? []).map((o) => ({ value: o, label: o })),
-                    { value: OTHER, label: "Other…" },
-                  ]}
-                  className="flex-1"
-                />
-                {row.other && (
-                  <LabeledInput
-                    label="Custom value"
-                    value={row.value}
-                    onChange={(v) => setValue(preset.pattern, v)}
-                    className="flex-1"
-                  />
-                )}
-              </div>
-            ) : (
-              <LabeledInput
+            <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
+              <LabeledSelect
                 label={preset.label}
-                value={row.value}
-                onChange={(v) => setValue(preset.pattern, v)}
+                value={row.other ? OTHER : row.value}
+                onChange={(v) => selectOption(preset, v)}
+                options={[
+                  { value: "", label: "Select…" },
+                  ...(preset.options ?? []).map((o) => ({ value: o, label: o })),
+                  { value: OTHER, label: "Other…" },
+                ]}
                 className="flex-1"
               />
-            )}
-            <div className="flex items-center gap-2">
-              {row.saved && <span className="text-caption text-muted-foreground">Saved.</span>}
-              <button
-                type="button"
-                onClick={() => save(preset)}
-                disabled={row.saving}
-                className="inline-flex items-center rounded-full bg-primary px-3 py-1.5 text-caption font-semibold text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50"
-              >
-                {row.saving ? "Saving…" : "Save"}
-              </button>
+              {row.other && (
+                <LabeledInput
+                  label="Custom value"
+                  value={row.value}
+                  onChange={(v) => setValue(preset, v)}
+                  className="flex-1"
+                />
+              )}
             </div>
+            {/* Status, not a control. The row saves itself; this only says what
+                happened, and stays a fixed width so a select does not shift
+                sideways when the word under it changes. */}
+            <span
+              aria-live="polite"
+              className={`w-16 shrink-0 pb-2 text-caption ${
+                row.status === "error" ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {row.status === "saving"
+                ? "Saving…"
+                : row.status === "saved"
+                  ? "Saved"
+                  : row.status === "error"
+                    ? "Failed"
+                    : ""}
+            </span>
           </div>
         );
       })}

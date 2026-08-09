@@ -89,3 +89,5 @@ scripts/check-usage.sh
 
 # Local-only git hooks + their blocklist (see .githooks/pre-commit)
 .githooks/
+
+.next-verify/
