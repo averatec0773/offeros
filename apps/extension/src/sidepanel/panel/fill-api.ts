@@ -1,0 +1,87 @@
+import type {
+  ApiResult,
+  AnswerEntry,
+  ApplicationSummary,
+  FieldReport,
+  FileFetchResult,
+  FillTaskBundle,
+  FillTicket,
+  FitSummary,
+} from "../../lib/offeros-api";
+
+/** The web-app fill API the panel talks to. Injected so tests can supply fakes. */
+export interface FillApi {
+  getPending: () => Promise<ApiResult<FillTicket[]>>;
+  claim: (handoffId: string) => Promise<ApiResult<FillTaskBundle>>;
+  postReport: (
+    taskId: string,
+    reports: FieldReport[],
+    complete?: boolean,
+  ) => Promise<ApiResult<unknown>>;
+  generateAnswer: (
+    taskId: string,
+    body: {
+      question: string;
+      label: string;
+      context?: string;
+      options?: string[];
+      existingAnswer?: string;
+    },
+  ) => Promise<ApiResult<{ answer: string }>>;
+  findApplicationsByJobUrl: (jobUrl: string) => Promise<ApiResult<ApplicationSummary[]>>;
+  createTaskFromJd: (input: {
+    jobTitle: string;
+    companyName: string;
+    jobUrl: string;
+    jdText: string;
+  }) => Promise<ApiResult<{ id: string; applicationId: string }>>;
+  /** One-click instant lane: park a fill-gate task for this page and claim it. */
+  instantFill: (input: {
+    jobTitle: string;
+    companyName: string;
+    jobUrl: string;
+    jdText: string;
+  }) => Promise<ApiResult<FillTaskBundle>>;
+  /** In-panel tailor: run the tailor-resume step for the claimed task. */
+  tailorResume: (taskId: string) => Promise<ApiResult<unknown>>;
+  /** In-panel cover letter: run the cover-letter step for the claimed task. */
+  generateCoverLetter: (taskId: string) => Promise<ApiResult<unknown>>;
+  /** Stored fit for the claimed application ({ok:false} when never computed). */
+  getFit: (applicationId: string) => Promise<ApiResult<FitSummary>>;
+  /** Compute/recompute the fit (an LLM call). */
+  computeFit: (applicationId: string) => Promise<ApiResult<FitSummary>>;
+  /** Terminal fill resolution from the panel ("applied-manually" = mark submitted). */
+  resolveFillAction: (
+    taskId: string,
+    action: "fixed" | "applied-manually",
+  ) => Promise<ApiResult<unknown>>;
+  /** Undo a mark-as-submitted (mis-click recovery). */
+  undoSubmission: (taskId: string) => Promise<ApiResult<unknown>>;
+  /** Ledger a self-recovery attempt (best-effort; failures ignored). */
+  postRepairEvent: (
+    taskId: string,
+    kind: "repair-attempted" | "repair-succeeded" | "repair-failed",
+    payload: { failure: string; action: string; detail?: string },
+  ) => Promise<ApiResult<unknown>>;
+  /** Original stored résumé bytes (`bundle.attachResume === "original"`). */
+  fetchResumeFile: (resumeId: string) => Promise<FileFetchResult>;
+  /** Rendered artifact PDF — the tailored résumé, or the cover letter. */
+  fetchArtifactPdf: (taskId: string, kind: "resume" | "cover-letter") => Promise<FileFetchResult>;
+  /** Answer memory — accepted AI answers persist here, deduped by normalized question. */
+  listAnswers: () => Promise<ApiResult<AnswerEntry[]>>;
+  createAnswer: (input: { question: string; answer: string }) => Promise<ApiResult<AnswerEntry>>;
+  updateAnswer: (id: string, input: { answer: string }) => Promise<ApiResult<AnswerEntry>>;
+}
+
+/** One OfferOS-managed file kind a file input can classify as — the only
+ *  kinds the panel ever auto-attaches. Maps to the report source vocabulary. */
+/** Which questions an automated answer may not decide, and which need the
+ *  user to review what was agreed to afterwards. Shared with the fill plan and
+ *  unit-tested in @offeros/autofill — the same question shows up as a radio
+ *  group on one site and a textarea on the next, and a guard that only covered
+ *  one lane once let a generated visa-sponsorship answer through. */
+const guardSubject = (label: string, desc?: { label?: string; options?: string[] }) => ({
+  label,
+  altLabel: desc?.label,
+  options: desc?.options,
+});
