@@ -1,4 +1,5 @@
 import { PIPELINE_STEPS } from "@offeros/core";
+import { diagnoseFill, type FillDiagnosis } from "@offeros/autofill";
 import { listApplications, getApplication } from "../repositories/application-repo";
 import { listAgentTasks, getAgentTask } from "../repositories/agent-task-repo";
 import { newestTaskByApplication } from "../repositories/agent-task-by-application";
@@ -66,56 +67,34 @@ export const listApplicationsTool: Tool<void, { applications: ApplicationLine[] 
   verify: async () => null,
 };
 
-export interface FieldLine {
-  label: string;
-  outcome: string;
-  reason?: string;
-}
-
 /**
- * The per-field record of the last fill.
+ * The last fill, grouped by why it did not finish.
  *
- * This is the tool the whole idea rests on. The extension writes a decision
- * trace for every field — what it classified it as, what it chose, and a
- * plain-language reason — and that record is what lets an agent say "three of
- * these are one broken question" instead of listing seventeen red rows.
+ * The tool deliberately does NOT hand over the rows. Eighteen failed fields is
+ * a wall; four causes is a to-do list, and turning one into the other is a
+ * lookup over reason strings our own engine wrote — deterministic, testable,
+ * free. Leaving that to the model would be paying for judgement on a question
+ * that has an exact answer, and getting a different grouping each time.
  *
- * Only the fields that did NOT succeed come back. A filled field has nothing
- * to diagnose, and the counts already say how many there were.
+ * What is left for the model is the part that needs judgement: which of these
+ * causes matters to this person now, and how to put it.
  */
-export const readFillReportTool: Tool<
-  void,
-  { total: number; filled: number; needsAttention: FieldLine[]; truncated: number }
-> = {
+export const readFillReportTool: Tool<void, FillDiagnosis> = {
   id: "read_fill_report",
   description:
-    "Read the last fill's per-field outcome for this application: how many fields were filled, and the ones that were not, each with the reason the engine recorded. Use this for any question about why a form did not complete.",
+    "Diagnose the last fill for this application: how many fields filled, and the reasons the rest did not, grouped by cause with the field names under each. Use this for any question about why a form did not complete.",
   run: async (ctx) => {
     const task = ctx.taskId ? getAgentTask(ctx.db, ctx.taskId) : undefined;
     const reports = task?.fieldReports ?? [];
+    const diagnosis = diagnoseFill(reports);
     if (reports.length === 0) {
-      return {
-        ok: true,
-        summary: "no fill has run for this application yet",
-        result: { total: 0, filled: 0, needsAttention: [], truncated: 0 },
-      };
+      return { ok: true, summary: "no fill has run for this application yet", result: diagnosis };
     }
-    const filled = reports.filter((r) => r.outcome === "filled").length;
-    const problems = reports.filter((r) => r.outcome !== "filled" && r.outcome !== "skipped");
-    const needsAttention = problems.slice(0, ROW_BUDGET).map((r): FieldLine => ({
-      label: r.label || r.fieldId,
-      outcome: r.outcome,
-      ...(r.reason ? { reason: r.reason } : {}),
-    }));
+    const causeCount = diagnosis.causes.length;
     return {
       ok: true,
-      summary: `${filled} of ${reports.length} fields filled, ${problems.length} need attention`,
-      result: {
-        total: reports.length,
-        filled,
-        needsAttention,
-        truncated: Math.max(0, problems.length - needsAttention.length),
-      },
+      summary: `${diagnosis.filled} of ${diagnosis.total} fields filled; ${causeCount === 0 ? "nothing outstanding" : `${causeCount} reason${causeCount === 1 ? "" : "s"} it did not finish`}`,
+      result: diagnosis,
     };
   },
   verify: async () => null,

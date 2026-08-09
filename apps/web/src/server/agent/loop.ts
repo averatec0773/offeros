@@ -40,6 +40,15 @@ export interface TurnResult {
 export interface RunTurnArgs {
   ctx: ToolContext;
   question: string;
+  /**
+   * Who the conversation is about, in one line ("Senior Engineer at Acme").
+   *
+   * Without it the agent asks which job the user means — reasonably, since the
+   * scope lives in `ctx` where only tools can see it. The chat is mounted on
+   * one application's workspace, so "this one" is unambiguous to the user and
+   * has to be unambiguous to the agent too.
+   */
+  subject?: string;
   runLlm: (args: {
     system: string;
     userPrompt: string;
@@ -74,7 +83,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
 
   for (let step = 0; step < maxSteps; step++) {
     const decision: Decision = await chooseNext({
-      context: buildContext(tools, findings),
+      context: buildContext(tools, findings, args.subject),
       question: args.question,
       runLlm: args.runLlm,
     });
@@ -132,12 +141,20 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
  * than everything up front. What it has already fetched stays, because
  * dropping it would make the loop re-fetch and pay twice.
  */
-function buildContext(tools: Record<string, Tool<never, unknown>>, findings: string[]): string {
+function buildContext(
+  tools: Record<string, Tool<never, unknown>>,
+  findings: string[],
+  subject?: string,
+): string {
+  const scope = subject
+    ? `You are looking at one application: ${subject}. Every tool you call is already scoped to it, so "this one" means this application — never ask the user which job they mean.`
+    : "";
   const menu = `Tools you can use:\n${toolMenu(tools)}`;
-  if (findings.length === 0) {
-    return `${menu}\n\nYou have not looked at anything yet.`;
-  }
-  return `${menu}\n\nWhat you have found so far:\n${findings.join("\n\n")}`;
+  const found =
+    findings.length === 0
+      ? "You have not looked at anything yet."
+      : `What you have found so far:\n${findings.join("\n\n")}`;
+  return [scope, menu, found].filter(Boolean).join("\n\n");
 }
 
 /**

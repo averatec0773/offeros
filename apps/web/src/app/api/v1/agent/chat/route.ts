@@ -32,12 +32,14 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    if (!getApplication(db, applicationId)) return notFound("application");
+    const application = getApplication(db, applicationId);
+    if (!application) return notFound("application");
     const task = getAgentTaskByApplicationId(db, applicationId);
 
     const result = await runTurn({
       ctx: { db, applicationId, ...(task ? { taskId: task.id } : {}) },
       question: question.trim(),
+      subject: `${application.jobInfo.jobTitle} at ${application.jobInfo.companyName}`,
       runLlm: makeAgentLlm(db),
     });
     return ok(result);

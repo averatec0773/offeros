@@ -40,3 +40,6 @@ export { findConflicts } from "./constraints";
 
 export type { FieldMeta, MetaControl, MetaSource, RawFieldMeta } from "./field-meta";
 export { toControl, fromSemanticId, toFieldMeta, groupFieldMeta } from "./field-meta";
+
+export type { FailureCause, CauseGroup, FillDiagnosis, DiagnosableField } from "./diagnose";
+export { diagnoseFill } from "./diagnose";
