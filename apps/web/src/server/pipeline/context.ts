@@ -98,7 +98,7 @@ export function envApiKeyFor(provider: LlmProvider): string {
  * Settings-first key resolution: a key saved in-app beats the environment
  * variable, which beats nothing.
  */
-function apiKeyFor(provider: LlmProvider, settings: Settings): string {
+export function apiKeyFor(provider: LlmProvider, settings: Settings): string {
   const saved = settings.llm.apiKeys[provider];
   if (saved && saved.trim() !== "") return saved.trim();
   return envApiKeyFor(provider);

@@ -18,6 +18,7 @@ import type {
 import type { ParsedResume } from "@offeros/llm";
 import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
 import type { QueueStatus } from "@/server/services/queue-service";
+import type { AgentStep } from "@/server/agent/loop";
 import type { TraceEntry } from "@/server/agent/types";
 import type { AttentionItem } from "@/server/services/attention-service";
 import type { LineDiff } from "./diff";
@@ -119,6 +120,13 @@ export const api = {
   },
   agent: {
     inbox: () => request<{ inbox: AttentionItem[]; trace: TraceEntry[] }>(`/agent/inbox`),
+    /** One turn of the agent chat. The steps come back with the answer so the
+     *  UI can show what was read to produce it. */
+    chat: (applicationId: string, question: string) =>
+      request<{ answer: string; steps: AgentStep[]; ranOutOfSteps: boolean }>(
+        `/agent/chat`,
+        json("POST", { applicationId, question }),
+      ),
   },
   queue: {
     status: () => request<QueueStatus>(`/agent/queue`),

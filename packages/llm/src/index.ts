@@ -15,3 +15,7 @@ export * from "./tasks/fit-analysis.task";
 export * from "./tasks/style-distill.task";
 export * from "./style-notes";
 export * from "./untrusted";
+
+// The agent loop parses the model's decision with the same tolerant reader the
+// tasks use for their JSON payloads.
+export { extractJson } from "./parse-json";

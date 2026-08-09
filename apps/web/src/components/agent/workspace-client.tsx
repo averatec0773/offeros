@@ -12,6 +12,7 @@ import {
   type ResumeSummary,
 } from "@offeros/core";
 import type { LineDiff } from "@/lib/diff";
+import { AgentChat } from "./agent-chat";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
 import { extensionPresent, openFillTabViaExtension } from "@/lib/extension-bridge";
 import { subscribeToAgentEvents } from "@/lib/agent-events";
@@ -594,6 +595,11 @@ export function WorkspaceClient({
               body="Artifacts will appear here once the agent starts working."
             />
           )}
+
+          {/* Below the artifacts and the timeline, because it answers questions
+              ABOUT them — the record comes first, the conversation about it
+              second. */}
+          <AgentChat applicationId={application.id} />
 
           <TimelineCard applicationId={application.id} events={events} />
         </div>
