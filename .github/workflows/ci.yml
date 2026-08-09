@@ -4,9 +4,23 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+
+# Read-only by default: nothing here publishes, comments, or pushes.
+permissions:
+  contents: read
+
+# A rapid series of pushes should leave one running check, not five — but never
+# cancel a run for a pull request someone is waiting on.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # The full suite finishes in minutes; anything past this is a hang, and an
+    # unbounded job would sit there for six hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

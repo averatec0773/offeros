@@ -1,16 +1,21 @@
 # OfferOS
 
+[![CI](https://github.com/averatec0773/offeros/actions/workflows/ci.yml/badge.svg)](https://github.com/averatec0773/offeros/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
+
 Local-first, open-source AI job-application copilot for the North American
 market. `apps/web` (Next.js) is **the product**: it owns your data in a local
 SQLite database and is where you build your profile, track applications, and run
 the AI workspace. `apps/extension` (a Chrome **Side Panel**) is the **fill arm**:
 on a supported ATS page it fills the form from your profile, tailors your
 résumé and writes a cover letter in place (generation runs server-side in the
-web app), and reports every field back to the workspace. Submitting is always
-a manual action you take on the page. As currently built, field classification
-runs on-device, no page HTML is uploaded anywhere, and the only files attached
-to a form are your own OfferOS-managed ones — it never reads files from the
-page.
+web app), and reports every field back to the workspace. **Submitting is yours by
+default** — OfferOS stops at the submit button and waits for you; an opt-in
+setting can hand it that last step, and it ships off. As currently built, field
+classification runs on-device, no page HTML is uploaded anywhere, and the only
+files attached to a form are your own OfferOS-managed ones — it never reads
+files from the page.
 
 Status: pre-alpha.
 
@@ -109,6 +114,21 @@ disk on your machine, and your key is only ever sent to the provider you chose.
 - **Style memory** — approving artifacts you tweaked teaches a per-kind style
   note (tone/structure only, never facts) that future generations honor;
   view/edit/disable it in Settings → Style.
+- **Agent console** (`/agent`) — everything waiting on _you_ across every
+  application in one list (fields that need an answer, an application ready to
+  submit, a step that failed), ordered by what you lose by ignoring it, beside a
+  run queue that walks a batch of applications to their next human gate and a
+  live record of what the agent did and whether each change was verified.
+- **Answer guards** — voluntary self-identification (gender, race, veteran,
+  disability) and legally-consequential facts (work authorization, citizenship,
+  visa sponsorship) are never answered automatically; policy acknowledgments are
+  filled but surfaced afterwards with their wording and the value that went in.
+- **Work evidence & self-assessments** — keep your projects with their stack and
+  outcome once; each application is offered only the ones whose stack matches the
+  posting. Rated questions ("how would you rate your Python") answer from one
+  committed level, so two applications never disagree about you.
+- **Undo on the one-way door** — a mis-clicked "mark as submitted" restores the
+  task to the gate it came from, from the append-only event log.
 - **Workspace nav** — jump straight into the most recent active application's
   agent workspace.
 
@@ -175,8 +195,10 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
 
 ## Privacy & safety — how it behaves today
 
-- **Submitting is yours** — nothing in OfferOS clicks submit; you take that
-  action on the page (and then mark it applied).
+- **Submitting is yours by default** — OfferOS stops at the submit button; you
+  take that action on the page and mark it applied. **Settings → Agent** has an
+  opt-in switch that lets it submit for you; it is off until you turn it on, and
+  it says plainly that a sent application cannot be recalled.
 - **Attaches only your own OfferOS-managed files** (the tailored résumé PDF,
   your stored original résumé, or the cover-letter PDF) to file inputs, never
   reads files from the page, and uploads no page HTML anywhere — field

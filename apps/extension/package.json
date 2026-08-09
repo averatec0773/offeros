@@ -1,6 +1,6 @@
 {
   "name": "@offeros/extension",
-  "description": "Local-first job application autofill. Review and submit yourself \u2014 OfferOS never submits for you.",
+  "description": "Autofill job applications from your local OfferOS profile \u2014 Greenhouse, Lever, Ashby, iCIMS and Workday. Every field is reported back so you can check it before you submit.",
   "private": true,
   "version": "0.0.0",
   "type": "module",

@@ -1,10 +1,47 @@
 {
   "name": "offeros",
-  "description": "Local-first, open-source AI job-application copilot \u2014 web app + companion extension. Review and submit yourself; OfferOS never submits for you.",
-  "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "private": true,
+  "description": "Local-first, open-source AI job-application copilot \u2014 a Next.js web app plus a Chrome side-panel extension that autofills ATS applications (Greenhouse, Lever, Ashby, iCIMS, Workday), tailors your r\u00e9sum\u00e9, and drafts cover letters. Your data and your API key stay on your machine.",
+  "keywords": [
+    "job-application",
+    "autofill",
+    "ats",
+    "greenhouse",
+    "lever",
+    "ashby",
+    "workday",
+    "icims",
+    "resume",
+    "resume-tailoring",
+    "cover-letter",
+    "job-search",
+    "job-hunt",
+    "ai-agent",
+    "llm",
+    "local-first",
+    "privacy",
+    "chrome-extension",
+    "side-panel",
+    "nextjs",
+    "typescript",
+    "sqlite",
+    "job-tracker",
+    "career"
+  ],
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/averatec0773/offeros.git"
+  },
+  "homepage": "https://github.com/averatec0773/offeros#readme",
+  "bugs": {
+    "url": "https://github.com/averatec0773/offeros/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
   "workspaces": [
     "apps/*",
     "packages/*"
