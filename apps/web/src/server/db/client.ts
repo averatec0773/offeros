@@ -61,7 +61,37 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_task ON artifacts(task_id);
 CREATE INDEX IF NOT EXISTS idx_fill_handoffs_task ON fill_handoffs(task_id);
 CREATE INDEX IF NOT EXISTS idx_application_events_application ON application_events(application_id);
 CREATE INDEX IF NOT EXISTS idx_agent_trace_application ON agent_trace(application_id);
+-- Two lookups run often enough to index and are selective: every artifact read
+-- is (task, kind), and the extension polls open handoffs by status. The
+-- updated_at orderings are deliberately NOT indexed — this is one person's
+-- database, those tables hold hundreds of rows, and the write cost would buy
+-- nothing measurable.
+CREATE INDEX IF NOT EXISTS idx_artifacts_task_kind ON artifacts(task_id, kind);
+CREATE INDEX IF NOT EXISTS idx_fill_handoffs_status ON fill_handoffs(status);
 `;
+
+/**
+ * Columns added to a table that had already shipped. `CREATE TABLE IF NOT
+ * EXISTS` does nothing for a database that already has the table, so each of
+ * these needs its own ALTER — and they are listed as data, not written as
+ * calls, so that SCHEMA_FINGERPRINT below can see them. Every entry is
+ * permanent: someone's database is still at the version that needs it.
+ */
+const ADDED_COLUMNS: ReadonlyArray<readonly [table: string, column: string, ddl: string]> = [
+  [
+    "agent_tasks",
+    "cover_letter_requirement",
+    "cover_letter_requirement TEXT NOT NULL DEFAULT 'unknown'",
+  ],
+  ["agent_tasks", "skipped_cover_letter", "skipped_cover_letter INTEGER NOT NULL DEFAULT 0"],
+  ["agent_tasks", "field_reports", "field_reports TEXT"],
+  ["agent_tasks", "fill_first", "fill_first INTEGER NOT NULL DEFAULT 0"],
+  ["agent_tasks", "failure_reason", "failure_reason TEXT"],
+  ["resumes", "note", "note TEXT"],
+  ["resumes", "text", "text TEXT"],
+  ["applications", "resume_id", "resume_id TEXT"],
+  ["applications", "attach_resume", "attach_resume TEXT"],
+];
 
 /** SQLite errors on `ALTER TABLE ADD COLUMN` if the column already exists, so
  *  re-opening an existing DB must check first via `PRAGMA table_info`. */
@@ -75,6 +105,23 @@ function addColumnIfMissing(
   if (columns.some((c) => c.name === column)) return;
   sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
+
+/**
+ * What this build's schema looks like, as a number `PRAGMA user_version` can
+ * hold. Derived from the schema text itself rather than bumped by hand: a
+ * version someone has to remember to raise is a version that eventually is
+ * not raised, and the failure is silent until a query hits the missing table.
+ * Any edit to DDL or ADDED_COLUMNS changes this automatically.
+ */
+const SCHEMA_FINGERPRINT = ((): number => {
+  let h = 2166136261;
+  for (const ch of DDL + JSON.stringify(ADDED_COLUMNS)) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  // user_version is a signed 32-bit int; keep it positive.
+  return h >>> 1;
+})();
 
 export function defaultDbPath(): string {
   return process.env.OFFEROS_DB_PATH ?? join(homedir(), ".offeros", "offeros.db");
@@ -103,43 +150,67 @@ function tightenPerms(path: string, mode: number): void {
   }
 }
 
-/** Open a database at an explicit path, applying the schema. Used by tests. */
-export function createDb(path: string): Db {
+/**
+ * Bring a database up to the schema this build expects.
+ *
+ * Every statement is idempotent, so this is safe to run against a fresh file
+ * and against one opened by an older build. It is deliberately separate from
+ * opening the connection: a long-lived process (the auto-start service, a dev
+ * server across a hot reload) keeps its handle far longer than it keeps its
+ * code, and the schema has to follow the code, not the handle.
+ */
+function applySchema(sqlite: Database.Database): void {
+  sqlite.exec(DDL);
+  for (const [table, column, ddl] of ADDED_COLUMNS) addColumnIfMissing(sqlite, table, column, ddl);
+  sqlite.pragma(`user_version = ${SCHEMA_FINGERPRINT}`);
+}
+
+/** Open a database at an explicit path, applying the schema. The raw handle
+ *  comes back too: `getDb` keeps it to re-check the schema later, without a
+ *  second connection to the same file. */
+function openDb(path: string): { db: Db; sqlite: Database.Database } {
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const sqlite = new Database(path);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
-  sqlite.exec(DDL);
+  applySchema(sqlite);
   tightenPerms(dir, 0o700);
   tightenPerms(path, 0o600);
-  addColumnIfMissing(
-    sqlite,
-    "agent_tasks",
-    "cover_letter_requirement",
-    "cover_letter_requirement TEXT NOT NULL DEFAULT 'unknown'",
-  );
-  addColumnIfMissing(
-    sqlite,
-    "agent_tasks",
-    "skipped_cover_letter",
-    "skipped_cover_letter INTEGER NOT NULL DEFAULT 0",
-  );
-  addColumnIfMissing(sqlite, "agent_tasks", "field_reports", "field_reports TEXT");
-  addColumnIfMissing(sqlite, "agent_tasks", "fill_first", "fill_first INTEGER NOT NULL DEFAULT 0");
-  addColumnIfMissing(sqlite, "agent_tasks", "failure_reason", "failure_reason TEXT");
-  addColumnIfMissing(sqlite, "resumes", "note", "note TEXT");
-  addColumnIfMissing(sqlite, "resumes", "text", "text TEXT");
-  addColumnIfMissing(sqlite, "applications", "resume_id", "resume_id TEXT");
-  addColumnIfMissing(sqlite, "applications", "attach_resume", "attach_resume TEXT");
-  return drizzle(sqlite, { schema });
+  return { db: drizzle(sqlite, { schema }), sqlite };
 }
 
-const globalForDb = globalThis as unknown as { __offerosDb?: Db };
+/** Open a database at an explicit path, applying the schema. Used by tests. */
+export function createDb(path: string): Db {
+  return openDb(path).db;
+}
 
-/** Process-wide singleton for the app's real database. Cached on globalThis so
- *  Next.js dev-mode module re-evaluation reuses the handle instead of leaking it. */
+const globalForDb = globalThis as unknown as {
+  __offerosDb?: Db;
+  __offerosSqlite?: Database.Database;
+};
+
+/**
+ * Process-wide singleton for the app's real database. Cached on globalThis so
+ * Next.js dev-mode module re-evaluation reuses the handle instead of leaking it.
+ *
+ * The cached handle can outlive the code that made it — a dev server hot-reloads
+ * modules while keeping globalThis, and the auto-start service runs for days
+ * across app updates. A build that added a table would then query one that its
+ * own DDL creates but this connection never ran, which is exactly how a running
+ * app started answering `no such table: agent_trace`. So the version this
+ * process last applied is checked here, not only when the handle is opened.
+ */
 export function getDb(): Db {
-  globalForDb.__offerosDb ??= createDb(defaultDbPath());
+  if (!globalForDb.__offerosDb || !globalForDb.__offerosSqlite) {
+    const opened = openDb(defaultDbPath());
+    globalForDb.__offerosDb = opened.db;
+    globalForDb.__offerosSqlite = opened.sqlite;
+    return globalForDb.__offerosDb;
+  }
+  // Cheap: one pragma read per call, no statement compilation.
+  if (globalForDb.__offerosSqlite.pragma("user_version", { simple: true }) !== SCHEMA_FINGERPRINT) {
+    applySchema(globalForDb.__offerosSqlite);
+  }
   return globalForDb.__offerosDb;
 }
