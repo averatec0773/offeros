@@ -77,7 +77,6 @@ apps/extension/test-fixtures/
 # running changelog/roadmap are kept local.
 docs/
 conventions/
-CHANGELOG.md
 ROADMAP.md
 
 # Local form-capture tooling + its test (not part of the published repo) ------
@@ -87,3 +86,6 @@ packages/autofill/src/__tests__/capture-form.test.mjs
 
 # Local agent-loop usage probe (references the gitignored loop/ harness) -------
 scripts/check-usage.sh
+
+# Local-only git hooks + their blocklist (see .githooks/pre-commit)
+.githooks/

@@ -1,0 +1,34 @@
+# Dependency updates. This is a browser extension plus a local server that
+# holds the user's résumé and API keys, so a compromised transitive package is
+# a real path in — but a solo project drowns in daily one-package PRs and
+# starts ignoring them, which is worse than not having this at all.
+#
+# Hence: weekly, and grouped so a week of updates is one pull request to read
+# rather than fifteen. Security advisories are delivered separately by GitHub
+# and are not affected by the schedule.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      # Patch and minor bumps are the bulk of the noise and almost never need
+      # thought. Majors stay separate: they are the ones worth reading.
+      minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
