@@ -148,6 +148,32 @@ describe("diagnoseFill", () => {
     expect(diagnoseFill(REAL.filter((f) => f.outcome === "filled")).causes).toEqual([]);
   });
 
+  /**
+   * Every phrasing `buildFillPlan` actually emits, from fill-plan.ts. Tying the
+   * lookup to one example missed the empty-stored-answer case and filed a
+   * question the user could answer as one nobody understood — opposite advice.
+   */
+  it("covers every reason the planner writes", () => {
+    const rows: [string, string][] = [
+      [
+        'answer-bank pattern matched label "Notice period" but stored answer is empty → needs-answer',
+        "needs-your-answer",
+      ],
+      [
+        "no classifier or answer-bank match, open-ended question → offered for per-field generation",
+        "needs-your-answer",
+      ],
+      ["no classifier match → left unknown", "not-recognised"],
+      ["file input → always manual upload, left needs-answer", "manual-upload"],
+    ];
+    for (const [reason, expected] of rows) {
+      const out = diagnoseFill([
+        { label: "q", outcome: "needs-user", source: "none", required: false, reason },
+      ]);
+      expect(out.causes[0]!.cause, reason).toBe(expected);
+    }
+  });
+
   it("survives an empty report", () => {
     expect(diagnoseFill([])).toEqual({ total: 0, filled: 0, skipped: 0, causes: [] });
   });

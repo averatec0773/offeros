@@ -77,16 +77,32 @@ const EXPLANATIONS: Record<FailureCause, string> = {
 /**
  * Read the cause out of a row.
  *
- * Matches on our own engine's reason strings, so this is a lookup rather than
- * inference. Order matters: a guard refusal also reads as "no answer-bank
- * match", so the narrower cause is tested first.
+ * The reason strings come from our own engine, so this is a lookup rather than
+ * inference — but it matches on the CONCEPT rather than on one exact sentence.
+ * The engine has four phrasings today and gained one the first time this was
+ * written against a single example: "answer-bank pattern matched … but stored
+ * answer is empty" is a question waiting on the user, and a pattern tied to
+ * one wording missed it and filed it as unrecognised.
+ *
+ * Order matters. A guard refusal also reads as "no answer-bank match", and an
+ * empty stored answer also mentions the answer bank, so the narrower cause is
+ * always tested first.
  */
 function causeOf(field: DiagnosableField): FailureCause {
   const reason = field.reason.toLowerCase();
   if (/guard|only you|refus/.test(reason)) return "only-you-can-answer";
   if (/file input|manual upload/.test(reason)) return "manual-upload";
   if (field.outcome === "failed" && field.source !== "none") return "write-rejected";
-  if (/no classifier or answer-bank match|open-ended/.test(reason)) return "needs-your-answer";
+  // The engine understood the question — what it lacks is the answer. Whether
+  // it says so as "open-ended", "needs-answer", "stored answer is empty" or
+  // "no matching answer", the user's next move is the same: answer it once.
+  if (
+    /open-ended|needs-answer|stored answer is empty|no (matching )?answer|answer.bank match/.test(
+      reason,
+    )
+  ) {
+    return "needs-your-answer";
+  }
   if (/no classifier match|left unknown/.test(reason)) return "not-recognised";
   // An outcome of "failed" with nothing chosen is a write that never had a
   // value, which is the engine not knowing rather than the page refusing.

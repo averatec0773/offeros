@@ -31,15 +31,47 @@ const reports: FieldReport[] = [
 ];
 
 describe("FillReportCard", () => {
-  it("renders filled rows with source/value and missing rows with reasons", () => {
+  it("renders filled rows with source and value", () => {
     render(<FillReportCard reports={reports} />);
 
     expect(screen.getByText("Full name")).toBeTruthy();
     expect(screen.getByText(/personal/)).toBeTruthy();
     expect(screen.getByText(/Jordan Rivera/)).toBeTruthy();
+  });
 
+  /**
+   * What did not fill is grouped by cause rather than listed row by row with
+   * the engine's own wording. Eighteen rows on a real form is a wall; the
+   * causes are a to-do list, and they come from the same `diagnoseFill` the
+   * agent reads — so the card and the chat cannot disagree about one fill.
+   */
+  it("groups unfilled fields under a cause, not under their raw reason", () => {
+    render(<FillReportCard reports={reports} />);
+
+    expect(screen.getByText(/Waiting on an answer from you/)).toBeTruthy();
+    // The field is named; the developer-facing reason string is not shown.
     expect(screen.getByText("Visa sponsorship required?")).toBeTruthy();
-    expect(screen.getByText(/no matching answer in the answer bank/)).toBeTruthy();
+    expect(screen.queryByText(/no matching answer in the answer bank/)).toBeNull();
+  });
+
+  it("does not count a skipped control as something needing attention", () => {
+    // A skipped control is the engine deciding it is not a question. Counting
+    // it as a failure made a form that behaved correctly look broken.
+    const withSkipped: FieldReport[] = [
+      ...reports,
+      {
+        fieldId: "f-search",
+        label: "Search",
+        classifiedType: "unknown",
+        status: "unknown",
+        source: "none",
+        reason: "not a question",
+        outcome: "skipped",
+        required: false,
+      },
+    ];
+    render(<FillReportCard reports={withSkipped} />);
+    expect(screen.queryByText("Search")).toBeNull();
   });
 
   it("renders nothing for an empty report list", () => {
