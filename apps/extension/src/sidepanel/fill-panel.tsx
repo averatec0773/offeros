@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Minus, RefreshCw, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, RefreshCw } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { SectionCard } from "../components/ui/section-card";
 import {
@@ -9,7 +9,6 @@ import {
   isAutoAnswerForbidden,
   needsPostFillReview,
   normalizeQuestion,
-  type Coverage,
   type FieldTrace,
   type FillItem,
 } from "@offeros/autofill";
@@ -30,16 +29,7 @@ import type {
   CaptureJdResponse,
   AttachFileResponse,
 } from "../lib/autofill/autofill-messaging";
-import type {
-  AnswerEntry,
-  ApiResult,
-  ApplicationSummary,
-  FieldReport,
-  FileFetchResult,
-  FillTaskBundle,
-  FillTicket,
-  FitSummary,
-} from "../lib/offeros-api";
+import type { FieldReport, FileFetchResult, FillTaskBundle, FitSummary } from "../lib/offeros-api";
 import {
   buildFieldReports,
   isCoverLetterField,
@@ -48,29 +38,32 @@ import {
   CUSTOM_UPLOADER_REASON,
   NO_FILE_REASON,
   RENDER_FAILED_REASON,
-  type FieldReportSource,
+  FILE_KIND_SOURCE,
   type WriteOutcome,
 } from "../lib/autofill/task-mode";
 
 type OkScan = Extract<ScanResponse, { ok: true }>;
 
 // The pieces this panel composes. They were inline until the file passed two
-// thousand lines and the orchestration below became hard to find; each one is
-// presentational (no messaging, no state of its own) except the API contract.
+// thousand lines and the orchestration below became hard to find. Four are
+// presentational — no state, no messaging. AddJobCard is not: it owns the whole
+// add-job state machine (capture → confirm → dedup → create) and calls the web
+// app itself, which is exactly why it was worth its own file.
 import type { FillApi } from "./panel/fill-api";
-import { StatusIcon } from "./panel/status-icon";
 import { CoverageBar } from "./panel/coverage-bar";
 import { FieldGroup } from "./panel/field-group";
 import { ArtifactCard } from "./panel/artifact-card";
-import { AddJobCard, FILE_KIND_SOURCE } from "./panel/add-job-card";
+import { AddJobCard } from "./panel/add-job-card";
 
 /** Re-exported: the panel is what callers configure, so its contract lives
  *  under its name even though the declaration moved. */
 export type { FillApi };
 
-/** Shape a question for the answer guards: the plan's label plus whatever the
- *  descriptor adds (its own label, and the option text — real forms put the
- *  substance of a question in its choices as often as in its label). */
+/** Which questions an automated answer may not decide, and which need the
+ *  user to review what was agreed to afterwards. Shared with the fill plan and
+ *  unit-tested in @offeros/autofill — the same question shows up as a radio
+ *  group on one site and a textarea on the next, and a guard that only covered
+ *  one lane once let a generated visa-sponsorship answer through. */
 const guardSubject = (label: string, desc?: { label?: string; options?: string[] }) => ({
   label,
   altLabel: desc?.label,
@@ -230,7 +223,9 @@ export function FillPanel({
     pendingRepairRef.current = repair;
     void api.postRepairEvent(b.taskId, "repair-attempted", { ...repair, detail: target });
     void navigateTab(target);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deliberately keyed on the scan alone: `api`, `b` and `tabUrl` are read
+    // for the attempt but must not re-trigger it, or a bundle refresh would
+    // re-navigate a page the user had already been carried to.
   }, [scanResult, navigateTab]);
 
   // A pushed "ticket created" event re-opens the claim window: reset the

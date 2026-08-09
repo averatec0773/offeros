@@ -1,4 +1,3 @@
-import { Check, RefreshCw } from "lucide-react";
 import { Button } from "../../components/ui/button";
 
 /** Generate → preview → attach card, shared by the résumé and cover-letter

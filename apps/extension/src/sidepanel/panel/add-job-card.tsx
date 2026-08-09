@@ -1,16 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../components/ui/button";
-import { SectionCard } from "../../components/ui/section-card";
 import type { CaptureJdResponse } from "../../lib/autofill/autofill-messaging";
-import { jobIdFromUrl } from "../../lib/autofill/recipes";
 import type { ApplicationSummary } from "../../lib/offeros-api";
-import type { FieldReportSource } from "../../lib/autofill/task-mode";
 import type { FillApi } from "./fill-api";
-
-export const FILE_KIND_SOURCE: Record<"resume" | "coverLetter", FieldReportSource> = {
-  resume: "resume-file",
-  coverLetter: "cover-letter-file",
-};
 
 /**
  * One-click "Add this job": capture the JD off the active tab, let the user

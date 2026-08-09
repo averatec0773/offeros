@@ -18,6 +18,13 @@ export type FieldReportSource =
   | "cover-letter-file"
   | "none";
 
+/** One OfferOS-managed file kind a file input can classify as — the only
+ *  kinds the panel ever auto-attaches. Maps to the report source vocabulary. */
+export const FILE_KIND_SOURCE: Record<"resume" | "coverLetter", FieldReportSource> = {
+  resume: "resume-file",
+  coverLetter: "cover-letter-file",
+};
+
 /** A file field the panel manages (résumé/cover-letter) but a fetch 404'd —
  *  no stored file to attach, whether from a stale attachResume preference or
  *  an out-of-band deletion. Distinct from CUSTOM_UPLOADER_REASON below. */

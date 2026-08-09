@@ -72,16 +72,3 @@ export interface FillApi {
   createAnswer: (input: { question: string; answer: string }) => Promise<ApiResult<AnswerEntry>>;
   updateAnswer: (id: string, input: { answer: string }) => Promise<ApiResult<AnswerEntry>>;
 }
-
-/** One OfferOS-managed file kind a file input can classify as — the only
- *  kinds the panel ever auto-attaches. Maps to the report source vocabulary. */
-/** Which questions an automated answer may not decide, and which need the
- *  user to review what was agreed to afterwards. Shared with the fill plan and
- *  unit-tested in @offeros/autofill — the same question shows up as a radio
- *  group on one site and a textarea on the next, and a guard that only covered
- *  one lane once let a generated visa-sponsorship answer through. */
-const guardSubject = (label: string, desc?: { label?: string; options?: string[] }) => ({
-  label,
-  altLabel: desc?.label,
-  options: desc?.options,
-});

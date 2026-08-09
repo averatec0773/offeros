@@ -17,6 +17,7 @@ const stripHtml = (html: string): string => {
 // and into the panel's confirm-card UI: flatten control chars/newlines to a
 // single space, trim, and cap length. Token-level neutralization (defanging a
 // literal "</untrusted-page-text>") is the LLM tasks' job server-side, not this.
+// eslint-disable-next-line no-control-regex -- stripping C0 control characters from scraped page text is the point
 const CONTROL_CHARS_RE = /[\x00-\x1F\x7F]+/g;
 const MAX_LABEL_LEN = 200;
 
