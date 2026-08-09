@@ -20,7 +20,7 @@
     "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
 }
