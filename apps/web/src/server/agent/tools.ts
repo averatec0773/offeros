@@ -16,6 +16,18 @@ import type { Tool, ToolContext, ToolObservation } from "./types";
  * uniform shape (a policy branches on observations, not on exception types),
  * the verification that reads the durable record afterwards, and the human
  * gates enforced at this layer so no caller can route around them.
+ *
+ * NOT YET WIRED, deliberately. Nothing in production calls this registry: the
+ * run queue drives its own `queueItemTool` through `runTool`, and the routes
+ * still call their services directly. This file is the surface the recovery
+ * policy (roadmap step 5) will choose from, written ahead of it so the shape
+ * was settled — and audited — before anything started planning against it.
+ * `runTool` and the trace, which this file exists to feed, ARE live.
+ *
+ * Two of these (mark_submitted, tailor_resume) are exercised by
+ * `__tests__/tool-contract-invariants.test.ts`; the rest are untested until a
+ * caller exists. If step 5 is abandoned, delete the file rather than leaving
+ * it to rot.
  */
 
 const HUMAN_GATES = new Set(["fill-form", "submit"]);
