@@ -6,6 +6,8 @@ import {
   classifiedRatio,
   explainFillPlan,
   fillCoverage,
+  isAutoAnswerForbidden,
+  needsPostFillReview,
   normalizeQuestion,
   type Coverage,
   type FieldTrace,
@@ -140,24 +142,16 @@ export interface FillApi {
 
 /** One OfferOS-managed file kind a file input can classify as — the only
  *  kinds the panel ever auto-attaches. Maps to the report source vocabulary. */
-/** Voluntary self-identification questions AI must never answer — the user
- *  seeds these once in Profile → Equal Employment and the bank fills them.
- *  Checked against the question AND the option labels: real forms ask
- *  neutral-sounding questions ("Which communities do you belong to?") whose
- *  OPTIONS are the sensitive part (disability / veteran / immigrant …). */
-const SENSITIVE_GROUP =
-  /gender|race|ethnic|veteran|disab|orientation|lgbt|pronoun|hispanic|latino|transgender|immigrant|refugee|\bage\b/i;
-
-function isSensitiveGroup(label: string, desc: { label?: string; options?: string[] }): boolean {
-  if (SENSITIVE_GROUP.test(`${label} ${desc.label ?? ""}`)) return true;
-  return (desc.options ?? []).some((o) => SENSITIVE_GROUP.test(o));
-}
-
-/** Work-authorization / visa questions: legally-consequential facts only the
- *  user can assert. They fill from the answer bank (set once in Profile →
- *  Equal Employment) — a wrong AI guess here is a misrepresentation, so AI
- *  never touches them and unanswered ones surface as needs-user. */
-const TRUTH_REQUIRED_GROUP = /sponsor|authoriz\w* to work|work authoriz|legally (?:able|authorized|eligible)|eligible to work|\bvisa\b/i;
+/** Which questions an automated answer may not decide, and which need the
+ *  user to review what was agreed to afterwards. Shared with the fill plan and
+ *  unit-tested in @offeros/autofill — the same question shows up as a radio
+ *  group on one site and a textarea on the next, and a guard that only covered
+ *  one lane once let a generated visa-sponsorship answer through. */
+const guardSubject = (label: string, desc?: { label?: string; options?: string[] }) => ({
+  label,
+  altLabel: desc?.label,
+  options: desc?.options,
+});
 
 const FILE_KIND_SOURCE: Record<"resume" | "coverLetter", FieldReportSource> = {
   resume: "resume-file",
@@ -593,6 +587,13 @@ export function FillPanel({
   const [writtenFields, setWrittenFields] = useState<Map<string, string>>(new Map());
   const markWritten = (fieldId: string, value: string) =>
     setWrittenFields((prev) => new Map(prev).set(fieldId, value));
+  // Policy acknowledgments this run put an answer into. They are allowed to be
+  // filled (leaving them blank blocks submission), but accepting a policy is
+  // the user's act — so every one is surfaced afterwards with its wording and
+  // the value that went in, for them to check before they submit.
+  const [policyAnswers, setPolicyAnswers] = useState<
+    { fieldId: string; label: string; value: string }[]
+  >([]);
   const [aiAnswers, setAiAnswers] = useState<
     { fieldId: string; label: string; answer: string; options?: string[] }[]
   >([]);
@@ -738,6 +739,7 @@ export function FillPanel({
     setBundle(null);
     reportsRef.current.clear();
     setAiAnswers([]);
+    setPolicyAnswers([]);
     setSavedFieldIds(new Set());
     setReported(false);
     setFilledOnce(false);
@@ -908,8 +910,7 @@ export function FillPanel({
       // legal assertion. A generated answer to either is a fabrication about a
       // real person on a real application — these fields stay needs-user.
       const aiForbidden = (label: string, desc?: { label?: string; options?: string[] }) =>
-        isSensitiveGroup(label, desc ?? {}) ||
-        TRUTH_REQUIRED_GROUP.test(`${label} ${desc?.label ?? ""}`);
+        isAutoAnswerForbidden(guardSubject(label, desc));
 
       // 3) open-ended free-text → AI answer → fill. Generation or write failure leaves
       // the field unwritten so it reports as needs-user (a human must answer).
@@ -974,6 +975,26 @@ export function FillPanel({
       }
       if (collected.length > 0) {
         setAiAnswers((prev) => [...prev.filter((e) => !collected.some((c) => c.fieldId === e.fieldId)), ...collected]);
+      }
+
+      // Everything this run committed to a policy question, whatever answered
+      // it (profile, answer bank, or a generated pick).
+      const acknowledged = planForFill
+        .filter((i) => {
+          const w = writes.get(i.fieldId);
+          const wrote = typeof w === "string" ? w === "filled" : w?.outcome === "filled";
+          return wrote && needsPostFillReview(guardSubject(i.label, descriptorById.get(i.fieldId)));
+        })
+        .map((i) => {
+          const w = writes.get(i.fieldId);
+          const value = typeof w === "string" ? "" : (w?.value ?? "");
+          return { fieldId: i.fieldId, label: i.label, value };
+        });
+      if (acknowledged.length > 0) {
+        setPolicyAnswers((prev) => [
+          ...prev.filter((p) => !acknowledged.some((a) => a.fieldId === p.fieldId)),
+          ...acknowledged,
+        ]);
       }
 
       // 4) résumé / cover-letter file attach — only the file inputs the classifier
@@ -1363,6 +1384,22 @@ export function FillPanel({
     [...pageValuesRef.current].filter(([, v]) => v.trim() !== "").map(([id]) => id),
   );
   const fillable = plan.filter((i) => i.status === "fillable" && !satisfiedByPage.has(i.fieldId));
+  // What a run would actually DO, not just what the profile can type in. A
+  // page whose remaining work is all AI-answerable (open-ended questions, or
+  // choice groups the answer bank missed) used to read "Fill 0 fields" with
+  // the button disabled — the run was possible, the user just could not start
+  // it. Guarded questions are excluded because the run will not answer them.
+  const descriptorFor = (fieldId: string) =>
+    scanResult.ok ? scanResult.descriptors.find((d) => d.fieldId === fieldId) : undefined;
+  const answerable = plan.filter((i) => {
+    if (i.status !== "needs-answer" || satisfiedByPage.has(i.fieldId)) return false;
+    const desc = descriptorFor(i.fieldId);
+    if (!desc || isAutoAnswerForbidden(guardSubject(i.label, desc))) return false;
+    const isGroup = desc.type === "radio-group" || desc.type === "checkbox-group";
+    if (isGroup) return (desc.options?.length ?? 0) > 0;
+    return i.generatable === true && isTextAnswerTarget(desc);
+  });
+  const plannedActions = fillable.length + answerable.length;
   const needs = plan.filter(
     (i) => i.status === "needs-answer" && !satisfiedByPage.has(i.fieldId),
   ).length;
@@ -1664,10 +1701,10 @@ export function FillPanel({
           <Button
             variant="primary"
             className="mb-3 w-full rounded-full py-2.5 text-body font-semibold"
-            disabled={fillable.length === 0 || pending || done}
+            disabled={plannedActions === 0 || pending || done}
             onClick={() => void onFill()}
           >
-            {`Fill ${fillable.length} ${fillable.length === 1 ? "field" : "fields"}`}
+            {`Fill ${plannedActions} ${plannedActions === 1 ? "field" : "fields"}`}
           </Button>
         ) : webReachable ? (
           <div className="mb-3 rounded-xl bg-bg-base p-3">
@@ -1772,6 +1809,30 @@ export function FillPanel({
             onGenerate={() => void onCoverGen()}
             onAttach={() => void onAttachCover()}
           />
+        )}
+        {bundle && policyAnswers.length > 0 && (
+          <div className="mt-3 rounded-2xl border border-warn-bg bg-warn-bg/40 p-3">
+            <p className="text-caption font-semibold text-text-primary">
+              Check what you agreed to
+            </p>
+            <p className="mt-0.5 text-micro leading-relaxed text-text-secondary">
+              These are agreements, not answers — read them on the page before you submit.
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {policyAnswers.map((p) => (
+                <li key={p.fieldId}>
+                  <button
+                    type="button"
+                    onClick={() => jumpToField(p.fieldId)}
+                    className="w-full rounded-xl bg-bg-base px-2.5 py-1.5 text-left text-micro text-text-secondary transition-colors hover:text-text-primary"
+                  >
+                    <span className="block text-text-primary">{p.label}</span>
+                    {p.value && <span className="block truncate">answered: {p.value}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {bundle && aiAnswers.length > 0 && (
           <div className="mt-3">

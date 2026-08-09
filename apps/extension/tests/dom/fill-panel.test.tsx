@@ -345,7 +345,7 @@ describe("FillPanel", () => {
     it("after reporting, 'I've submitted' resolves the fill as applied-manually", async () => {
       const api = claimedApi();
       renderPanel({ api });
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await userEvent.click(fillBtn);
       await userEvent.click(
         await screen.findByRole("button", { name: "Done — report to workspace" }),
@@ -403,7 +403,7 @@ describe("FillPanel", () => {
       // Preview appears from the rendered artifact PDF.
       expect(await screen.findByTitle("Tailored résumé preview")).toBeInTheDocument();
       // Fill first so the report map has a row for the resume field.
-      await userEvent.click(screen.getByRole("button", { name: "Fill 1 field" }));
+      await userEvent.click(screen.getByRole("button", { name: /^Fill \d+ fields?$/ }));
       await waitFor(() => expect(api.postReport).toHaveBeenCalled());
       const callsBefore = (api.postReport as ReturnType<typeof vi.fn>).mock.calls.length;
       await userEvent.click(screen.getByRole("button", { name: "Attach tailored PDF" }));
@@ -528,7 +528,7 @@ describe("FillPanel", () => {
       renderPanel({ api, fill });
       const row = await screen.findByRole("button", { name: /Email/ });
       expect(row.getAttribute("data-written")).toBeNull();
-      await userEvent.click(await screen.findByRole("button", { name: "Fill 1 field" }));
+      await userEvent.click(await screen.findByRole("button", { name: /^Fill \d+ fields?$/ }));
       await waitFor(() =>
         expect(screen.getByRole("button", { name: /Email/ }).getAttribute("data-written")).toBe(
           "true",
@@ -604,7 +604,7 @@ describe("FillPanel", () => {
 
       // …and a fill run leaves it alone (no generated answer clobbers it).
       await act(async () => {
-        await userEvent.click(screen.getByRole("button", { name: "Fill 1 field" }));
+        await userEvent.click(screen.getByRole("button", { name: /^Fill \d+ fields?$/ }));
       });
       expect(fill).toHaveBeenCalledWith([{ fieldId: "f1", value: "a@b.com" }]);
       expect(api.generateAnswer).not.toHaveBeenCalled();
@@ -637,7 +637,7 @@ describe("FillPanel", () => {
       await screen.findByText("Engineer · Acme");
       // Claim + rescan settle with the row still unwritten: the report says
       // filled, the page says empty, and the page wins.
-      await screen.findByRole("button", { name: "Fill 1 field" });
+      await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       expect(screen.getByRole("button", { name: /Email/ }).getAttribute("data-written")).toBeNull();
     });
 
@@ -758,7 +758,7 @@ describe("FillPanel", () => {
     const { fill } = renderPanel({ api });
 
     // after claim + rescan against the bundle profile, email is fillable
-    const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+    const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
     expect(api.claim).toHaveBeenCalledWith("h1");
     expect(await screen.findByText("Engineer · Acme")).toBeInTheDocument();
 
@@ -856,7 +856,7 @@ describe("FillPanel", () => {
     };
     const { fill } = renderPanel({ api, scan: async () => scanWithGroups });
 
-    const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+    const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
     await act(async () => {
       await userEvent.click(fillBtn);
     });
@@ -1133,7 +1133,7 @@ describe("FillPanel", () => {
     });
 
     const fillAndGetTextarea = async () => {
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1325,7 +1325,7 @@ describe("FillPanel", () => {
         tabUrl={scanOk.url}
       />,
     );
-    const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+    const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
     expect(fillBtn).toHaveClass("rounded-full", "bg-primary");
     // status glyphs are lucide svg icons, never the old raw ✓/⚠/– characters
     expect(container.querySelector("svg")).toBeTruthy();
@@ -1378,7 +1378,7 @@ describe("FillPanel", () => {
         tabUrl={scanOk.url}
       />,
     );
-    expect(await screen.findByRole("button", { name: "Fill 1 field" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Fill \d+ fields?$/ })).toBeInTheDocument();
     expect(api.claim).toHaveBeenCalledWith("h1");
   });
 
@@ -1399,7 +1399,7 @@ describe("FillPanel", () => {
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1437,7 +1437,7 @@ describe("FillPanel", () => {
       };
       renderPanel({ scan: async () => scanWithResumeFile, api });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1457,7 +1457,7 @@ describe("FillPanel", () => {
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1483,7 +1483,7 @@ describe("FillPanel", () => {
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1511,7 +1511,7 @@ describe("FillPanel", () => {
         attachFile: vi.fn(async () => ({ ok: false })),
       });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1534,7 +1534,7 @@ describe("FillPanel", () => {
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithResumeFile, api });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1564,7 +1564,7 @@ describe("FillPanel", () => {
         }),
       });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1590,7 +1590,7 @@ describe("FillPanel", () => {
       };
       const { attachFile } = renderPanel({ scan: async () => scanWithBothFiles, api });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });
@@ -1617,7 +1617,7 @@ describe("FillPanel", () => {
       };
       renderPanel({ scan: async () => scanWithBothFiles, api });
 
-      const fillBtn = await screen.findByRole("button", { name: "Fill 1 field" });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await act(async () => {
         await userEvent.click(fillBtn);
       });

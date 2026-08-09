@@ -145,3 +145,58 @@ describe("AI-answering guardrails on FREE-TEXT questions", () => {
     ]);
   });
 });
+
+describe("policy acknowledgments", () => {
+  // Owner decision: these MAY be filled (leaving them blank blocks the
+  // submission), but accepting a policy is the user's act — so the panel has
+  // to show what went in, with the wording, before they submit.
+  const policyScan: ScanResponse = {
+    ok: true,
+    atsId: "greenhouse",
+    url: "https://boards.greenhouse.io/acme/jobs/1",
+    company: "Acme",
+    title: "Engineer",
+    descriptors: [
+      {
+        fieldId: "consent",
+        label: "Do you acknowledge and agree to comply with our AI use policy during the interview process?",
+        name: "",
+        autocomplete: "",
+        type: "radio-group",
+        placeholder: "",
+        ariaLabel: "",
+        required: true,
+        options: ["Yes", "No"],
+      },
+    ],
+  };
+
+  it("fills the acknowledgment and then asks the user to check what they agreed to", async () => {
+    const used = api();
+    used.generateAnswer = vi.fn(async () => ({ ok: true as const, value: { answer: "Yes" } }));
+    render(
+      <FillPanel
+        scan={async () => policyScan}
+        fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+        capture={vi.fn(async () => captureOk)}
+        attachFile={vi.fn(async () => ({ ok: true }))}
+        api={used}
+        rescanNonce={0}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+        tabUrl={policyScan.ok ? policyScan.url : ""}
+      />,
+    );
+    await screen.findByText("Engineer · Acme");
+    await act(async () => {
+      await userEvent.click(await screen.findByRole("button", { name: /^Fill/ }));
+    });
+
+    // It was allowed to answer…
+    expect(used.generateAnswer).toHaveBeenCalled();
+    // …and the acknowledgment is surfaced for review, with what went in.
+    expect(await screen.findByText("Check what you agreed to")).toBeInTheDocument();
+    expect(screen.getByText(/answered: Yes/)).toBeInTheDocument();
+  });
+});

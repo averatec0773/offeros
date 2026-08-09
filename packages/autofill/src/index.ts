@@ -23,3 +23,6 @@ export { classifyField, isCoverLetterLabel } from "./classify";
 
 export type { FillStatus, FillItem, Coverage, FieldTrace } from "./fill-plan";
 export { buildFillPlan, classifiedRatio, fillCoverage, explainFillPlan } from "./fill-plan";
+
+export type { GuardClass, GuardSubject } from "./guards";
+export { guardClassOf, isAutoAnswerForbidden, needsPostFillReview } from "./guards";
