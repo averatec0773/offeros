@@ -48,7 +48,7 @@ const textField = (fieldId: string, label: string): FieldDescriptor => ({
 });
 
 describe("AUDIT: derived answers reaching a live form", () => {
-  it("CLAIM: irrelevant work is dropped — a C++ side project is offered to a Rails job", () => {
+  it("irrelevant work is dropped — a C++ side project is offered to a Rails job", () => {
     saveProfile(db, {
       personal: { name: "Jordan Rivera", email: "j@example.com", phone: "", links: {} },
       skills: [],
@@ -70,7 +70,7 @@ describe("AUDIT: derived answers reaching a live form", () => {
     expect(bundle.fillProfile.answerBank.find((a) => a.id === "derived:evidence")).toBeUndefined();
   });
 
-  it("CLAIM: a stored answer always beats a derived one — proven through the plan", () => {
+  it("a stored answer always beats a derived one — proven through the plan", () => {
     saveProfile(db, {
       personal: { name: "Jordan Rivera", email: "j@example.com", phone: "", links: {} },
       skills: [],
@@ -102,7 +102,7 @@ describe("AUDIT: derived answers reaching a live form", () => {
     expect(item.value).toBe("Everything I can share is on my resume.");
   });
 
-  it("CLAIM: a committed rating only answers questions about that topic", () => {
+  it("a committed rating only answers questions about that topic", () => {
     saveProfile(db, {
       personal: { name: "Jordan Rivera", email: "j@example.com", phone: "", links: {} },
       skills: [],

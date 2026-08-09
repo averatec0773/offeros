@@ -987,7 +987,11 @@ export function FillPanel({
         })
         .map((i) => {
           const w = writes.get(i.fieldId);
-          const value = typeof w === "string" ? "" : (w?.value ?? "");
+          // Step-1 writes (profile / answer bank — the commonest way an
+          // acknowledgment gets answered) record the bare string "filled", so
+          // the value has to come from what was planned for that field.
+          const value =
+            typeof w === "string" ? (valueById.get(i.fieldId) ?? i.value ?? "") : (w?.value ?? "");
           return { fieldId: i.fieldId, label: i.label, value };
         });
       if (acknowledged.length > 0) {
@@ -1193,6 +1197,10 @@ export function FillPanel({
         resetTaskMode();
       } else if (pageChanged) {
         setDone(false);
+        // Acknowledgments belong to the page they were made on: their jump
+        // targets no longer exist here, and listing them would attach one
+        // page's agreements to another.
+        setPolicyAnswers([]);
       }
 
       // Auto-claim: one attempt per job while no bundle is held. An explicit
@@ -1397,7 +1405,12 @@ export function FillPanel({
     if (!desc || isAutoAnswerForbidden(guardSubject(i.label, desc))) return false;
     const isGroup = desc.type === "radio-group" || desc.type === "checkbox-group";
     if (isGroup) return (desc.options?.length ?? 0) > 0;
-    return i.generatable === true && isTextAnswerTarget(desc);
+    if (!i.generatable || !isTextAnswerTarget(desc)) return false;
+    // A cover-letter box is pasted from the bundle, never generated here — with
+    // no cover letter the run does nothing to it, so counting it would offer an
+    // enabled button whose click writes nothing.
+    if (isCoverLetterField(i.label)) return (bundle?.coverLetterText ?? "").trim() !== "";
+    return true;
   });
   const plannedActions = fillable.length + answerable.length;
   const needs = plan.filter(

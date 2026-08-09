@@ -33,13 +33,20 @@ export type GuardClass = "sensitive" | "truth" | "policy";
 const SENSITIVE =
   /gender|race|ethnic|veteran|disab|orientation|lgbt|pronoun|hispanic|latino|transgender|immigrant|refugee|\bage\b/i;
 
+// Legal work status in the wordings forms actually use — citizenship and
+// residency belong here as much as sponsorship: they are the same kind of
+// fact (only the applicant can assert it, and being wrong is a
+// misrepresentation), and leaving them out let a generated answer decide one.
 const TRUTH =
-  /sponsor|authoriz\w* to work|work authoriz|legally (?:able|authorized|eligible)|eligible to work|\bvisa\b/i;
+  /sponsor|\bvisa\b|\bh-?1b\b|immigration|citizen|permanent resident|green card|(?:work|employment)\s+(?:authoriz|eligib)|authoriz\w*\s+to\s+work|legally\s+(?:able|authorized|eligible)|eligib\w*\s+(?:to|for)\s+work/i;
 
-// Acknowledgment shapes, not topics: "do you agree/acknowledge/consent…",
-// "I have read…", "terms and conditions", "privacy policy", "code of conduct".
+// Acknowledgment SHAPES, not topics. A bare "policy" would sweep in ordinary
+// questions ("describe a time you challenged a company policy") and bury the
+// real consents in the one surface meant to catch them — so the named
+// documents are listed explicitly, and agree/consent needs an acknowledgment
+// frame around it.
 const POLICY =
-  /\b(?:acknowledge|acknowledgement|acknowledgment|consent|agree to|agree that|accept the|i have read|terms (?:and|&) conditions|privacy policy|code of conduct|policy)\b/i;
+  /\b(?:acknowledge|acknowledgement|acknowledgment)\b|\bi (?:have read|agree|accept|consent)\b|\bby (?:submitting|applying|checking)\b|\b(?:do you )?consent to\b|\bterms (?:and|&) conditions\b|\bprivacy policy\b|\bcode of conduct\b|\b(?:ai|acceptable) use policy\b/i;
 
 export interface GuardSubject {
   /** The question as shown to the applicant. */
@@ -57,10 +64,13 @@ export interface GuardSubject {
  * gets the most restrictive handling.
  */
 export function guardClassOf(subject: GuardSubject): GuardClass | null {
-  const text = `${subject.label} ${subject.altLabel ?? ""}`;
-  if (SENSITIVE.test(text) || (subject.options ?? []).some((o) => SENSITIVE.test(o))) {
-    return "sensitive";
-  }
+  // One haystack for every class. Real forms put the substance in the OPTIONS
+  // as often as the label — a group labelled "Please select one" whose choices
+  // are "…will not require visa sponsorship" / "…will require sponsorship" is
+  // a work-authorization question, and testing only the label let one be
+  // answered for the applicant.
+  const text = [subject.label, subject.altLabel ?? "", ...(subject.options ?? [])].join(" ");
+  if (SENSITIVE.test(text)) return "sensitive";
   if (TRUTH.test(text)) return "truth";
   if (POLICY.test(text)) return "policy";
   return null;

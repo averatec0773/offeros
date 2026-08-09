@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { guardClassOf, isAutoAnswerForbidden, needsPostFillReview } from "../guards";
 
 describe("AUDIT guards: truth-required facts", () => {
-  it("CLAIM: work-authorization/sponsorship is NEVER auto-answered — options are not inspected", () => {
+  it("work-authorization/sponsorship is NEVER auto-answered — options are not inspected", () => {
     // A radio group whose LABEL is neutral (or absent, which real ATS forms do
     // when the question sits in a preceding <h3>) and whose OPTIONS carry the
     // sponsorship question. SENSITIVE checks options; TRUTH does not.
@@ -21,7 +21,7 @@ describe("AUDIT guards: truth-required facts", () => {
     expect(isAutoAnswerForbidden(subject)).toBe(true);
   });
 
-  it("CLAIM: truth guard covers legal work-status facts — citizenship is not covered", () => {
+  it("truth guard covers legal work-status facts — citizenship is not covered", () => {
     for (const label of [
       "Are you a U.S. citizen?",
       "Are you a lawful permanent resident (green card holder)?",
@@ -33,7 +33,7 @@ describe("AUDIT guards: truth-required facts", () => {
 });
 
 describe("AUDIT guards: policy acknowledgments", () => {
-  it("CLAIM: every policy acknowledgment is surfaced — options are not inspected", () => {
+  it("every policy acknowledgment is surfaced — options are not inspected", () => {
     // A checkbox group with no label of its own; the acknowledgment text is
     // the option. Filled by the choice lane, then invisible to the review card.
     const subject = {
@@ -43,7 +43,7 @@ describe("AUDIT guards: policy acknowledgments", () => {
     expect(needsPostFillReview(subject)).toBe(true);
   });
 
-  it("CLAIM: policy class means 'acknowledgment shape' — ordinary questions match too", () => {
+  it("policy class means 'acknowledgment shape' — ordinary questions match too", () => {
     // These are essay questions, not agreements. They are auto-answered (fine)
     // and then listed under "Check what you agreed to" as if they were consents.
     for (const label of [

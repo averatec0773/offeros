@@ -198,17 +198,33 @@ function pickHighestDegree(degrees: string[]): string | undefined {
   return best || undefined;
 }
 
+/** How rating questions are phrased around a topic. A pattern must contain a
+ *  rating cue, so a committed level can only answer a question that is asking
+ *  for one. */
+const RATING_FRAMES: ((topic: string) => string)[] = [
+  (t) => `rate your ${t}`,
+  (t) => `rate your proficiency with ${t}`,
+  (t) => `${t} proficiency`,
+  (t) => `proficiency with ${t}`,
+  (t) => `${t} experience level`,
+  (t) => `level of ${t}`,
+  (t) => `how would you rate ${t}`,
+  (t) => `how often did you use ${t}`,
+  (t) => `how frequently did you use ${t}`,
+];
+
 /** Questions that ask for links to work, in the wording forms actually use. */
 const EVIDENCE_PATTERNS = [
   "links to any relevant work",
   "links to relevant work",
   "relevant work",
-  "github repositories",
-  "portfolio",
-  "personal website",
   "technical projects",
   "projects or write ups",
 ];
+// Deliberately NOT "portfolio" / "personal website" / "github repositories":
+// those are single-line link inputs the classifier already fills from the
+// profile's own link fields, and a multi-project answer would be truncated at
+// the first separator anyway.
 
 /**
  * Answers derived from the profile for THIS job: the work worth showing, and
@@ -231,19 +247,25 @@ function derivedAnswers(profile: Profile | null, jobText: string): AnswerEntry[]
       answer: formatEvidence(chosen),
       type: "text",
       category: "custom",
+      derived: true,
     });
   }
 
-  // One entry per committed rating. The topic IS the pattern: forms phrase the
-  // question a dozen ways ("rate your proficiency with Python", "how would you
-  // describe your Python") but they all contain the topic.
+  // One entry per committed rating — but the bare topic must NOT be the
+  // pattern. A topic like "Go" or "R" appears inside ordinary prose ("how far
+  // are you willing to go…"), and a derived entry arrives as `fillable`, so a
+  // one-word rating would be typed into an unrelated field with no guard and
+  // no review. Only rating-SHAPED questions match.
   for (const assessment of profile.selfAssessments ?? []) {
+    const topic = assessment.topic.trim();
+    if (topic === "") continue;
     out.push({
       id: `derived:self-assessment:${assessment.id}`,
-      questionPatterns: [assessment.topic],
+      questionPatterns: RATING_FRAMES.map((frame) => frame(topic)),
       answer: assessment.level,
       type: "enum",
       category: "custom",
+      derived: true,
     });
   }
   return out;

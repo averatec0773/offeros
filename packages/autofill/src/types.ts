@@ -12,6 +12,10 @@ export interface AnswerEntry {
   answer: string;
   type: AnswerType;
   category: AnswerCategory;
+  /** True for entries OfferOS derived for this job rather than answers the
+   *  user wrote. Matching prefers the user's own words regardless of which
+   *  pattern happens to be longer. */
+  derived?: boolean;
 }
 
 // Minimal input contract for buildFillPlan — exactly the fields `personalValue`

@@ -35,11 +35,24 @@ const tokens = (s: string): string[] =>
     .split(" ")
     .filter((t) => t.length > 1);
 
+/** Stack terms keep one-character names ("R", "C") — dropping them is what
+ *  made a stack of only such names match everything. */
+const stackTokens = (s: string): string[] =>
+  normalizeQuestion(s)
+    .split(" ")
+    .filter((t) => t.length > 0);
+
 /** How well one project answers a job, from its stack and its wording. */
 export function scoreEvidence(item: EvidenceItem, jobText: string): number {
   const haystack = new Set(tokens(jobText));
   if (haystack.size === 0) return 0;
-  const stackHits = item.stack.filter((s) => tokens(s).every((t) => haystack.has(t))).length;
+  // `[].every()` is vacuously true, and tokenizing drops one-character terms —
+  // so "C++", "C#" and "R" used to normalize to nothing and therefore "match"
+  // every job, padding an answer with work that has no bearing on it.
+  const stackHits = item.stack.filter((s) => {
+    const terms = stackTokens(s);
+    return terms.length > 0 && terms.every((t) => haystack.has(t));
+  }).length;
   const proseHits = tokens(`${item.title} ${item.summary}`).filter((t) => haystack.has(t)).length;
   // Stack matches are the strong signal — a shared framework says more than a
   // shared English word — so they weigh more, and prose only breaks ties.
@@ -60,15 +73,21 @@ export function selectEvidence(items: EvidenceItem[], jobText: string, limit = 3
     .map((e) => e.item);
 }
 
-/** Render selected work the way these questions expect: link + what you did. */
-export function formatEvidence(items: EvidenceItem[]): string {
-  return items
-    .map((i) => {
-      const head = i.url ? `${i.title} — ${i.url}` : i.title;
-      const body = [i.summary, i.outcome].filter((s) => s.trim() !== "").join(" ");
-      return body ? `${head}\n${body}` : head;
-    })
-    .join("\n\n");
+/**
+ * Render selected work. `multiline: false` is the default because several of
+ * the questions this answers ("portfolio", "personal website", "github
+ * repositories") sit on single-line inputs, which truncate at the first
+ * newline — a multi-line answer would silently lose everything after the
+ * first project.
+ */
+export function formatEvidence(items: EvidenceItem[], multiline = false): string {
+  const rendered = items.map((i) => {
+    const head = i.url ? `${i.title} — ${i.url}` : i.title;
+    const body = [i.summary, i.outcome].filter((s) => s.trim() !== "").join(" ");
+    if (!body) return head;
+    return multiline ? `${head}\n${body}` : `${head}: ${body}`;
+  });
+  return rendered.join(multiline ? "\n\n" : " · ");
 }
 
 /**

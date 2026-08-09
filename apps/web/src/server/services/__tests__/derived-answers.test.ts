@@ -73,7 +73,12 @@ describe("derived answers in the fill bundle", () => {
     saveProfile(db, PROFILE);
     const bundle = seedBundle("Python role");
     const entry = bundle.fillProfile.answerBank.find((a) => a.id === "derived:self-assessment:py");
-    expect(entry).toMatchObject({ answer: "High", questionPatterns: ["Python"] });
+    expect(entry?.answer).toBe("High");
+    expect(entry?.derived).toBe(true);
+    // The patterns carry a rating cue rather than the bare topic: "Python" on
+    // its own would answer any question containing the word.
+    expect(entry!.questionPatterns).toContain("rate your Python");
+    expect(entry!.questionPatterns).not.toContain("Python");
   });
 
   it("lets a stored answer win over a derived one", () => {
