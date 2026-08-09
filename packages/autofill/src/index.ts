@@ -26,3 +26,11 @@ export { buildFillPlan, classifiedRatio, fillCoverage, explainFillPlan } from ".
 
 export type { GuardClass, GuardSubject } from "./guards";
 export { guardClassOf, isAutoAnswerForbidden, needsPostFillReview } from "./guards";
+
+export type { EvidenceItem, SelfAssessmentItem } from "./evidence-match";
+export {
+  scoreEvidence,
+  selectEvidence,
+  formatEvidence,
+  matchSelfAssessment,
+} from "./evidence-match";

@@ -10,6 +10,7 @@ import {
   type JobInfo,
   type Profile,
 } from "@offeros/core";
+import { formatEvidence, selectEvidence } from "@offeros/autofill";
 import type { AnswerEntry, FillPersonalInfo, FillProfile } from "@offeros/autofill";
 import type { Db } from "../db/client";
 import { answers } from "../db/schema";
@@ -197,6 +198,57 @@ function pickHighestDegree(degrees: string[]): string | undefined {
   return best || undefined;
 }
 
+/** Questions that ask for links to work, in the wording forms actually use. */
+const EVIDENCE_PATTERNS = [
+  "links to any relevant work",
+  "links to relevant work",
+  "relevant work",
+  "github repositories",
+  "portfolio",
+  "personal website",
+  "technical projects",
+  "projects or write ups",
+];
+
+/**
+ * Answers derived from the profile for THIS job: the work worth showing, and
+ * the ratings the user has already committed to.
+ *
+ * These ride the existing answer bank rather than a parallel mechanism, so
+ * they inherit its matching, its provenance, and its precedence — a stored
+ * answer always beats a derived one. Deriving them per job is the point: the
+ * evidence chosen depends on what the job asks for.
+ */
+function derivedAnswers(profile: Profile | null, jobText: string): AnswerEntry[] {
+  if (!profile) return [];
+  const out: AnswerEntry[] = [];
+
+  const chosen = selectEvidence(profile.evidence ?? [], jobText);
+  if (chosen.length > 0) {
+    out.push({
+      id: "derived:evidence",
+      questionPatterns: EVIDENCE_PATTERNS,
+      answer: formatEvidence(chosen),
+      type: "text",
+      category: "custom",
+    });
+  }
+
+  // One entry per committed rating. The topic IS the pattern: forms phrase the
+  // question a dozen ways ("rate your proficiency with Python", "how would you
+  // describe your Python") but they all contain the topic.
+  for (const assessment of profile.selfAssessments ?? []) {
+    out.push({
+      id: `derived:self-assessment:${assessment.id}`,
+      questionPatterns: [assessment.topic],
+      answer: assessment.level,
+      type: "enum",
+      category: "custom",
+    });
+  }
+  return out;
+}
+
 function toFillPersonal(profile: Profile | null): FillPersonalInfo {
   if (!profile) return EMPTY_PERSONAL;
   const p = profile.personal;
@@ -264,7 +316,16 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
   const fillProfile: FillProfile = {
     personal: toFillPersonal(profile),
     skills: profile?.skills ?? [],
-    answerBank: listAnswerBank(db),
+    // The stored bank first: an answer the user wrote always wins over one we
+    // derived. The derived entries below only cover questions the bank has
+    // nothing for.
+    answerBank: [
+      ...listAnswerBank(db),
+      ...derivedAnswers(
+        profile,
+        `${application?.jobInfo.jobTitle ?? ""} ${application?.jdText ?? ""}`,
+      ),
+    ],
   };
 
   const coverLetter = task.skippedCoverLetter
