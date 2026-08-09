@@ -17,7 +17,12 @@ export default function HomePage() {
   const tasks = listAgentTasks(db);
   const fits = listFits(db);
   const hasProfile = getProfile(db) !== null;
-  const taskByApplication = new Map(tasks.map((task) => [task.applicationId, task]));
+  // Newest-first list: keep the FIRST task per application so a superseded run
+  // never decides what the row shows or whether the job is eligible.
+  const taskByApplication = new Map<string, (typeof tasks)[number]>();
+  for (const task of tasks) {
+    if (!taskByApplication.has(task.applicationId)) taskByApplication.set(task.applicationId, task);
+  }
   const fitByApplication = new Map(fits.map((fit) => [fit.applicationId, fit]));
 
   const active = applications.filter((a) => a.status === "saved" || a.status === "applying");

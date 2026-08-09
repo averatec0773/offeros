@@ -31,6 +31,63 @@ function requireTaskId(ctx: ToolContext): string {
   return ctx.taskId;
 }
 
+/** What a generation step produced, and what was there before it ran. */
+interface ArtifactRun {
+  versionsBefore: number;
+  versionsAfter: number;
+  currentVersionId: string | null;
+}
+
+/**
+ * Run a generation step and describe what changed. The BEFORE snapshot is the
+ * point: a step that quietly no-ops on a task that already has an artifact
+ * would otherwise report a verified success for work it never did.
+ */
+async function runArtifactStep(
+  ctx: ToolContext,
+  step: "tailor-resume" | "generate-cover-letter",
+  kind: "resume" | "cover-letter",
+  noun: string,
+): Promise<ToolObservation<ArtifactRun>> {
+  const taskId = requireTaskId(ctx);
+  const before = getArtifact(ctx.db, taskId, kind);
+  const versionsBefore = before?.versions.length ?? 0;
+  await runTargetedStep(buildPipelineContext(taskId), step);
+  const after = getArtifact(ctx.db, taskId, kind);
+  const versionsAfter = after?.versions.length ?? 0;
+  if (!after || versionsAfter <= versionsBefore) {
+    return {
+      ok: false,
+      summary: `no new ${noun} was produced`,
+      result: {
+        versionsBefore,
+        versionsAfter,
+        currentVersionId: after?.currentVersionId ?? null,
+      },
+      failure: {
+        kind: "unverified",
+        reason: after ? "the step added no version" : `no ${kind} artifact after the step`,
+      },
+    };
+  }
+  return {
+    ok: true,
+    summary: `${noun} v${versionsAfter}`,
+    result: { versionsBefore, versionsAfter, currentVersionId: after.currentVersionId },
+  };
+}
+
+/** Confirm from the durable record that a NEW version exists — not merely that
+ *  some artifact does, which is what `run` already knew. */
+const verifyArtifactAdvanced =
+  (kind: "resume" | "cover-letter") =>
+  async (ctx: ToolContext, _input: void, result: unknown): Promise<boolean> => {
+    const run = result as ArtifactRun | undefined;
+    const artifact = getArtifact(ctx.db, requireTaskId(ctx), kind);
+    if (!artifact || !run) return false;
+    return artifact.versions.length > run.versionsBefore;
+  };
+
 const gateRefusal = (where: string): ToolObservation => ({
   ok: false,
   summary: `waiting for you at ${where}`,
@@ -38,53 +95,21 @@ const gateRefusal = (where: string): ToolObservation => ({
 });
 
 /** Tailor the résumé for this job (an out-of-band pipeline step run). */
-export const tailorResumeTool: Tool<void, { version: number }> = {
+export const tailorResumeTool: Tool<void, ArtifactRun> = {
   id: "tailor_resume",
   description:
     "Generate a tailored résumé for this application's job. Use when the task has no résumé artifact yet or the user asked for a fresh one.",
-  run: async (ctx) => {
-    const taskId = requireTaskId(ctx);
-    await runTargetedStep(buildPipelineContext(taskId), "tailor-resume");
-    const artifact = getArtifact(ctx.db, taskId, "resume");
-    return artifact
-      ? {
-          ok: true,
-          summary: `tailored résumé (${artifact.versions.length} version${artifact.versions.length === 1 ? "" : "s"})`,
-          result: { version: artifact.versions.length },
-        }
-      : {
-          ok: false,
-          summary: "tailoring produced no résumé",
-          failure: { kind: "unverified", reason: "no resume artifact after the step" },
-        };
-  },
-  // The artifact row is the durable record — read it back rather than trusting
-  // the step's own return.
-  verify: async (ctx) => getArtifact(ctx.db, requireTaskId(ctx), "resume") !== null,
+  run: async (ctx) => runArtifactStep(ctx, "tailor-resume", "resume", "tailored résumé"),
+  verify: verifyArtifactAdvanced("resume"),
 };
 
 /** Write a cover letter for this job. */
-export const coverLetterTool: Tool<void, { version: number }> = {
+export const coverLetterTool: Tool<void, ArtifactRun> = {
   id: "generate_cover_letter",
   description:
     "Generate a cover letter grounded in this job's description and the user's résumé. Use when the job asks for one.",
-  run: async (ctx) => {
-    const taskId = requireTaskId(ctx);
-    await runTargetedStep(buildPipelineContext(taskId), "generate-cover-letter");
-    const artifact = getArtifact(ctx.db, taskId, "cover-letter");
-    return artifact
-      ? {
-          ok: true,
-          summary: `wrote cover letter (${artifact.versions.length} version${artifact.versions.length === 1 ? "" : "s"})`,
-          result: { version: artifact.versions.length },
-        }
-      : {
-          ok: false,
-          summary: "no cover letter was produced",
-          failure: { kind: "unverified", reason: "no cover-letter artifact after the step" },
-        };
-  },
-  verify: async (ctx) => getArtifact(ctx.db, requireTaskId(ctx), "cover-letter") !== null,
+  run: async (ctx) => runArtifactStep(ctx, "generate-cover-letter", "cover-letter", "cover letter"),
+  verify: verifyArtifactAdvanced("cover-letter"),
 };
 
 /** Score this application against the job (advisory, never a gate). */
@@ -134,6 +159,12 @@ export const markSubmittedTool: Tool<{ confirmedByUser: boolean }, { taskId: str
   },
   run: async (ctx) => {
     const taskId = requireTaskId(ctx);
+    // The gate is checked HERE, not only inside the service: a refusal has to
+    // read as "waiting for you", not as an outage a ladder should retry.
+    const key = stepKeyOf(ctx.db, taskId);
+    if (key !== "submit") {
+      return gateRefusal(key ?? "an earlier step") as ToolObservation<{ taskId: string }>;
+    }
     const task = completeSubmitted(ctx.db, taskId);
     return { ok: true, summary: "marked as submitted", result: { taskId: task.id } };
   },

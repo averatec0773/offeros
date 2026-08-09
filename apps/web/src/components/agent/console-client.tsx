@@ -12,6 +12,7 @@ import type { QueueJob } from "./agent-status-bar";
 
 const KIND_STYLE: Record<AttentionKind, { Icon: typeof Circle; cls: string; label: string }> = {
   "missing-fields": { Icon: AlertTriangle, cls: "text-warn", label: "Needs answers" },
+  "open-to-fill": { Icon: Circle, cls: "text-brand", label: "Open to fill" },
   "ready-to-submit": { Icon: CheckCircle2, cls: "text-brand", label: "Ready" },
   failed: { Icon: XCircle, cls: "text-destructive", label: "Failed" },
   "not-started": { Icon: Circle, cls: "text-muted-foreground", label: "Not started" },

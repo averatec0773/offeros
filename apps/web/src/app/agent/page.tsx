@@ -14,7 +14,11 @@ export default function AgentConsolePage() {
   const db = getDb();
   const applications = listApplications(db);
   const tasks = listAgentTasks(db);
-  const taskByApplication = new Map(tasks.map((t) => [t.applicationId, t]));
+  // listAgentTasks is newest-first: keep the FIRST per application so a
+  // superseded run never decides whether a job is eligible.
+  const taskByApplication = new Map<string, (typeof tasks)[number]>();
+  for (const t of tasks)
+    if (!taskByApplication.has(t.applicationId)) taskByApplication.set(t.applicationId, t);
   const active = applications.filter((a) => a.status === "saved" || a.status === "applying");
 
   return (

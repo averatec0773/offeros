@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, desc, eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { agentTrace } from "../db/schema";
 import type { TraceEntry } from "../agent/types";
@@ -38,14 +38,28 @@ export function listTrace(db: Db, applicationId: string): TraceEntry[] {
     .select()
     .from(agentTrace)
     .where(eq(agentTrace.applicationId, applicationId))
-    .orderBy(asc(agentTrace.at))
+    // `at` is a millisecond clock, so several calls share one value. rowid is
+    // the insertion order — the tiebreaker that makes "in order" actually true
+    // instead of whatever permutation SQLite feels like returning.
+    .orderBy(sql`${agentTrace.at} asc, rowid asc`)
     .all();
   return rows.map(toDomain);
 }
 
 /** The console's execution stream: newest calls across every application. */
 export function listRecentTrace(db: Db, limit = 50): TraceEntry[] {
-  return db.select().from(agentTrace).orderBy(desc(agentTrace.at)).limit(limit).all().map(toDomain);
+  return (
+    db
+      .select()
+      .from(agentTrace)
+      // Same tie problem as above, and worse here: without the rowid tiebreak a
+      // LIMIT under a tie returns an arbitrary slice — "the newest 3" could be
+      // the oldest 3.
+      .orderBy(sql`${agentTrace.at} desc, rowid desc`)
+      .limit(limit)
+      .all()
+      .map(toDomain)
+  );
 }
 
 function toDomain(r: typeof agentTrace.$inferSelect): TraceEntry {

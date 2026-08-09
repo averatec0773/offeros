@@ -72,9 +72,7 @@ describe("derived answers in the fill bundle", () => {
   it("answers a rating question from the committed level, so applications agree", () => {
     saveProfile(db, PROFILE);
     const bundle = seedBundle("Python role");
-    const entry = bundle.fillProfile.answerBank.find(
-      (a) => a.id === "derived:self-assessment:py",
-    );
+    const entry = bundle.fillProfile.answerBank.find((a) => a.id === "derived:self-assessment:py");
     expect(entry).toMatchObject({ answer: "High", questionPatterns: ["Python"] });
   });
 

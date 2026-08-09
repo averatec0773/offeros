@@ -1,4 +1,5 @@
 import { appendTrace } from "../repositories/agent-trace-repo";
+import { getAgentTask } from "../repositories/agent-task-repo";
 import type { Tool, ToolContext, ToolObservation } from "./types";
 
 /**
@@ -24,6 +25,24 @@ export async function runTool<I, R>(
 ): Promise<ToolObservation<R>> {
   const startedAt = Date.now();
 
+  // The ledger has to follow the work. A context whose applicationId does not
+  // own its taskId would act on one application and file the record under
+  // another — the irreversible tools (mark_submitted) turn that into "closed
+  // over there, no record here". Refuse rather than reconcile.
+  if (ctx.taskId) {
+    const task = getAgentTask(ctx.db, ctx.taskId);
+    if (task && task.applicationId !== ctx.applicationId) {
+      return {
+        ok: false,
+        summary: `${tool.id}: task belongs to a different application`,
+        failure: {
+          kind: "precondition",
+          reason: `task ${ctx.taskId} belongs to application ${task.applicationId}`,
+        },
+      };
+    }
+  }
+
   const record = (obs: ToolObservation<R>, verified?: boolean) => {
     appendTrace(ctx.db, {
       applicationId: ctx.applicationId,
@@ -31,7 +50,10 @@ export async function runTool<I, R>(
       tool: tool.id,
       reason: ctx.reason,
       ok: obs.ok,
-      summary: obs.summary,
+      // A missing summary must not cost the row: the NOT NULL column would
+      // reject it, appendTrace would swallow the error, and a call that really
+      // happened would leave no trace.
+      summary: obs.summary || tool.id,
       failureKind: obs.failure?.kind,
       failureReason: obs.failure?.reason,
       verified,
@@ -55,10 +77,17 @@ export async function runTool<I, R>(
   try {
     observation = await tool.run(ctx, input);
   } catch (error) {
+    // A service precondition failure ("task is not at the submit gate") is a
+    // state that will never become ready on its own — telling a repair ladder
+    // it is a dependency outage invites an infinite retry.
+    const isStateRefusal = error instanceof Error && error.name === "ServiceError";
     return record({
       ok: false,
       summary: `${tool.id} failed`,
-      failure: { kind: "dependency", reason: messageOf(error) },
+      failure: {
+        kind: isStateRefusal ? "precondition" : "dependency",
+        reason: messageOf(error),
+      },
     });
   }
 
@@ -81,11 +110,18 @@ export async function runTool<I, R>(
   }
 
   if (verified === false) {
+    // Deliberately NOT "nothing happened": the tool ran, and whatever it did
+    // is still out there. `result` is kept so a caller can reach a partial
+    // effect instead of being told the world is untouched.
     return record(
       {
         ok: false,
-        summary: `${tool.id}: reported success but the change is not there`,
-        failure: { kind: "unverified", reason: "verification found no effect" },
+        summary: `${tool.id}: could not confirm the change landed`,
+        result: observation.result,
+        failure: {
+          kind: "unverified",
+          reason: "the effect could not be confirmed — it may be partially applied",
+        },
       },
       false,
     );

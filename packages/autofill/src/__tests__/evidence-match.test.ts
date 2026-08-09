@@ -88,10 +88,8 @@ describe("matchSelfAssessment", () => {
     // Both "Python" and "Python for data analysis" appear in this question;
     // the narrower commitment is the honest answer.
     expect(
-      matchSelfAssessment(
-        "When using Python for data analysis, rate your proficiency.",
-        LEDGER,
-      )?.level,
+      matchSelfAssessment("When using Python for data analysis, rate your proficiency.", LEDGER)
+        ?.level,
     ).toBe("Medium");
   });
 

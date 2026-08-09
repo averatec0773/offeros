@@ -36,7 +36,7 @@ function seed(title: string): string {
   }).id;
 }
 
-describe("B1 — the inbox must read the CURRENT task of an application", () => {
+describe("the inbox must read the CURRENT task of an application", () => {
   it("does not report a superseded task's state", async () => {
     const id = seed("AI Engineer");
     // `POST /api/v1/agent/tasks` creates a task per call with no dedup, so an
@@ -52,7 +52,7 @@ describe("B1 — the inbox must read the CURRENT task of an application", () => 
   });
 });
 
-describe("B2 — a fill gate the browser has never touched is the user's turn", () => {
+describe("a fill gate the browser has never touched is the user's turn", () => {
   it("lists an application the queue parked at the fill gate with no report", async () => {
     const id = seed("AI Engineer");
     const task = createAgentTask(db, { applicationId: id });
@@ -72,7 +72,7 @@ describe("B2 — a fill gate the browser has never touched is the user's turn", 
   });
 });
 
-describe("B3 — an application whose task was created but never started", () => {
+describe("an application whose task was created but never started", () => {
   it("is still listed as not-started", () => {
     const id = seed("AI Engineer");
     createAgentTask(db, { applicationId: id }); // status "queued"
@@ -83,7 +83,7 @@ describe("B3 — an application whose task was created but never started", () =>
   });
 });
 
-describe("B4 — inbox ordering claims 'most recently touched first'", () => {
+describe("inbox ordering claims 'most recently touched first'", () => {
   it("sorts by when the task last moved, not when the application row changed", async () => {
     const a = seed("Older");
     await new Promise((r) => setTimeout(r, 20));
@@ -99,7 +99,7 @@ describe("B4 — inbox ordering claims 'most recently touched first'", () => {
   });
 });
 
-describe("B5 — listRecentTrace is 'the newest N, newest first'", () => {
+describe("listRecentTrace is 'the newest N, newest first'", () => {
   it("orders and truncates correctly when rows share the same millisecond", () => {
     const id = seed("AI Engineer");
     for (const tool of ["a", "b", "c", "d", "e", "f", "g", "h"]) {

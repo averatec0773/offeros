@@ -16,6 +16,9 @@ import { listAgentTasks } from "../repositories/agent-task-repo";
 export type AttentionKind =
   /** The form was filled but fields still need a human answer. */
   | "missing-fields"
+  /** Parked at the form and nothing has filled it yet — the user has to open
+   *  the panel on that page. Nothing moves on its own here. */
+  | "open-to-fill"
   /** Everything is ready; only the user can submit. */
   | "ready-to-submit"
   /** A step failed — needs a retry or a decision. */
@@ -41,9 +44,10 @@ export interface AttentionItem {
 // blocks everything after it, an unstarted job is merely not-yet-progress.
 const PRIORITY: Record<AttentionKind, number> = {
   "missing-fields": 0,
-  "ready-to-submit": 1,
-  failed: 2,
-  "not-started": 3,
+  "open-to-fill": 1,
+  "ready-to-submit": 2,
+  failed: 3,
+  "not-started": 4,
 };
 
 function stepKey(task: AgentTask): string {
@@ -55,10 +59,15 @@ function itemFor(application: Application, task: AgentTask | undefined): Attenti
     applicationId: application.id,
     jobTitle: application.jobInfo.jobTitle,
     companyName: application.jobInfo.companyName,
-    at: application.updatedAt,
+    // The task is what moves; the application row does not change when a step
+    // completes, so ordering on it would put the most recent event last.
+    at: task?.updatedAt ?? application.updatedAt,
   };
 
-  if (!task) {
+  // A task that exists but has never run is exactly as unstarted as no task:
+  // the JD-import seam creates one up front, and those applications would
+  // otherwise be invisible in the console.
+  if (!task || task.status === "queued") {
     return { ...base, kind: "not-started", headline: "Not started yet" };
   }
   if (task.status === "failed") {
@@ -73,19 +82,27 @@ function itemFor(application: Application, task: AgentTask | undefined): Attenti
 
   const key = stepKey(task);
   if (key === "fill-form") {
-    const missing = task.applicationInfo?.missingFields ?? [];
+    // No report at all means no fill has ever run. Nothing is "moving on its
+    // own" here — the extension only fills once the user opens the panel on
+    // that apply page, so this is their turn.
+    if (!task.applicationInfo) {
+      return { ...base, kind: "open-to-fill", headline: "Open the page to fill it" };
+    }
     // Status 2 is the Action-Required contract: fields the fill could not
-    // answer. Anything else at this gate is waiting on the browser, not on the
-    // user, and must not be dressed up as their turn.
-    if (task.applicationInfo?.status === 2) {
+    // answer. Status 1 means everything landed and the browser (not the user)
+    // holds it — that one, and only that one, is excluded.
+    if (task.applicationInfo.status === 2) {
+      const missing = task.applicationInfo.missingFields ?? [];
+      const shown = missing.slice(0, 4);
       return {
         ...base,
         kind: "missing-fields",
-        headline:
-          missing.length > 0
-            ? `${missing.length} field${missing.length === 1 ? "" : "s"} need you`
-            : "Some fields need you",
-        detail: missing.slice(0, 4).join(", ") || undefined,
+        headline: `${missing.length} field${missing.length === 1 ? "" : "s"} need you`,
+        // Say when the list is trimmed, so the count and the names agree.
+        detail:
+          missing.length > shown.length
+            ? `${shown.join(", ")} +${missing.length - shown.length} more`
+            : shown.join(", ") || undefined,
       };
     }
     return null;
@@ -100,7 +117,13 @@ function itemFor(application: Application, task: AgentTask | undefined): Attenti
 
 /** Everything waiting on the user, most consequential first. */
 export function buildInbox(db: Db): AttentionItem[] {
-  const tasks = new Map(listAgentTasks(db).map((t) => [t.applicationId, t]));
+  // listAgentTasks is newest-first, so a plain Map build would leave the OLDEST
+  // task per application winning — the console would report a superseded run,
+  // nondeterministically when two share a timestamp.
+  const tasks = new Map<string, AgentTask>();
+  for (const task of listAgentTasks(db)) {
+    if (!tasks.has(task.applicationId)) tasks.set(task.applicationId, task);
+  }
   return listApplications(db)
     .filter((a) => a.status === "saved" || a.status === "applying")
     .map((a) => itemFor(a, tasks.get(a.id)))

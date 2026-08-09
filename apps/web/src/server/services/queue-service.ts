@@ -96,8 +96,10 @@ const queueItemTool: Tool<{ deps: QueueDeps }, { stoppedAt: string; taskStatus: 
       result: { stoppedAt, taskStatus: t.status },
     };
   },
-  // The task row is the durable record of where the item landed.
-  verify: async (ctx) => getAgentTaskByApplicationId(ctx.db, ctx.applicationId) !== null,
+  // Nothing independent to check: runItemToGate creates the task when it is
+  // missing, so asserting one exists would be a tautology dressed as proof.
+  // The task's own status is already what `run` reported on.
+  verify: async () => null,
 };
 
 export function queueStatus(): QueueStatus {
