@@ -5,6 +5,14 @@ export const agentSettingsSchema = z.object({
   enableCustomizeCoverLetter: z.boolean().default(true),
   useOriginalResume: z.boolean().default(false),
   autoConfirm: z.boolean().default(false),
+  /**
+   * Let the agent press submit on the ATS itself, instead of stopping so the
+   * user can. Off by default and deliberately explicit: the submit gate is the
+   * last point at which a mistake is still cheap, and an application sent on
+   * someone's behalf cannot be recalled. The setting exists because the owner
+   * asked for it; the disclosure beside it is part of the feature, not decoration.
+   */
+  autoSubmit: z.boolean().default(false),
 });
 
 export const llmSettingsSchema = z.object({

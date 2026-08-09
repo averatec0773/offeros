@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/settings/ai", label: "AI" },
+  { href: "/settings/agent", label: "Agent" },
   { href: "/settings/style", label: "Style" },
   { href: "/settings/prompts", label: "Prompts" },
   { href: "/settings/templates", label: "Templates" },
