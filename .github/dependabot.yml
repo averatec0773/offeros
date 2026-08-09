@@ -17,8 +17,16 @@ updates:
     groups:
       # Patch and minor bumps are the bulk of the noise and almost never need
       # thought. Majors stay separate: they are the ones worth reading.
+      #
+      # Except below 1.0, where the minor position IS the breaking position —
+      # semver says nothing is stable before 1.0 and projects there use minor
+      # for breaking changes. The very first grouped pull request proved it: a
+      # "minor" wxt 0.20 -> 0.21 removed an export the test config imports, and
+      # took thirteen genuinely safe updates down with it. Anything still on
+      # 0.x gets its own pull request so it can fail alone.
       minor-and-patch:
         update-types: [minor, patch]
+        exclude-patterns: [wxt, esbuild, "@types/chrome"]
     commit-message:
       prefix: "chore(deps)"
 
