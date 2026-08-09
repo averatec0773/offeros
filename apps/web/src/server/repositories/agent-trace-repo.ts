@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { agentTrace } from "../db/schema";
 import type { TraceEntry } from "../agent/types";
@@ -40,7 +40,16 @@ export function listTrace(db: Db, applicationId: string): TraceEntry[] {
     .where(eq(agentTrace.applicationId, applicationId))
     .orderBy(asc(agentTrace.at))
     .all();
-  return rows.map((r) => ({
+  return rows.map(toDomain);
+}
+
+/** The console's execution stream: newest calls across every application. */
+export function listRecentTrace(db: Db, limit = 50): TraceEntry[] {
+  return db.select().from(agentTrace).orderBy(desc(agentTrace.at)).limit(limit).all().map(toDomain);
+}
+
+function toDomain(r: typeof agentTrace.$inferSelect): TraceEntry {
+  return {
     id: r.id,
     applicationId: r.applicationId,
     taskId: r.taskId ?? undefined,
@@ -53,5 +62,5 @@ export function listTrace(db: Db, applicationId: string): TraceEntry[] {
     verified: r.verified ?? undefined,
     durationMs: r.durationMs,
     at: r.at,
-  }));
+  };
 }

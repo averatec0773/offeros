@@ -19,6 +19,7 @@ import type { ParsedResume } from "@offeros/llm";
 import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
 import type { QueueStatus } from "@/server/services/queue-service";
 import type { TraceEntry } from "@/server/agent/types";
+import type { AttentionItem } from "@/server/services/attention-service";
 import type { LineDiff } from "./diff";
 
 export class ApiError extends Error {
@@ -115,6 +116,9 @@ export const api = {
     fillResolve: (id: string, action: "fixed" | "applied-manually") =>
       request<AgentTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
     fillUndo: (id: string) => request<AgentTask>(`/agent/tasks/${id}/fill/undo`, json("POST", {})),
+  },
+  agent: {
+    inbox: () => request<{ inbox: AttentionItem[]; trace: TraceEntry[] }>(`/agent/inbox`),
   },
   queue: {
     status: () => request<QueueStatus>(`/agent/queue`),
