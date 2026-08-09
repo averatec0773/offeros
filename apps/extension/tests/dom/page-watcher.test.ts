@@ -9,12 +9,11 @@ beforeEach(() => {
 
 // happy-dom doesn't fully support MutationObserver callbacks, so we mock it
 let mutationCallbacks: (() => void)[] = [];
-const OriginalMutationObserver = MutationObserver;
 vi.stubGlobal(
   "MutationObserver",
   class MockMutationObserver {
     constructor(callback: MutationCallback) {
-      mutationCallbacks.push(() => callback([], this as any));
+      mutationCallbacks.push(() => callback([], this as unknown as MutationObserver));
     }
     observe() {}
     disconnect() {
@@ -23,15 +22,12 @@ vi.stubGlobal(
     takeRecords() {
       return [];
     }
-  } as any,
+  } as unknown as typeof MutationObserver,
 );
 
 function triggerMutations() {
   mutationCallbacks.forEach((cb) => cb());
 }
-
-const FIELD_SELECTOR =
-  "input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea";
 
 describe("pageSignature", () => {
   it("includes URL, field count, and rolling hash of field names/ids", () => {

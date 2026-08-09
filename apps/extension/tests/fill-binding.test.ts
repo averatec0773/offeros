@@ -39,7 +39,6 @@ describe("fill-binding message guards", () => {
   it("only http(s) urls are openable — never javascript:/chrome:/file:/data:", () => {
     expect(isOpenableFillUrl("https://jobs.ashbyhq.com/acme/1/application")).toBe(true);
     expect(isOpenableFillUrl("http://example.com")).toBe(true);
-    // eslint-disable-next-line no-script-url
     expect(isOpenableFillUrl("javascript:alert(1)")).toBe(false);
     expect(isOpenableFillUrl("chrome://settings")).toBe(false);
     expect(isOpenableFillUrl("file:///etc/passwd")).toBe(false);
