@@ -41,6 +41,65 @@ The AI runs in the web app (server-side, with your key). The extension is a
 thin client — no local database, no LLM calls of its own — the panel asks the
 web app to generate and the content script drives the page.
 
+## Two ideas the rest of it is built on
+
+### It asks the page what its fields are, instead of guessing
+
+Autofill usually works by reading a control's label and inferring what it wants.
+That inference is where most fill failures come from, and it fails worst where
+it matters: on a choice question, each _option_ looks like its own question. On
+one live form the visible-label path produced the right question text **9 times
+out of 24** — pronouns arrived as "She/her", gender identity as "Man", ethnicity
+as "Asian or Asian American", and work authorisation and visa sponsorship
+arrived **blank**.
+
+But the page already knows. Every major ATS keeps a machine-readable description
+of each field within reach — React props holding the definition, a semantic id
+path like `name--legalName--firstName`, or a stable automation hook. Reading it
+turns classification into a lookup and grouping into "same field id, same
+question".
+
+Measured across six live application forms at five companies: **146 of 157
+controls described**, collapsing to **81 real questions** — on one form, eight
+race checkboxes became one question. Question text went from **37.5% correct to
+100%**. The misses are file inputs, a captcha, and typeahead inner inputs, none
+of which are questions.
+
+Server-rendered boards (Lever is jQuery, no React) expose nothing, and the
+heuristics stay for them — the change is additive, and a test pins that a page
+describing nothing behaves exactly as before.
+`packages/autofill/src/field-meta.ts`, `apps/extension/src/lib/autofill/read-field-meta.ts`
+
+**This is a safety property, not only an accuracy one.** The guards that refuse
+to let a model answer work-authorisation and sponsorship questions match on the
+question text. A blank label matches nothing — so on that form, before this,
+those two questions carried no guard at all.
+`packages/autofill/src/__tests__/invariants-guards.test.ts`
+
+### The agent explains; the pipeline executes
+
+A single application is about two minutes of wall clock, most of it you on the
+page. Putting a reasoning loop inside that path costs latency, money and
+repeatability and buys nothing, so the pipeline stays deterministic and the
+agent sits above it — triaging, diagnosing, answering questions about what
+happened.
+
+It has read tools only. Each call goes through a contract that verifies the
+result and writes it to a trace with the reason the agent gave, so **the
+transcript you read and the ledger a developer reads are the same events**. The
+answer arrives with the steps that produced it, shown rather than hidden: an
+assistant that says "three of these failed for one reason" is worth trusting
+only if you can see which records it read.
+
+Grouping a failed fill by cause is done in code, not in a prompt — which rows
+share a cause has an exact answer, and asking a model for it means paying for
+judgement on a lookup and getting a different grouping each time. Eighteen red
+rows become four causes, ordered by who can act on them: a guard refusing
+(working as designed), a question waiting on you, a value the page rejected (a
+defect), a field nobody understood (a coverage gap), a file only you can upload.
+The last two look identical in a list and have opposite fixes.
+`packages/autofill/src/diagnose.ts`, `apps/web/src/server/agent/`
+
 ## Architecture
 
 ```mermaid
@@ -189,6 +248,14 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
   content-script engine, and the fill engine is scored against a 12-résumé ×
   5-form corpus plus a captured real ATS form —
   `packages/autofill/src/__tests__/adaptation/`.
+- **Deterministic first, model last — and measured.** Field identity comes from
+  the ATS's own metadata (a lookup), failure grouping from a reason-string
+  lookup, and only "which of these matters to you, and how to say it" reaches a
+  model. The split is why the numbers above are reproducible.
+- **The decision point is one function.** The loop, the tools and the transcript
+  do not care whether the next step is chosen by a model, a rule, or a person,
+  so provider-native tool-calling is a drop-in replacement for one file —
+  `apps/web/src/server/agent/decide.ts`.
 - **Pluggable seams, not branches.** A new PDF output format is one entry in a
   renderer registry (`apps/web/src/server/export/renderers.ts`); style memory is
   a two-method contract behind a registry, so a different store swaps in without
