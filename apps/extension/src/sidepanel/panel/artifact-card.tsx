@@ -1,7 +1,9 @@
 import { Button } from "../../components/ui/button";
+import type { ArtifactLane } from "./use-artifact-lane";
 
 /** Generate → preview → attach card, shared by the résumé and cover-letter
- *  flows. Pure UI — the caller owns all state and handlers. */
+ *  flows. Pure UI: the words are this component's, the state and the work are
+ *  the lane's. */
 export function ArtifactCard({
   title,
   cta,
@@ -9,12 +11,7 @@ export function ArtifactCard({
   hint,
   previewTitle,
   attachCta,
-  busy,
-  error,
-  pdf,
-  attached,
-  onGenerate,
-  onAttach,
+  lane,
 }: {
   title: string;
   cta: string;
@@ -22,13 +19,11 @@ export function ArtifactCard({
   hint: string;
   previewTitle: string;
   attachCta: string;
-  busy: boolean;
-  error: string | null;
-  pdf: { url: string; fileName: string } | null;
-  attached: boolean;
-  onGenerate: () => void;
-  onAttach: () => void;
+  lane: ArtifactLane;
 }) {
+  const { busy, error, pdf, attached } = lane;
+  const onGenerate = () => void lane.onGenerate();
+  const onAttach = () => void lane.onAttach();
   return (
     <div className="mt-3 rounded-xl bg-bg-base p-3">
       <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">

@@ -1794,6 +1794,61 @@ describe("FillPanel", () => {
         false,
       );
     });
+
+    // The bundle's coverLetterText is a snapshot taken when the task was
+    // claimed, and nothing refreshes it. A letter written in the panel is
+    // therefore absent from it — but the user can see its preview, so a fill
+    // that then skipped the upload field would look simply broken.
+    it("attaches a cover letter written in the panel, which the claimed bundle never knew about", async () => {
+      const coverPdf = {
+        ok: true as const,
+        bytes: new Uint8Array([1]).buffer,
+        fileName: "Cover_Letter.pdf",
+        mimeType: "application/pdf",
+      };
+      const api: FillApi = {
+        ...emptyApi(),
+        getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+        claim: vi.fn(async () => ({
+          ok: true as const,
+          value: { ...bundle, attachResume: "tailored" as const, coverLetterText: null },
+        })),
+        generateCoverLetter: vi.fn(async () => ({ ok: true as const, value: {} })),
+        fetchArtifactPdf: vi.fn(async (_taskId: string, kind: "resume" | "cover-letter") =>
+          kind === "cover-letter" ? coverPdf : pdfBytes(),
+        ),
+      };
+      const { attachFile } = renderPanel({ scan: async () => scanWithBothFiles, api });
+
+      const write = await screen.findByRole("button", { name: "Write cover letter" });
+      await act(async () => {
+        await userEvent.click(write);
+      });
+      expect(api.generateCoverLetter).toHaveBeenCalledWith("t1");
+
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+
+      expect(attachFile).toHaveBeenCalledWith("cl1", {
+        fileName: "Cover_Letter.pdf",
+        mimeType: "application/pdf",
+        bytesBase64: expect.any(String),
+      });
+      expect(api.postReport).toHaveBeenCalledWith(
+        "t1",
+        expect.arrayContaining([
+          expect.objectContaining({
+            fieldId: "cl1",
+            outcome: "filled",
+            source: "cover-letter-file",
+            value: "Cover_Letter.pdf",
+          }),
+        ]),
+        false,
+      );
+    });
   });
 
   describe("Add this job", () => {

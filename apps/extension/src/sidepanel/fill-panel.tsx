@@ -46,13 +46,16 @@ type OkScan = Extract<ScanResponse, { ok: true }>;
 
 // The pieces this panel composes. They were inline until the file passed two
 // thousand lines and the orchestration below became hard to find. Four are
-// presentational — no state, no messaging. AddJobCard is not: it owns the whole
-// add-job state machine (capture → confirm → dedup → create) and calls the web
-// app itself, which is exactly why it was worth its own file.
+// presentational — no state, no messaging. Two are not, and are the reason the
+// file shrank: AddJobCard owns the whole add-job state machine (capture →
+// confirm → dedup → create) and calls the web app itself, and useArtifactLane
+// owns the generate → preview → attach machine that used to be written out
+// twice, once per artifact kind.
 import type { FillApi } from "./panel/fill-api";
 import { CoverageBar } from "./panel/coverage-bar";
 import { FieldGroup } from "./panel/field-group";
 import { ArtifactCard } from "./panel/artifact-card";
+import { useArtifactLane } from "./panel/use-artifact-lane";
 import { AddJobCard } from "./panel/add-job-card";
 
 /** Re-exported: the panel is what callers configure, so its contract lives
@@ -141,20 +144,42 @@ export function FillPanel({
   const [fitError, setFitError] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<"idle" | "busy" | "done">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [tailorBusy, setTailorBusy] = useState(false);
-  const [tailorError, setTailorError] = useState<string | null>(null);
-  const [tailorPdf, setTailorPdf] = useState<{ url: string; fileName: string } | null>(null);
-  const [tailorAttached, setTailorAttached] = useState(false);
-  // The fetched PDF bytes behind the current preview (refs so resetTaskMode and
-  // the attach handler never race a stale closure), and its blob URL for revoke.
-  const tailorFetchedRef = useRef<Extract<FileFetchResult, { ok: true }> | null>(null);
-  const tailorUrlRef = useRef<string | null>(null);
-  const [coverBusy, setCoverBusy] = useState(false);
-  const [coverError, setCoverError] = useState<string | null>(null);
-  const [coverPdf, setCoverPdf] = useState<{ url: string; fileName: string } | null>(null);
-  const [coverAttached, setCoverAttached] = useState(false);
-  const coverFetchedRef = useRef<Extract<FileFetchResult, { ok: true }> | null>(null);
-  const coverUrlRef = useRef<string | null>(null);
+  // The two generate -> preview -> attach lanes. They differ in the five things
+  // named below; the state machine behind them is one implementation. Config
+  // callbacks close over helpers declared further down — they run on a click,
+  // never during this render.
+  const resumeLane = useArtifactLane({
+    generate: (taskId) => api.tailorResume(taskId),
+    fetchPdf: (taskId) => api.fetchArtifactPdf(taskId, "resume"),
+    renderFailedError:
+      "Tailored, but the PDF couldn't be rendered — check the artifact in OfferOS.",
+    noFieldError: "No résumé upload field on this page — attach the file manually.",
+    findField: () => findManagedFileField("resume"),
+    attach: (fieldId, fetched) => attachManagedFile(fieldId, fetched, "resume"),
+    recordAttached: (fieldId, fetched) => recordManagedAttach(fieldId, fetched, "resume"),
+    taskId: () => bundleRef.current?.taskId ?? null,
+    isFillPending: () => pendingRef.current,
+    // Later page fills (wizard steps, re-fill) should attach the tailored PDF
+    // now that one exists.
+    afterGenerate: () => {
+      const b = bundleRef.current;
+      if (!b) return;
+      const next: FillTaskBundle = { ...b, attachResume: "tailored" };
+      bundleRef.current = next;
+      setBundle(next);
+    },
+  });
+  const coverLane = useArtifactLane({
+    generate: (taskId) => api.generateCoverLetter(taskId),
+    fetchPdf: (taskId) => api.fetchArtifactPdf(taskId, "cover-letter"),
+    renderFailedError: "Written, but the PDF couldn't be rendered — check the artifact in OfferOS.",
+    noFieldError: "No cover-letter upload field on this page — attach the file manually.",
+    findField: () => findManagedFileField("coverLetter"),
+    attach: (fieldId, fetched) => attachManagedFile(fieldId, fetched, "coverLetter"),
+    recordAttached: (fieldId, fetched) => recordManagedAttach(fieldId, fetched, "coverLetter"),
+    taskId: () => bundleRef.current?.taskId ?? null,
+    isFillPending: () => pendingRef.current,
+  });
   const [fitExpanded, setFitExpanded] = useState(false);
   // fieldId → the value that verifiably landed on the page. Updated live as
   // each fill phase completes (batch → cover letter → per-question AI →
@@ -254,22 +279,9 @@ export function FillPanel({
     for (const r of reports) reportsRef.current.set(reportKey(r), r);
   };
   const allReports = () => Array.from(reportsRef.current.values());
-  const resetTailor = () => {
-    if (tailorUrlRef.current) URL.revokeObjectURL(tailorUrlRef.current);
-    tailorUrlRef.current = null;
-    tailorFetchedRef.current = null;
-    setTailorPdf(null);
-    setTailorError(null);
-    setTailorBusy(false);
-    setTailorAttached(false);
-    if (coverUrlRef.current) URL.revokeObjectURL(coverUrlRef.current);
-    coverUrlRef.current = null;
-    coverFetchedRef.current = null;
-    setCoverPdf(null);
-    setCoverError(null);
-    setCoverBusy(false);
-    setCoverAttached(false);
-    setFitExpanded(false);
+  const resetArtifactLanes = () => {
+    resumeLane.reset();
+    coverLane.reset();
   };
 
   // A bundle can arrive carrying an earlier session's per-field reports (the
@@ -328,7 +340,8 @@ export function FillPanel({
     setFitError(null);
     setSubmitState("idle");
     setSubmitError(null);
-    resetTailor();
+    resetArtifactLanes();
+    setFitExpanded(false);
     claimTriedRef.current = false;
   };
 
@@ -430,6 +443,40 @@ export function FillPanel({
     return { outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON, source };
   };
 
+  /** This page's upload field for one of the two OfferOS-managed kinds, if the
+   *  classifier found one. Both artifact lanes attach through it. */
+  const findManagedFileField = (kind: "resume" | "coverLetter"): string | undefined =>
+    scanResult?.ok
+      ? scanResult.descriptors.find(
+          (d) =>
+            d.type === "file" &&
+            traceRef.current.find((t) => t.fieldId === d.fieldId)?.classifiedType === kind,
+        )?.fieldId
+      : undefined;
+
+  /** Fold a verified in-panel attach into the live view and the cumulative
+   *  report. The rows already exist from the fill that ran before it, so this
+   *  rewrites them in place rather than appending a second row per field. */
+  const recordManagedAttach = async (
+    fieldId: string,
+    fetched: Extract<FileFetchResult, { ok: true }>,
+    kind: "resume" | "coverLetter",
+  ) => {
+    const b = bundleRef.current;
+    markWritten(fieldId, fetched.fileName);
+    for (const [k, r] of reportsRef.current) {
+      if (r.fieldId === fieldId) {
+        reportsRef.current.set(k, {
+          ...r,
+          outcome: "filled",
+          value: fetched.fileName,
+          source: FILE_KIND_SOURCE[kind],
+        });
+      }
+    }
+    if (b && reportsRef.current.size > 0) await api.postReport(b.taskId, allReports(), false);
+  };
+
   // Task-mode fill for one (wizard) page: classified/personal fields from the bundle
   // profile, cover-letter textareas verbatim, AI answers for open-ended free-text,
   // résumé/cover-letter file attaches, then a cumulative FieldReport back to the
@@ -472,7 +519,11 @@ export function FillPanel({
         if (o === "filled") markWritten(id, valueById.get(id) ?? "");
       }
 
-      // 2) cover-letter textareas ← bundle.coverLetterText verbatim (never generated).
+      // 2) cover-letter textareas ← bundle.coverLetterText verbatim (never
+      // generated). A letter written in the panel cannot fill these: what the
+      // lane holds is rendered PDF bytes, not the text, and pasting anything
+      // else into a cover-letter box would be inventing an application. The
+      // file input below does get it; a textarea stays the user's to fill.
       const coverText = b.coverLetterText?.trim() ? b.coverLetterText : null;
       if (coverText) {
         for (const cf of planForFill.filter(
@@ -597,7 +648,7 @@ export function FillPanel({
 
       // 4) résumé / cover-letter file attach — only the file inputs the classifier
       // recognized as one of the two OfferOS-managed kinds; cover-letter only
-      // when the bundle actually carries a confirmed cover letter.
+      // when one exists, whether it came with the bundle or was written here.
       for (const t of traceForFill) {
         if (t.status !== "needs-answer") continue;
         const desc = descriptorById.get(t.fieldId);
@@ -614,7 +665,14 @@ export function FillPanel({
           writes.set(t.fieldId, outcome);
           if (typeof outcome !== "string" && outcome.outcome === "filled")
             markWritten(t.fieldId, outcome.value ?? "");
-        } else if (t.classifiedType === "coverLetter" && coverText) {
+          // `coverText` is the bundle's snapshot of the cover-letter artifact,
+          // taken when the task was claimed. A letter written in the panel
+          // afterwards is not in it — without the lane's flag, page two of a
+          // wizard would skip an upload the user can plainly see a preview of.
+        } else if (
+          t.classifiedType === "coverLetter" &&
+          (coverText || coverLane.hasGeneratedFor(b.taskId))
+        ) {
           const fetched = await api.fetchArtifactPdf(b.taskId, "cover-letter");
           const outcome = await attachManagedFile(t.fieldId, fetched, "coverLetter");
           writes.set(t.fieldId, outcome);
@@ -1025,9 +1083,10 @@ export function FillPanel({
     const isGroup = desc.type === "radio-group" || desc.type === "checkbox-group";
     if (isGroup) return (desc.options?.length ?? 0) > 0;
     if (!i.generatable || !isTextAnswerTarget(desc)) return false;
-    // A cover-letter box is pasted from the bundle, never generated here — with
-    // no cover letter the run does nothing to it, so counting it would offer an
-    // enabled button whose click writes nothing.
+    // A cover-letter box is pasted from the bundle, never generated here, and
+    // an in-panel letter arrives as PDF bytes with no text to paste (see step 2
+    // of taskFillPage). With nothing to write, counting it would offer an
+    // enabled button whose click does nothing.
     if (isCoverLetterField(i.label)) return (bundle?.coverLetterText ?? "").trim() !== "";
     return true;
   });
@@ -1053,159 +1112,6 @@ export function FillPanel({
     // Fields the page already holds are skipped inside taskFillPage — the one
     // place every fill path passes through.
     await taskFillPage(plan, scanResult, traceRef.current);
-  };
-
-  // In-panel tailor: run the tailor step on the claimed task (long LLM call),
-  // then fetch the rendered PDF for an inline preview. Attaching is a separate,
-  // user-gated click below. Regenerate re-runs the step (a new artifact
-  // version) and replaces the preview.
-  const onTailor = async () => {
-    const b = bundleRef.current;
-    if (!b || tailorBusy) return;
-    setTailorBusy(true);
-    setTailorError(null);
-    try {
-      const res = await api.tailorResume(b.taskId);
-      if (!res.ok) {
-        setTailorError(res.error);
-        return;
-      }
-      const fetched = await api.fetchArtifactPdf(b.taskId, "resume");
-      if (!fetched.ok) {
-        setTailorError(
-          "Tailored, but the PDF couldn't be rendered — check the artifact in OfferOS.",
-        );
-        return;
-      }
-      if (tailorUrlRef.current) URL.revokeObjectURL(tailorUrlRef.current);
-      tailorFetchedRef.current = fetched;
-      const url = URL.createObjectURL(new Blob([fetched.bytes], { type: fetched.mimeType }));
-      tailorUrlRef.current = url;
-      setTailorPdf({ url, fileName: fetched.fileName });
-      setTailorAttached(false);
-      // Future page fills (wizard steps, re-fill) should attach the tailored
-      // PDF now that one exists.
-      const next: FillTaskBundle = { ...b, attachResume: "tailored" };
-      bundleRef.current = next;
-      setBundle(next);
-    } finally {
-      setTailorBusy(false);
-    }
-  };
-
-  // Attach the previewed tailored PDF to this page's résumé file input,
-  // reusing the verified attach path, then reflect it in the cumulative report.
-  const onAttachTailored = async () => {
-    const b = bundleRef.current;
-    const fetched = tailorFetchedRef.current;
-    if (!b || !fetched || pendingRef.current) return;
-    const resumeField = scanResult?.ok
-      ? scanResult.descriptors.find(
-          (d) =>
-            d.type === "file" &&
-            traceRef.current.find((t) => t.fieldId === d.fieldId)?.classifiedType === "resume",
-        )
-      : undefined;
-    if (!resumeField) {
-      setTailorError("No résumé upload field on this page — attach the file manually.");
-      return;
-    }
-    setTailorBusy(true);
-    setTailorError(null);
-    try {
-      const outcome = await attachManagedFile(resumeField.fieldId, fetched, "resume");
-      const normalized = typeof outcome === "string" ? { outcome } : outcome;
-      if (normalized.outcome !== "filled") {
-        setTailorError(normalized.reason ?? CUSTOM_UPLOADER_REASON);
-        return;
-      }
-      setTailorAttached(true);
-      markWritten(resumeField.fieldId, fetched.fileName);
-      for (const [k, r] of reportsRef.current) {
-        if (r.fieldId === resumeField.fieldId) {
-          reportsRef.current.set(k, {
-            ...r,
-            outcome: "filled",
-            value: fetched.fileName,
-            source: "resume-file",
-          });
-        }
-      }
-      if (reportsRef.current.size > 0) await api.postReport(b.taskId, allReports(), false);
-    } finally {
-      setTailorBusy(false);
-    }
-  };
-
-  // In-panel cover letter: same shape as onTailor — run the step, fetch the
-  // rendered PDF, preview; attach stays a separate user-gated click.
-  const onCoverGen = async () => {
-    const b = bundleRef.current;
-    if (!b || coverBusy) return;
-    setCoverBusy(true);
-    setCoverError(null);
-    try {
-      const res = await api.generateCoverLetter(b.taskId);
-      if (!res.ok) {
-        setCoverError(res.error);
-        return;
-      }
-      const fetched = await api.fetchArtifactPdf(b.taskId, "cover-letter");
-      if (!fetched.ok) {
-        setCoverError("Written, but the PDF couldn't be rendered — check the artifact in OfferOS.");
-        return;
-      }
-      if (coverUrlRef.current) URL.revokeObjectURL(coverUrlRef.current);
-      coverFetchedRef.current = fetched;
-      const url = URL.createObjectURL(new Blob([fetched.bytes], { type: fetched.mimeType }));
-      coverUrlRef.current = url;
-      setCoverPdf({ url, fileName: fetched.fileName });
-      setCoverAttached(false);
-    } finally {
-      setCoverBusy(false);
-    }
-  };
-
-  const onAttachCover = async () => {
-    const b = bundleRef.current;
-    const fetched = coverFetchedRef.current;
-    if (!b || !fetched || pendingRef.current) return;
-    const coverField = scanResult?.ok
-      ? scanResult.descriptors.find(
-          (d) =>
-            d.type === "file" &&
-            traceRef.current.find((t) => t.fieldId === d.fieldId)?.classifiedType === "coverLetter",
-        )
-      : undefined;
-    if (!coverField) {
-      setCoverError("No cover-letter upload field on this page — attach the file manually.");
-      return;
-    }
-    setCoverBusy(true);
-    setCoverError(null);
-    try {
-      const outcome = await attachManagedFile(coverField.fieldId, fetched, "coverLetter");
-      const normalized = typeof outcome === "string" ? { outcome } : outcome;
-      if (normalized.outcome !== "filled") {
-        setCoverError(normalized.reason ?? CUSTOM_UPLOADER_REASON);
-        return;
-      }
-      setCoverAttached(true);
-      markWritten(coverField.fieldId, fetched.fileName);
-      for (const [k, r] of reportsRef.current) {
-        if (r.fieldId === coverField.fieldId) {
-          reportsRef.current.set(k, {
-            ...r,
-            outcome: "filled",
-            value: fetched.fileName,
-            source: "cover-letter-file",
-          });
-        }
-      }
-      if (reportsRef.current.size > 0) await api.postReport(b.taskId, allReports(), false);
-    } finally {
-      setCoverBusy(false);
-    }
   };
 
   // The instant lane: capture this page's JD, ask the web app to park + claim
@@ -1428,12 +1334,7 @@ export function FillPanel({
             hint="AI-tailors your résumé to this posting — preview before attaching."
             previewTitle="Tailored résumé preview"
             attachCta="Attach tailored PDF"
-            busy={tailorBusy}
-            error={tailorError}
-            pdf={tailorPdf}
-            attached={tailorAttached}
-            onGenerate={() => void onTailor()}
-            onAttach={() => void onAttachTailored()}
+            lane={resumeLane}
           />
         )}
         {bundle && !bundle.coverLetterText && (
@@ -1444,12 +1345,7 @@ export function FillPanel({
             hint="Grounded in your profile and tailored résumé — preview before attaching."
             previewTitle="Cover letter preview"
             attachCta="Attach cover letter PDF"
-            busy={coverBusy}
-            error={coverError}
-            pdf={coverPdf}
-            attached={coverAttached}
-            onGenerate={() => void onCoverGen()}
-            onAttach={() => void onAttachCover()}
+            lane={coverLane}
           />
         )}
         {bundle && policyAnswers.length > 0 && (
