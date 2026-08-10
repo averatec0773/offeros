@@ -80,6 +80,10 @@ conventions/
 ROADMAP.md
 DEVLOG.md
 
+# Session state carried across a context compaction. Temporary by design —
+# the file says so itself and is deleted once the next session has read it.
+SESSION-STATE.md
+
 # Local form-capture tooling + its test (not part of the published repo) ------
 scripts/capture-form.mjs
 scripts/serialize-form.js
