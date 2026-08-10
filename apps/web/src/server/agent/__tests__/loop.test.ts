@@ -63,6 +63,7 @@ describe("runTurn", () => {
         reason: "need the list first",
         ok: true,
         summary: "2 applications",
+        acted: false,
       },
     ]);
   });
@@ -152,6 +153,91 @@ describe("runTurn", () => {
     expect(out.steps[0]!.ok).toBe(false);
     expect(chooseNext.mock.calls.at(-1)![0].context).toContain("never run a fill");
     expect(out.answer).toBe("It has not been filled yet.");
+  });
+});
+
+describe("acting tools", () => {
+  const acting = (id: string): Tool<never, unknown> => ({
+    id,
+    description: `changes ${id}`,
+    run: async () => ({ ok: true, summary: `${id} done` }),
+    verify: async () => null,
+  });
+
+  it("allows one change per turn and refuses the second", async () => {
+    // Reading is free and undoable; acting spends money or writes records. A
+    // plan needing three actions is one the user should see before it runs.
+    const tools = { a: acting("a"), b: acting("b"), look: tool("look", "looked") };
+    const chooseNext = script(
+      { kind: "use-tool", tool: "a", reason: "first" },
+      { kind: "use-tool", tool: "b", reason: "second" },
+      { kind: "answer", text: "I did one thing." },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "fix it",
+      runLlm: noLlm,
+      chooseNext,
+      tools,
+      actingToolIds: new Set(["a", "b"]),
+    });
+
+    expect(out.steps[0]).toMatchObject({ tool: "a", ok: true, acted: true });
+    expect(out.steps[1]).toMatchObject({ tool: "b", ok: false, acted: false });
+    expect(out.steps[1]!.summary).toContain("one action per turn");
+    // The refusal is fed back so the agent can tell the user what is next.
+    expect(chooseNext.mock.calls.at(-1)![0].context).toContain("already changed something");
+  });
+
+  it("does not count looking against the action budget", async () => {
+    const tools = { look: tool("look", "looked"), act: acting("act") };
+    const chooseNext = script(
+      { kind: "use-tool", tool: "look", reason: "1" },
+      { kind: "use-tool", tool: "look", reason: "2" },
+      { kind: "use-tool", tool: "act", reason: "now do it" },
+      { kind: "answer", text: "done" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "look then act",
+      runLlm: noLlm,
+      chooseNext,
+      tools,
+      actingToolIds: new Set(["act"]),
+    });
+    expect(out.steps.filter((s) => s.acted)).toHaveLength(1);
+    expect(out.steps.at(-1)).toMatchObject({ tool: "act", ok: true });
+  });
+
+  it("a tool that refuses its own gate does not spend the action budget", async () => {
+    // The gate lives in the tool. A refusal changed nothing, so the agent
+    // should still be able to do the thing the user actually needs.
+    const gated: Tool<never, unknown> = {
+      id: "mark_submitted",
+      description: "closes it",
+      run: async () => ({
+        ok: false,
+        summary: "waiting for you at fill-form",
+        failure: { kind: "human-gate", reason: "the task is parked at the fill-form gate" },
+      }),
+      verify: async () => null,
+    };
+    const tools = { mark_submitted: gated, tailor: acting("tailor") };
+    const chooseNext = script(
+      { kind: "use-tool", tool: "mark_submitted", reason: "closing it" },
+      { kind: "use-tool", tool: "tailor", reason: "tailor instead" },
+      { kind: "answer", text: "tailored" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "close it",
+      runLlm: noLlm,
+      chooseNext,
+      tools,
+      actingToolIds: new Set(["mark_submitted", "tailor"]),
+    });
+    expect(out.steps[0]).toMatchObject({ ok: false, acted: false });
+    expect(out.steps[1]).toMatchObject({ tool: "tailor", ok: true, acted: true });
   });
 });
 

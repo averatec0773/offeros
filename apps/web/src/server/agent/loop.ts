@@ -1,5 +1,6 @@
 import { runTool } from "./run-tool";
 import { READ_TOOLS, toolMenu } from "./read-tools";
+import { TOOLS as ACT_TOOLS } from "./tools";
 import { decide, type Decision } from "./decide";
 import type { Tool, ToolContext } from "./types";
 
@@ -12,11 +13,14 @@ import type { Tool, ToolContext } from "./types";
  *
  * Two decisions shape this file, both from what the project already learned:
  *
- *   - Only READ tools are reachable here. The agent's job is to explain and to
- *     triage, and a single application takes about two minutes of wall clock
- *     with the user watching — reasoning inside that path buys nothing and
- *     costs latency, money and repeatability. Acting tools stay with the
- *     pipeline until there is trace data to justify moving them.
+ *   - Reads and acts are both reachable, but they are not the same kind of
+ *     thing and the loop does not treat them as one. Reading is free and
+ *     reversible; acting spends the user's money (an LLM step) or changes a
+ *     record. So acting is capped separately, and the cap is small.
+ *   - Nothing here can step past a human gate. Not because the loop checks —
+ *     it does not — but because each acting tool checks its own precondition.
+ *     A caller that could talk its way past a gate is exactly the failure the
+ *     tool contract was built to make impossible.
  *   - Every tool call goes through `runTool`, so each one is verified and
  *     written to the trace with the reason the agent gave. The transcript the
  *     user reads and the ledger the developer reads are the same events.
@@ -28,6 +32,8 @@ export interface AgentStep {
   reason: string;
   ok: boolean;
   summary: string;
+  /** True when this step changed something rather than looked at it. */
+  acted?: boolean;
 }
 
 export interface TurnResult {
@@ -56,9 +62,14 @@ export interface RunTurnArgs {
   }) => Promise<string>;
   /** Swappable so tests can drive the loop without a provider. */
   chooseNext?: typeof decide;
-  /** Read tools, keyed by id. Injectable for tests. */
+  /** Every tool the agent may reach, keyed by id. Injectable for tests. */
   tools?: Record<string, Tool<never, unknown>>;
+  /** Which of those ids change something. Used for the separate action cap and
+   *  to mark the step in the transcript, so a reader can see at a glance which
+   *  lines were the agent doing rather than looking. */
+  actingToolIds?: ReadonlySet<string>;
   maxSteps?: number;
+  maxActions?: number;
 }
 
 /**
@@ -71,8 +82,23 @@ export interface RunTurnArgs {
  */
 const DEFAULT_MAX_STEPS = 6;
 
+/**
+ * How many of those steps may CHANGE something.
+ *
+ * Reading is cheap and undoable; acting generates documents, opens tickets and
+ * writes records. One per turn means a question can be answered and one thing
+ * done about it — a plan that needs three actions is a plan the user should see
+ * before it runs, not one a loop performs while they wait.
+ */
+const DEFAULT_MAX_ACTIONS = 1;
+
 export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
-  const tools = args.tools ?? (READ_TOOLS as unknown as Record<string, Tool<never, unknown>>);
+  const tools =
+    args.tools ??
+    ({ ...READ_TOOLS, ...ACT_TOOLS } as unknown as Record<string, Tool<never, unknown>>);
+  const actingIds = args.actingToolIds ?? new Set(Object.keys(ACT_TOOLS));
+  const maxActions = args.maxActions ?? DEFAULT_MAX_ACTIONS;
+  let actionsTaken = 0;
   const chooseNext = args.chooseNext ?? decide;
   const maxSteps = args.maxSteps ?? DEFAULT_MAX_STEPS;
   const steps: AgentStep[] = [];
@@ -107,16 +133,39 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       continue;
     }
 
+    const acting = actingIds.has(tool.id);
+    if (acting && actionsTaken >= maxActions) {
+      // Refuse, and say so as a finding rather than an error: the agent can
+      // still answer, and telling the user what it wanted to do next is more
+      // useful than a loop that quietly stops short.
+      findings.push(
+        `You have already changed something this turn, so ${tool.id} was not run. Tell the user what you would do next and let them ask for it.`,
+      );
+      steps.push({
+        tool: tool.id,
+        reason: decision.reason,
+        ok: false,
+        summary: "one action per turn — not run",
+        acted: false,
+      });
+      continue;
+    }
     const observation = await runTool(
       tool,
       { ...args.ctx, reason: decision.reason },
       decision.input,
     );
+    // The budget counts CHANGES, so it is spent after the fact and only when
+    // something changed. A tool that refused its own gate, or failed, altered
+    // nothing — charging for it would leave the agent unable to do the thing
+    // the user actually needed.
+    if (acting && observation.ok) actionsTaken++;
     steps.push({
       tool: tool.id,
       reason: decision.reason,
       ok: observation.ok,
       summary: observation.summary,
+      acted: acting && observation.ok,
     });
     findings.push(renderObservation(tool.id, observation));
   }

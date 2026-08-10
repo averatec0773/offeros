@@ -29,7 +29,7 @@ interface Turn {
 const SUGGESTIONS = [
   "Why did this one not finish?",
   "What still needs me?",
-  "What has been done so far?",
+  "Tailor my résumé for this job",
 ];
 
 export function AgentChat({ applicationId }: { applicationId: string }) {
@@ -76,7 +76,7 @@ export function AgentChat({ applicationId }: { applicationId: string }) {
       <header className="flex items-baseline justify-between">
         <h2 className="text-body font-semibold text-foreground">Ask about this application</h2>
         <span className="text-caption text-muted-foreground">
-          reads your records, never submits
+          one change per turn · never submits
         </span>
       </header>
 
@@ -160,6 +160,14 @@ function StepList({ steps }: { steps: AgentStep[] }) {
           <span aria-hidden className={step.ok ? "text-success" : "text-warning"}>
             {step.ok ? "✓" : "!"}
           </span>
+          {/* A step that changed something is not the same as a step that
+              looked at something, and the difference should not need reading
+              the tool name to spot. */}
+          {step.acted && (
+            <span className="rounded-full bg-primary/10 px-1.5 text-micro font-semibold text-primary">
+              did
+            </span>
+          )}
           <span className="font-medium text-text-secondary">{step.tool}</span>
           <span className="text-muted-foreground">— {step.summary}</span>
           {step.reason && <span className="text-muted-foreground/70">({step.reason})</span>}
