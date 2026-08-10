@@ -817,11 +817,20 @@ export function FillPanel({
             // taken mid-scroll photographs the wrong part of the page.
             await new Promise((resolve) => setTimeout(resolve, 400));
             const shot = await captureTab();
-            if (!shot.ok) return; // background gone or not permitted — stop, silently
-            await api.postEvidence(b.applicationId, {
+            if (!shot.ok) {
+              // Wave 1 shipped a `return` here and the whole run produced ZERO
+              // evidence with nothing in any log — one early failure silently
+              // aborted every later shot. Log it and keep going: the next
+              // field's capture may succeed, and a warn is the only way the
+              // failure is diagnosable at all.
+              console.warn("[offeros] evidence capture failed:", shot.error);
+              continue;
+            }
+            const posted = await api.postEvidence(b.applicationId, {
               label: report.label,
               dataUrl: shot.dataUrl,
             });
+            if (!posted.ok) console.warn("[offeros] evidence upload failed:", posted.error);
           }
         } catch {
           // Evidence must never surface an error a fill did not have.

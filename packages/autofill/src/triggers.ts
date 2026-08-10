@@ -108,6 +108,12 @@ const isWriteRejected = (field: DiagnosableField): boolean =>
  * whose stored history says it has never failed.
  */
 export function isPreventableFailure(field: DiagnosableField): boolean {
+  // A field that ENDED UP FILLED is not a failure, whatever the reason text
+  // says about how it got there. Wave-1 data showed the gap: AI-generated
+  // answers carry "no classifier match" in their reason, and counting them
+  // inflated form_shapes.failed_count from 3 real failures to 5 on one form —
+  // corrupting the recurrence denominator the learning decision reads.
+  if (field.outcome === "filled") return false;
   return isWriteRejected(field) || isUnrecognised(field);
 }
 

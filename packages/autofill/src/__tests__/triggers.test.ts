@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { detectIncidents, requiredCoverage, type TriggerField } from "../triggers";
+import {
+  detectIncidents,
+  requiredCoverage,
+  isPreventableFailure,
+  type TriggerField,
+} from "../triggers";
 
 /** Reason strings the planner actually writes (see fill-plan.ts). */
 const R = {
@@ -155,5 +160,34 @@ describe("requiredCoverage", () => {
   it("returns null when there is nothing to measure", () => {
     expect(requiredCoverage([])).toBeNull();
     expect(requiredCoverage([field({ required: false })])).toBeNull();
+  });
+});
+
+describe("isPreventableFailure — outcome gates the reason text", () => {
+  it("an AI-rescued FILLED field is not a failure, whatever its reason says", () => {
+    // Live wave-1 case: generated answers carry "no classifier match" in the
+    // reason; counting them as failures inflated failed_count 3 -> 5 on one
+    // form and poisoned the recurrence denominator.
+    expect(
+      isPreventableFailure({
+        label: "Tell us why",
+        outcome: "filled",
+        reason: "no classifier match → left unknown, AI answer accepted",
+        source: "ai-generated",
+        required: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("an unfilled unrecognised field still counts", () => {
+    expect(
+      isPreventableFailure({
+        label: "Mystery",
+        outcome: "skipped",
+        reason: "no classifier match → left unknown",
+        source: "none",
+        required: true,
+      }),
+    ).toBe(true);
   });
 });
