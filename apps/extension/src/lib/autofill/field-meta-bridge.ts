@@ -15,7 +15,18 @@ import { META_INDEX_ATTR, META_PAYLOAD_ID } from "./read-field-meta";
  * That is the designed outcome, not a failure.
  */
 
-const REQUEST_TIMEOUT_MS = 1200;
+/**
+ * How long to wait for the MAIN-world script to answer.
+ *
+ * This is a postMessage to the same document, so a real reply arrives in well
+ * under a millisecond; the only thing the timeout covers is the script not
+ * being there at all (a tab restored without it, a page outside the driver's
+ * match list, a test). It was 1200ms at first — a figure borrowed from network
+ * calls — which meant every scan on such a page silently paid 1.2 seconds
+ * before falling back. CI found it as a timing failure in a panel test; the
+ * cost was real everywhere, just usually invisible.
+ */
+const REQUEST_TIMEOUT_MS = 150;
 let nonce = 0;
 
 function requestAnnotation(selector: string): Promise<number> {
