@@ -74,3 +74,24 @@ describe("createPanelOverlay", () => {
     overlay = null;
   });
 });
+
+describe("stale iframe recovery", () => {
+  it("rebuilds the iframe when Chrome destroyed the old one (extension reload)", () => {
+    overlay = createPanelOverlay(document, OPTS);
+    overlay.open();
+    const first = shadow().querySelector("iframe")!;
+    // What an extension reload does to the page: the extension-origin frame
+    // is torn out of the DOM while the orphaned content script's closures
+    // (including the cached node) live on. Observed live on an Ashby fill —
+    // the panel opened as a blank white sheet forever.
+    first.remove();
+    expect(shadow().querySelector("iframe")).toBeNull();
+
+    overlay.close();
+    overlay.open();
+    const second = shadow().querySelector("iframe");
+    expect(second).not.toBeNull();
+    expect(second).not.toBe(first);
+    expect(second!.src).toBe(OPTS.panelUrl);
+  });
+});

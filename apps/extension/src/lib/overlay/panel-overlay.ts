@@ -110,7 +110,14 @@ export function createPanelOverlay(doc: Document, opts: PanelOverlayOptions): Pa
   // never expands OfferOS on pay only for a badge.
   let iframe: HTMLIFrameElement | null = null;
   const ensureIframe = () => {
-    if (iframe) return;
+    // `isConnected`, not just null: when the extension reloads, Chrome
+    // destroys every extension-origin frame in the page but this closure (and
+    // its captured `iframe` variable) lives on in the orphaned content
+    // script's world. Caching the dead node meant the panel opened as a blank
+    // white sheet forever — observed on a live Ashby fill, class
+    // stale-node-cache. A disconnected frame is rebuilt, not reused.
+    if (iframe && iframe.isConnected) return;
+    iframe?.remove();
     iframe = doc.createElement("iframe");
     iframe.src = opts.panelUrl;
     iframe.allow = "";
