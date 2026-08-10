@@ -51,3 +51,6 @@ export type { FillStats, CauseCount, AtsBreakdown, ApplicationFill } from "./fil
 export { computeFillStats, atsFromUrl } from "./fill-stats";
 
 export { fnv1a64, questionKey, formFingerprint, newQuestions } from "./fingerprint";
+
+export type { TriggerId, TriggerField, TriggerInput, Incident } from "./triggers";
+export { detectIncidents, requiredCoverage } from "./triggers";
