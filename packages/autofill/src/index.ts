@@ -53,4 +53,13 @@ export { computeFillStats, atsFromUrl } from "./fill-stats";
 export { fnv1a64, questionKey, formFingerprint, newQuestions } from "./fingerprint";
 
 export type { TriggerId, TriggerField, TriggerInput, Incident } from "./triggers";
-export { detectIncidents, requiredCoverage } from "./triggers";
+export { detectIncidents, requiredCoverage, isPreventableFailure } from "./triggers";
+
+export type { ReplayRow, ReplayDivergence } from "./replay";
+export { replayForm, diffReplays } from "./replay";
+
+export type { CaptureFinding } from "./capture-audit";
+export { auditCapturedForm, verifyCaptureRoundTrip } from "./capture-audit";
+
+export type { CanaryPersona, ProvenanceLeak, ProvenanceReport } from "./canary";
+export { canaryPersonas, profileAtoms, distinctiveAtoms, checkProvenance } from "./canary";

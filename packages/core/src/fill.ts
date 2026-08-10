@@ -26,6 +26,16 @@ export const fieldReportSchema = z.object({
   outcome: z.enum(FIELD_REPORT_OUTCOMES),
   required: z.boolean(),
   page: z.string().optional(),
+  /**
+   * Stable identity of the question this field asks, computed by the fill
+   * engine (see `@offeros/autofill`'s fingerprint.ts). Optional because it is
+   * the extension that computes it — a panel older than this field still
+   * reports, it just contributes nothing to form memory.
+   *
+   * Unlike `fieldId` this survives across postings: `fieldId` is a per-render
+   * DOM handle, this is "the same question, wherever it appears".
+   */
+  questionKey: z.string().optional(),
 });
 
 export type FillHandoff = z.infer<typeof fillHandoffSchema>;

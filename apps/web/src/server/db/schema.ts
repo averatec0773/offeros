@@ -45,7 +45,19 @@ export const applications = sqliteTable("applications", {
   notes: text("notes"),
   resumeId: text("resume_id"),
   attachResume: text("attach_resume"),
+  campaignId: text("campaign_id"),
   appliedAt: integer("applied_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** A named batch of applications — see `@offeros/core`'s `campaignSchema` for
+ *  the domain contract and the single-membership rationale. */
+export const campaigns = sqliteTable("campaigns", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  note: text("note"),
+  status: text("status").notNull(),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -151,6 +163,50 @@ export const styleMemories = sqliteTable("style_memories", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/**
+ * One row per QUESTION the fill engine has ever met, keyed by the engine's
+ * question fingerprint. This is the memory that makes "have we seen this
+ * before?" a lookup instead of a guess, and it is the denominator of every
+ * later claim about whether the engine is learning.
+ *
+ * `vendor` is the platform it was FIRST seen on. The same question text can
+ * appear on two ATSs and would share a key; the first vendor is kept rather
+ * than a list because nothing reads this field to make a decision — it exists
+ * so a person reading the table can tell where a question came from.
+ *
+ * `first_failed_application_id` is what makes "failed on a DIFFERENT
+ * application" answerable with one column: a question failing twice on one form
+ * is one problem, not two sightings.
+ */
+export const formShapes = sqliteTable("form_shapes", {
+  questionKey: text("question_key").primaryKey(),
+  vendor: text("vendor").notNull(),
+  question: text("question").notNull(),
+  classifiedType: text("classified_type").notNull(),
+  seenCount: integer("seen_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  firstFailedApplicationId: text("first_failed_application_id"),
+  firstSeenAt: integer("first_seen_at").notNull(),
+  lastSeenAt: integer("last_seen_at").notNull(),
+});
+
+/** One row per fill worth looking at — see `@offeros/autofill`'s triggers.ts
+ *  for what "worth" means. Rows are written by the engine and never by a model;
+ *  the count of them over the count of fills IS the trigger rate, which is the
+ *  number that decides whether anything more expensive gets built. */
+export const fillIncidents = sqliteTable("fill_incidents", {
+  id: text("id").primaryKey(),
+  applicationId: text("application_id").notNull(),
+  taskId: text("task_id").notNull(),
+  vendor: text("vendor").notNull(),
+  formFingerprint: text("form_fingerprint").notNull(),
+  triggerId: text("trigger_id").notNull(),
+  questionKeys: text("question_keys", { mode: "json" }).$type<string[]>().notNull(),
+  summary: text("summary").notNull(),
+  status: text("status").notNull(),
+  at: integer("at").notNull(),
+});
+
 export const schema = {
   profiles,
   answers,
@@ -166,4 +222,7 @@ export const schema = {
   applicationEvents,
   agentTrace,
   styleMemories,
+  formShapes,
+  fillIncidents,
+  campaigns,
 };

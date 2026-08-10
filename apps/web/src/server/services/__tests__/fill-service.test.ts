@@ -380,7 +380,14 @@ describe("applyFillReport", () => {
       true,
     );
     const events = listEvents(db, applicationId);
-    expect(events.map((e) => e.kind)).toEqual(["fill-reported", "fill-reported"]);
+    // The complete call additionally leaves the form-memory idempotency
+    // marker (see rememberForm) — the reports these test fixtures use carry
+    // no questionKey, so memory records nothing, but the marker still lands.
+    expect(events.map((e) => e.kind)).toEqual([
+      "fill-reported",
+      "fill-reported",
+      "form-memory-recorded",
+    ]);
     expect(events[1]?.payload).toEqual({ filled: 2, needsAttention: 0 });
   });
 });

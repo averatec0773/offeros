@@ -119,6 +119,7 @@ const trace = (over: Partial<FieldTrace>): FieldTrace => ({
   chosenValue: "",
   source: "none",
   reason: "",
+  questionKey: "k-f1",
   ...over,
 });
 

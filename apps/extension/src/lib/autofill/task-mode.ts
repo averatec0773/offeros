@@ -237,6 +237,7 @@ export function buildFieldReports(
       outcome,
       required: requiredIds.has(t.fieldId),
       page,
+      questionKey: t.questionKey,
     };
   });
 }

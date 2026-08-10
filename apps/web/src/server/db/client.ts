@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS style_memories (
   kind TEXT PRIMARY KEY, notes TEXT NOT NULL DEFAULT '',
   enabled INTEGER NOT NULL DEFAULT 1, source_count INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS campaigns (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT, status TEXT NOT NULL,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS form_shapes (
+  question_key TEXT PRIMARY KEY, vendor TEXT NOT NULL, question TEXT NOT NULL,
+  classified_type TEXT NOT NULL, seen_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0, first_failed_application_id TEXT,
+  first_seen_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS fill_incidents (
+  id TEXT PRIMARY KEY, application_id TEXT NOT NULL, task_id TEXT NOT NULL,
+  vendor TEXT NOT NULL, form_fingerprint TEXT NOT NULL, trigger_id TEXT NOT NULL,
+  question_keys TEXT NOT NULL, summary TEXT NOT NULL, status TEXT NOT NULL,
+  at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_agent_tasks_application ON agent_tasks(application_id);
 CREATE INDEX IF NOT EXISTS idx_jd_analyses_application ON jd_analyses(application_id);
@@ -68,6 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_trace_application ON agent_trace(applicatio
 -- nothing measurable.
 CREATE INDEX IF NOT EXISTS idx_artifacts_task_kind ON artifacts(task_id, kind);
 CREATE INDEX IF NOT EXISTS idx_fill_handoffs_status ON fill_handoffs(status);
+CREATE INDEX IF NOT EXISTS idx_fill_incidents_application ON fill_incidents(application_id);
 `;
 
 /**
@@ -91,6 +105,7 @@ const ADDED_COLUMNS: ReadonlyArray<readonly [table: string, column: string, ddl:
   ["resumes", "text", "text TEXT"],
   ["applications", "resume_id", "resume_id TEXT"],
   ["applications", "attach_resume", "attach_resume TEXT"],
+  ["applications", "campaign_id", "campaign_id TEXT"],
 ];
 
 /** SQLite errors on `ALTER TABLE ADD COLUMN` if the column already exists, so
@@ -135,6 +150,12 @@ export function defaultStorageDir(): string {
 /** Directory that holds imported template assets (.cls, shared preamble inputs). */
 export function defaultTemplatesDir(): string {
   return join(dirname(defaultDbPath()), "templates");
+}
+
+/** Directory that holds fill evidence (incident-field screenshots), one
+ *  subdirectory per application. */
+export function defaultEvidenceDir(): string {
+  return join(dirname(defaultDbPath()), "evidence");
 }
 
 /** Best-effort tighten to owner-only. This is a single-user, local-first app;

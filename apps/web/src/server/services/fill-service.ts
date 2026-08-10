@@ -28,6 +28,7 @@ import { getProfile } from "../repositories/profile-repo";
 import { appendEvent, listEvents } from "../repositories/application-event-repo";
 import { buildProfileFacts, resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { listResumes } from "./resume-service";
+import { recordFillOutcome } from "./form-memory";
 import {
   createFillHandoff,
   getFillHandoff,
@@ -440,7 +441,45 @@ export function applyFillReport(
     payload: { filled, needsAttention },
   });
 
+  if (complete) rememberForm(db, task.applicationId, taskId, merged);
+
   return result;
+}
+
+/**
+ * Write this fill into form memory. Bookkeeping, in the same sense as
+ * `appendEvent`: it runs after the fill has already been persisted and it must
+ * never be able to break one. A form the engine cannot record is a form the
+ * engine still filled, and the user is standing in front of the page waiting.
+ *
+ * Recorded ONCE per task, guarded by a marker event rather than by trusting
+ * the caller. An Action-Required fill leaves the task parked at fill-form, so
+ * a second complete report (a double-clicked Done, a re-fill of the same page)
+ * passes the state guard above and would silently inflate `seen_count` — the
+ * recurrence number the whole learning decision reads. The gate lives here,
+ * inside the tool, because callers cannot be trusted to submit exactly once.
+ * Accepted trade-off: a re-fill that reaches NEW questions (a later wizard
+ * page) is not re-recorded either; one undercounted page beats every
+ * double-click permanently corrupting the denominator.
+ */
+function rememberForm(db: Db, applicationId: string, taskId: string, reports: FieldReport[]): void {
+  try {
+    const alreadyRecorded = listEvents(db, applicationId).some(
+      (event) =>
+        event.kind === "form-memory-recorded" &&
+        (event.payload as { taskId?: unknown } | undefined)?.taskId === taskId,
+    );
+    if (alreadyRecorded) return;
+    recordFillOutcome(db, {
+      applicationId,
+      taskId,
+      applyLink: getApplication(db, applicationId)?.jobInfo.applyLink,
+      reports,
+    });
+    appendEvent(db, { applicationId, kind: "form-memory-recorded", payload: { taskId } });
+  } catch (error) {
+    console.error("[fill-service] recording form memory failed:", error);
+  }
 }
 
 /**

@@ -1,4 +1,5 @@
 import { classifyField, type CanonicalField, type FieldDescriptor } from "./classify";
+import { questionKey } from "./fingerprint";
 import { splitName, normalizeLink } from "./format";
 import { matchAnswer } from "./answer-match";
 import { matchOption } from "./option-match";
@@ -248,6 +249,14 @@ export type FieldTrace = {
   source: FillItem["source"];
   /** Human-readable: WHY this field got this decision. */
   reason: string;
+  /**
+   * Stable identity of the QUESTION (not of this DOM element) — see
+   * fingerprint.ts. Carried here because this is the last point at which the
+   * descriptor still exists: by the time a report reaches the server it has
+   * been reduced to a label and an outcome, and the control type and the option
+   * list the key is built from are gone.
+   */
+  questionKey: string;
 };
 
 // Where a canonical field's value comes from on the profile, for the reason string.
@@ -356,6 +365,13 @@ export function explainFillPlan(
       chosenValue,
       source: item.source,
       reason: deriveReason(desc, item, canonical, profile),
+      // `null` meta is not a loss of fidelity: on a platform that exposes its
+      // own field definitions the scan has ALREADY projected them into the
+      // descriptor (label = the platform's question, options = the platform's
+      // option list), so hashing the descriptor hashes the metadata. Passing
+      // meta separately here would mean threading it through a scan boundary
+      // that currently returns descriptors and nothing else.
+      questionKey: questionKey(null, desc),
     };
   });
   return { plan, trace };

@@ -99,6 +99,19 @@ const isWriteRejected = (field: DiagnosableField): boolean =>
   field.outcome === "failed" && field.source !== "none";
 
 /**
+ * A miss the engine could in principle have prevented: it either did not
+ * understand the question, or it chose a value the page rejected.
+ *
+ * Exported because whatever RECORDS a fill has to count failures the same way
+ * the triggers below judge them. Two copies of "what counts as a failure" would
+ * drift, and the drift would be invisible: the trigger would fire on a question
+ * whose stored history says it has never failed.
+ */
+export function isPreventableFailure(field: DiagnosableField): boolean {
+  return isWriteRejected(field) || isUnrecognised(field);
+}
+
+/**
  * Every incident this fill is worth raising. Empty is the common case and the
  * designed outcome.
  *

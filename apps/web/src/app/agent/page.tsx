@@ -6,6 +6,8 @@ import { listRecentTrace } from "@/server/repositories/agent-trace-repo";
 import { buildInbox } from "@/server/services/attention-service";
 import { computeFillStats } from "@offeros/autofill";
 import { FillQuality } from "@/components/agent/fill-quality";
+import { FormMemoryCard } from "@/components/agent/form-memory-card";
+import { formMemorySummary } from "@/server/repositories/form-memory-repo";
 import { ConsoleClient } from "@/components/agent/console-client";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,12 @@ export default function AgentConsolePage() {
   const tasks = listAgentTasks(db);
   const taskByApplication = newestTaskByApplication(tasks);
   const active = applications.filter((a) => a.status === "saved" || a.status === "applying");
+  const stats = computeFillStats(
+    applications.map((a) => ({
+      applyLink: a.jobInfo.applyLink,
+      fields: taskByApplication.get(a.id)?.fieldReports ?? [],
+    })),
+  );
 
   return (
     <main className="mx-auto w-full max-w-[860px] px-6 py-10">
@@ -31,15 +39,9 @@ export default function AgentConsolePage() {
 
       {/* Before the queue and the inbox: those say what to do next, this says
           how well the last hundred went. */}
-      <div className="mb-6">
-        <FillQuality
-          stats={computeFillStats(
-            applications.map((a) => ({
-              applyLink: a.jobInfo.applyLink,
-              fields: taskByApplication.get(a.id)?.fieldReports ?? [],
-            })),
-          )}
-        />
+      <div className="mb-6 space-y-4">
+        <FillQuality stats={stats} />
+        <FormMemoryCard memory={formMemorySummary(db)} fills={stats.applications} />
       </div>
 
       <ConsoleClient

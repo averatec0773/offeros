@@ -162,3 +162,45 @@ describe("explainFillPlan", () => {
     expect(coverLetter.reason.toLowerCase()).toContain("manual upload");
   });
 });
+
+/**
+ * The trace carries the question's identity, not the element's. This is what
+ * lets a fill be compared to fills on other postings — `fieldId` cannot,
+ * because it is regenerated on every render.
+ */
+describe("explainFillPlan — question identity", () => {
+  const ask = (over: Partial<FieldDescriptor>) => d("f1", over);
+
+  it("gives the same key to the same question on two different pages", () => {
+    const a = explainFillPlan([ask({ fieldId: "input-3a7f", label: "Work email" })], profile);
+    const b = explainFillPlan([ask({ fieldId: "q_9928", label: "Work email" })], profile);
+    expect(a.trace[0]!.questionKey).toBe(b.trace[0]!.questionKey);
+    expect(a.trace[0]!.fieldId).not.toBe(b.trace[0]!.fieldId);
+  });
+
+  it("gives different keys to different questions", () => {
+    const { trace } = explainFillPlan(
+      [d("a", { label: "Work email" }), d("b", { label: "Home address" })],
+      profile,
+    );
+    expect(trace[0]!.questionKey).not.toBe(trace[1]!.questionKey);
+  });
+
+  it("distinguishes the same wording asked as different controls", () => {
+    const text = explainFillPlan([ask({ label: "Start date", type: "text" })], profile);
+    const date = explainFillPlan([ask({ label: "Start date", type: "date" })], profile);
+    expect(text.trace[0]!.questionKey).not.toBe(date.trace[0]!.questionKey);
+  });
+
+  it("is unchanged when a choice list is merely reordered", () => {
+    const one = explainFillPlan(
+      [ask({ label: "Pronouns", type: "radio-group", options: ["She/Her", "He/Him"] })],
+      profile,
+    );
+    const two = explainFillPlan(
+      [ask({ label: "Pronouns", type: "radio-group", options: ["He/Him", "She/Her"] })],
+      profile,
+    );
+    expect(one.trace[0]!.questionKey).toBe(two.trace[0]!.questionKey);
+  });
+});
