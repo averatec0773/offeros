@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
 import type { AgentStep } from "@/server/agent/loop";
 
@@ -46,6 +46,39 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  // The thread is server-side and shared by scope (this application, or the
+  // global console thread) — load it on mount so the conversation survives
+  // reloads and follows the user between surfaces. Messages pair up
+  // user→assistant in order; a trailing unanswered user message renders as a
+  // question still waiting.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const thread = await api.agent.chatHistory(applicationId);
+        if (!live || thread.length === 0) return;
+        const loaded: Turn[] = [];
+        for (const message of thread) {
+          if (message.role === "user") {
+            loaded.push({ question: message.content });
+          } else if (loaded.length > 0 && loaded[loaded.length - 1]!.answer === undefined) {
+            loaded[loaded.length - 1] = {
+              ...loaded[loaded.length - 1]!,
+              answer: message.content,
+              steps: (message.steps as AgentStep[] | undefined) ?? [],
+            };
+          }
+        }
+        setTurns((current) => (current.length === 0 ? loaded : current));
+      } catch {
+        // No history is not an error worth surfacing — the chat just starts fresh.
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [applicationId]);
 
   async function ask(question: string) {
     const trimmed = question.trim();

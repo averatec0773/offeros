@@ -1,6 +1,11 @@
 import { getDb } from "@/server/db/client";
 import { getApplication, listApplications } from "@/server/repositories/application-repo";
 import { getAgentTaskByApplicationId } from "@/server/repositories/agent-task-by-application";
+import {
+  appendChatMessage,
+  listRecentMessages,
+  GLOBAL_SCOPE,
+} from "@/server/repositories/chat-repo";
 import { runTurn } from "@/server/agent/loop";
 import { makeAgentLlm } from "@/server/agent/agent-llm";
 import { handle, ok, badRequest, notFound } from "@/server/http/envelope";
@@ -17,9 +22,12 @@ export const runtime = "nodejs";
  * application the agent named, so the trace records the work against the job it
  * was actually about.
  *
- * Stateless by design: the client owns the transcript and sends the question,
- * the server answers it. There is no session to expire, nothing to clean up,
- * and a reload cannot leave a half-finished turn on the server.
+ * Conversations are THREADS now, persisted server-side (chat_messages): one
+ * per application plus one global, shared by every chat surface. Each request
+ * still stands alone — the server loads the thread's recent window, answers,
+ * appends both sides, and holds nothing in memory between requests, so a
+ * reload cannot leave a half-finished turn behind. History resolves
+ * references ("the second one"); facts are still re-read through tools.
  *
  * The answer comes back with the steps the agent took, because the steps are
  * the evidence. An answer about someone's job applications that cannot be
@@ -46,14 +54,35 @@ export async function POST(request: Request) {
       return { applicationId: id, ...(task ? { taskId: task.id } : {}) };
     };
 
+    /** Answer within a thread: load the window, run the turn, append both
+     *  sides. The user message is persisted BEFORE the model runs — a failed
+     *  turn should still show what was asked. */
+    const answerInThread = async (
+      scope: string,
+      turn: Omit<Parameters<typeof runTurn>[0], "history" | "runLlm">,
+    ) => {
+      const history = listRecentMessages(db, scope, 10).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      appendChatMessage(db, { scope, role: "user", content: question.trim() });
+      const result = await runTurn({ ...turn, history, runLlm: makeAgentLlm(db) });
+      appendChatMessage(db, {
+        scope,
+        role: "assistant",
+        content: result.answer,
+        steps: result.steps,
+      });
+      return result;
+    };
+
     if (applicationId) {
       const application = getApplication(db, applicationId);
       if (!application) return notFound("application");
-      const result = await runTurn({
+      const result = await answerInThread(applicationId, {
         ctx: { db, ...focus(applicationId)! },
         question: question.trim(),
         subject: `${application.jobInfo.jobTitle} at ${application.jobInfo.companyName}`,
-        runLlm: makeAgentLlm(db),
       });
       return ok(result);
     }
@@ -71,11 +100,10 @@ export async function POST(request: Request) {
         ranOutOfSteps: false,
       });
     }
-    const result = await runTurn({
+    const result = await answerInThread(GLOBAL_SCOPE, {
       ctx: { db, ...focus(newest.id)! },
       question: question.trim(),
       focus,
-      runLlm: makeAgentLlm(db),
     });
     return ok(result);
   });

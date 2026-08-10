@@ -6,6 +6,10 @@ import { newestTaskByApplication } from "../repositories/agent-task-by-applicati
 import { listTrace } from "../repositories/agent-trace-repo";
 import { listAnswers } from "../repositories/answer-repo";
 import { getFit } from "../repositories/fit-repo";
+import { getProfile } from "../repositories/profile-repo";
+import { listResumes } from "../services/resume-service";
+import { formMemorySummary, listIncidents } from "../repositories/form-memory-repo";
+import { buildInbox } from "../services/attention-service";
 import type { Tool, ToolContext } from "./types";
 
 /**
@@ -207,6 +211,115 @@ export const readApplicationTool: Tool<void, JobDetail> = {
   verify: async () => null,
 };
 
+/** The user's profile in summary: who the forms say they are, and which
+ *  résumés exist. Summary on purpose — the agent needs "is there a phone
+ *  number, which résumé is primary", not the document itself. */
+export const readProfileTool: Tool<
+  void,
+  {
+    personal: Record<string, string>;
+    skills: string[];
+    resumes: { name: string; primary: boolean; hasText: boolean }[];
+  }
+> = {
+  id: "read_profile",
+  description:
+    "Read the user's profile summary: personal contact fields, skills, and which résumés exist (and whether each has extracted text). Use before answering questions about the profile or proposing profile changes.",
+  run: async (ctx) => {
+    const profile = getProfile(ctx.db);
+    if (!profile) {
+      return {
+        ok: false,
+        summary: "no profile exists yet",
+        failure: { kind: "precondition", reason: "the user has not set up a profile" },
+      };
+    }
+    const personal = Object.fromEntries(
+      Object.entries(profile.personal).filter(
+        ([k, v]) => typeof v === "string" && v && k !== "links",
+      ),
+    ) as Record<string, string>;
+    const resumes = listResumes(ctx.db).map((r) => ({
+      name: r.name,
+      primary: r.isPrimary,
+      hasText: Boolean(r.text),
+    }));
+    return {
+      ok: true,
+      summary: `profile: ${Object.keys(personal).length} personal fields, ${profile.skills.length} skills, ${resumes.length} résumé(s)`,
+      result: { personal, skills: profile.skills.slice(0, ROW_BUDGET * 2), resumes },
+    };
+  },
+  verify: async () => null,
+};
+
+/** What the fill engine has learned across every application — the memory the
+ *  learning loop writes. First real consumer of `fill_incidents`. */
+export const readFormMemoryTool: Tool<
+  { applicationId?: string } | void,
+  {
+    knownQuestions: number;
+    recurringQuestions: number;
+    failedQuestions: number;
+    incidents: { trigger: string; summary: string }[];
+  }
+> = {
+  id: "read_form_memory",
+  description:
+    'Read what the fill engine has learned: how many distinct questions it has met, which recur, and the recorded incidents (things that genuinely went wrong). Pass {"applicationId":"<id>"} to see one application\'s incidents, or nothing for the campaign-wide picture.',
+  parse: (input) => {
+    const id = (input as Record<string, unknown> | null)?.applicationId;
+    return typeof id === "string" && id !== "" ? { applicationId: id } : undefined;
+  },
+  run: async (ctx, input) => {
+    const summary = formMemorySummary(ctx.db);
+    const incidents = listIncidents(ctx.db, input?.applicationId)
+      .slice(0, ROW_BUDGET)
+      .map((row) => ({ trigger: row.triggerId, summary: row.summary }));
+    return {
+      ok: true,
+      summary: `${summary.knownQuestions} questions known, ${summary.recurringQuestions} recurring, ${incidents.length} incident(s)${input?.applicationId ? " on this application" : ""}`,
+      result: {
+        knownQuestions: summary.knownQuestions,
+        recurringQuestions: summary.recurringQuestions,
+        failedQuestions: summary.failedQuestions,
+        incidents,
+      },
+    };
+  },
+  verify: async () => null,
+};
+
+/** Everything currently waiting on the user, in priority order — the same
+ *  deterministic inbox the console shows. The agent READS it; it never
+ *  generates it. */
+export const readInboxTool: Tool<
+  void,
+  { items: { kind: string; summary: string; applicationId: string }[] }
+> = {
+  id: "read_inbox",
+  description:
+    "Read the needs-you inbox: everything currently waiting on the user across all applications, in priority order. Use for questions like 'what needs me' or 'what should I do first'.",
+  run: async (ctx) => {
+    const items = buildInbox(ctx.db)
+      .slice(0, ROW_BUDGET)
+      .map((item) => ({
+        kind: item.kind,
+        summary: `${item.headline} (${item.jobTitle} at ${item.companyName})${item.detail ? ` — ${item.detail}` : ""}`,
+        applicationId: item.applicationId,
+      }));
+    return {
+      ok: true,
+      summary:
+        items.length === 0
+          ? "nothing is waiting on the user"
+          : `${items.length} item(s) waiting on the user`,
+      result: { items },
+    };
+  },
+  verify: async () => null,
+};
+
 /** Every read the agent may perform, by id. */
 export const READ_TOOLS = {
   [listApplicationsTool.id]: listApplicationsTool,
@@ -214,6 +327,9 @@ export const READ_TOOLS = {
   [readFillReportTool.id]: readFillReportTool,
   [readTraceTool.id]: readTraceTool,
   [searchAnswersTool.id]: searchAnswersTool,
+  [readProfileTool.id]: readProfileTool,
+  [readFormMemoryTool.id]: readFormMemoryTool,
+  [readInboxTool.id]: readInboxTool,
 } as const;
 
 /** A tool's id and description, which is all the model needs to choose one. */

@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS style_memories (
   kind TEXT PRIMARY KEY, notes TEXT NOT NULL DEFAULT '',
   enabled INTEGER NOT NULL DEFAULT 1, source_count INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id TEXT PRIMARY KEY, scope TEXT NOT NULL, role TEXT NOT NULL,
+  content TEXT NOT NULL, steps TEXT, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT, status TEXT NOT NULL,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
@@ -82,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_trace_application ON agent_trace(applicatio
 CREATE INDEX IF NOT EXISTS idx_artifacts_task_kind ON artifacts(task_id, kind);
 CREATE INDEX IF NOT EXISTS idx_fill_handoffs_status ON fill_handoffs(status);
 CREATE INDEX IF NOT EXISTS idx_fill_incidents_application ON fill_incidents(application_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_scope ON chat_messages(scope, at);
 `;
 
 /**

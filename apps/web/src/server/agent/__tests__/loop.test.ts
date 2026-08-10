@@ -164,14 +164,21 @@ describe("acting tools", () => {
     verify: async () => null,
   });
 
-  it("allows one change per turn and refuses the second", async () => {
-    // Reading is free and undoable; acting spends money or writes records. A
-    // plan needing three actions is one the user should see before it runs.
-    const tools = { a: acting("a"), b: acting("b"), look: tool("look", "looked") };
+  it("allows two changes per turn and refuses the third", async () => {
+    // Reading is free and undoable; acting spends money or writes records.
+    // Two covers the natural compound request ("save this and mark that");
+    // a plan needing three is one the user should see before it runs.
+    const tools = {
+      a: acting("a"),
+      b: acting("b"),
+      c: acting("c"),
+      look: tool("look", "looked"),
+    };
     const chooseNext = script(
       { kind: "use-tool", tool: "a", reason: "first" },
       { kind: "use-tool", tool: "b", reason: "second" },
-      { kind: "answer", text: "I did one thing." },
+      { kind: "use-tool", tool: "c", reason: "third" },
+      { kind: "answer", text: "I did two things." },
     );
     const out = await runTurn({
       ctx,
@@ -179,12 +186,13 @@ describe("acting tools", () => {
       runLlm: noLlm,
       chooseNext,
       tools,
-      actingToolIds: new Set(["a", "b"]),
+      actingToolIds: new Set(["a", "b", "c"]),
     });
 
     expect(out.steps[0]).toMatchObject({ tool: "a", ok: true, acted: true });
-    expect(out.steps[1]).toMatchObject({ tool: "b", ok: false, acted: false });
-    expect(out.steps[1]!.summary).toContain("one action per turn");
+    expect(out.steps[1]).toMatchObject({ tool: "b", ok: true, acted: true });
+    expect(out.steps[2]).toMatchObject({ tool: "c", ok: false, acted: false });
+    expect(out.steps[2]!.summary).toContain("action budget spent");
     // The refusal is fed back so the agent can tell the user what is next.
     expect(chooseNext.mock.calls.at(-1)![0].context).toContain("already changed something");
   });

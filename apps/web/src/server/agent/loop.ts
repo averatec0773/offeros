@@ -1,6 +1,7 @@
 import { runTool } from "./run-tool";
 import { READ_TOOLS, toolMenu } from "./read-tools";
 import { TOOLS as ACT_TOOLS } from "./tools";
+import { WRITE_TOOLS } from "./write-tools";
 import { decide, type Decision } from "./decide";
 import type { Tool, ToolContext } from "./types";
 
@@ -61,6 +62,14 @@ export interface RunTurnArgs {
    * has to be unambiguous to the agent too.
    */
   subject?: string;
+  /**
+   * The recent conversation, oldest first — what makes "the second one" and
+   * "do that too" resolvable. Reference only: facts still come from tools
+   * every turn, never from what an earlier answer claimed. Kept as a plain
+   * transcript window (no summarisation) because threads here are short and
+   * the durable memory this must not duplicate lives in the database.
+   */
+  history?: { role: "user" | "assistant"; content: string }[];
   runLlm: (args: {
     system: string;
     userPrompt: string;
@@ -92,17 +101,24 @@ const DEFAULT_MAX_STEPS = 6;
  * How many of those steps may CHANGE something.
  *
  * Reading is cheap and undoable; acting generates documents, opens tickets and
- * writes records. One per turn means a question can be answered and one thing
- * done about it — a plan that needs three actions is a plan the user should see
- * before it runs, not one a loop performs while they wait.
+ * writes records. Two per turn covers the natural compound request — "save
+ * this answer and mark X interviewed" — while a plan that needs three changes
+ * is still a plan the user should see before it runs, not one a loop performs
+ * while they wait. (Was one before the write family existed.)
  */
-const DEFAULT_MAX_ACTIONS = 1;
+const DEFAULT_MAX_ACTIONS = 2;
 
 export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   const tools =
     args.tools ??
-    ({ ...READ_TOOLS, ...ACT_TOOLS } as unknown as Record<string, Tool<never, unknown>>);
-  const actingIds = args.actingToolIds ?? new Set(Object.keys(ACT_TOOLS));
+    ({ ...READ_TOOLS, ...ACT_TOOLS, ...WRITE_TOOLS } as unknown as Record<
+      string,
+      Tool<never, unknown>
+    >);
+  // Writes count against the action budget exactly like the execution tools:
+  // both change the world, and the cap is about world-changes per turn.
+  const actingIds =
+    args.actingToolIds ?? new Set([...Object.keys(ACT_TOOLS), ...Object.keys(WRITE_TOOLS)]);
   const maxActions = args.maxActions ?? DEFAULT_MAX_ACTIONS;
   let actionsTaken = 0;
   const chooseNext = args.chooseNext ?? decide;
@@ -115,7 +131,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
 
   for (let step = 0; step < maxSteps; step++) {
     const decision: Decision = await chooseNext({
-      context: buildContext(tools, findings, args.subject),
+      context: buildContext(tools, findings, args.subject, args.history),
       question: args.question,
       runLlm: args.runLlm,
     });
@@ -169,13 +185,13 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       // still answer, and telling the user what it wanted to do next is more
       // useful than a loop that quietly stops short.
       findings.push(
-        `You have already changed something this turn, so ${tool.id} was not run. Tell the user what you would do next and let them ask for it.`,
+        `You have already changed something this turn (${maxActions} change${maxActions === 1 ? "" : "s"} max), so ${tool.id} was not run. Tell the user what you would do next and let them ask for it.`,
       );
       steps.push({
         tool: tool.id,
         reason: decision.reason,
         ok: false,
-        summary: "one action per turn — not run",
+        summary: "action budget spent — not run",
         acted: false,
       });
       continue;
@@ -231,16 +247,26 @@ function buildContext(
   tools: Record<string, Tool<never, unknown>>,
   findings: string[],
   subject?: string,
+  history?: { role: "user" | "assistant"; content: string }[],
 ): string {
   const scope = subject
     ? `You are looking at one application: ${subject}. Every tool you call is already scoped to it, so "this one" means this application — never ask the user which job they mean.`
     : `You are looking at ALL of the user's applications. Start with list_applications to get their ids, then pass {"applicationId":"<id>"} to any tool that is about one job. Answer about the whole set unless the user names one.`;
+  // History is for RESOLVING the question ("the second one", "do that too"),
+  // never for answering it: an earlier answer's claims may be stale the moment
+  // a fill or an edit lands, so facts are re-read through tools every turn.
+  const past =
+    history && history.length > 0
+      ? `Recent conversation (oldest first — use it to understand what the user is referring to, but re-read facts through tools rather than trusting earlier answers):\n${history
+          .map((m) => `${m.role === "user" ? "User" : "You"}: ${m.content}`)
+          .join("\n")}`
+      : "";
   const menu = `Tools you can use:\n${toolMenu(tools)}`;
   const found =
     findings.length === 0
       ? "You have not looked at anything yet."
       : `What you have found so far:\n${findings.join("\n\n")}`;
-  return [scope, menu, found].filter(Boolean).join("\n\n");
+  return [scope, past, menu, found].filter(Boolean).join("\n\n");
 }
 
 /**

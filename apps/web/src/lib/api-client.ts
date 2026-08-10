@@ -132,6 +132,11 @@ export const api = {
         `/agent/chat`,
         json("POST", { question, ...(applicationId ? { applicationId } : {}) }),
       ),
+    /** The persisted thread for a scope (this application, or global). */
+    chatHistory: (applicationId?: string) =>
+      request<
+        { id: string; role: "user" | "assistant"; content: string; steps?: unknown[]; at: number }[]
+      >(`/agent/chat/history${applicationId ? `?applicationId=${applicationId}` : ""}`),
   },
   campaigns: {
     list: () => request<Campaign[]>("/campaigns"),

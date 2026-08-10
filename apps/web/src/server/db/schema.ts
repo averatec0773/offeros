@@ -51,6 +51,30 @@ export const applications = sqliteTable("applications", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+/**
+ * One chat message in an agent conversation thread.
+ *
+ * `scope` is the thread key: an applicationId for per-application threads, or
+ * the literal "global" for the campaign-wide console thread. Three chat doors
+ * (console, workspace, list-row Ask — and later the extension panel) share
+ * threads by scope, which is what makes a conversation continue across
+ * surfaces and reloads.
+ *
+ * The discipline this table must not erode: history answers "what did we just
+ * say"; the DATABASE answers "what is true". The agent still reads facts
+ * through tools every turn — a message here is never a source of record.
+ */
+export const chatMessages = sqliteTable("chat_messages", {
+  id: text("id").primaryKey(),
+  scope: text("scope").notNull(),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  /** Assistant messages only: the tool steps that produced the answer, so a
+   *  reloaded thread can still show what was read/done. */
+  steps: text("steps", { mode: "json" }).$type<unknown[]>(),
+  at: integer("at").notNull(),
+});
+
 /** A named batch of applications — see `@offeros/core`'s `campaignSchema` for
  *  the domain contract and the single-membership rationale. */
 export const campaigns = sqliteTable("campaigns", {
@@ -225,4 +249,5 @@ export const schema = {
   formShapes,
   fillIncidents,
   campaigns,
+  chatMessages,
 };
