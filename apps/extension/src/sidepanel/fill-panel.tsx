@@ -814,8 +814,11 @@ export function FillPanel({
           for (const report of pickEvidenceFields(allReports())) {
             await scrollToField(report.fieldId).catch(() => {});
             // Scroll animation + the highlight flash need a moment; a shot
-            // taken mid-scroll photographs the wrong part of the page.
-            await new Promise((resolve) => setTimeout(resolve, 400));
+            // taken mid-scroll photographs the wrong part of the page. Also
+            // paces under Chrome's captureVisibleTab quota (2/sec) — faster
+            // loops hit MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND and shots
+            // start warn-and-skipping.
+            await new Promise((resolve) => setTimeout(resolve, 600));
             const shot = await captureTab();
             if (!shot.ok) {
               // Wave 1 shipped a `return` here and the whole run produced ZERO
