@@ -23,6 +23,7 @@ import {
   clearRescueLog,
 } from "../lib/autofill/rescue";
 import { bytesToBase64 } from "../lib/autofill/base64";
+import { pickEvidenceFields } from "../lib/autofill/evidence";
 import type {
   ScanResponse,
   FillResponse,
@@ -86,6 +87,7 @@ export function FillPanel({
   capture,
   attachFile,
   scrollToField,
+  captureTab,
   api,
   rescanNonce,
   openWebApp,
@@ -109,6 +111,10 @@ export function FillPanel({
   ) => Promise<AttachFileResponse>;
   /** Bring a scanned field into view on the page (scroll + highlight flash). */
   scrollToField?: (fieldId: string) => Promise<unknown>;
+  /** Photograph the visible tab (panel → background → captureVisibleTab).
+   *  Present = incident fields get screenshots on Done; absent = no evidence,
+   *  everything else identical. */
+  captureTab?: () => Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }>;
   /** The handoff explicitly bound to this tab (workspace-opened tabs) — wins
    *  over URL-heuristic ticket matching when present. */
   getBoundHandoff?: () => Promise<string | null>;
@@ -272,6 +278,9 @@ export function FillPanel({
   const bundleRef = useRef<FillTaskBundle | null>(null);
   const traceRef = useRef<FieldTrace[]>([]);
   const claimTriedRef = useRef(false);
+  /** True once the complete report has been posted (or is in flight) — the
+   *  Done button's re-entry guard. */
+  const doneRef = useRef(false);
   const lastRescanNonceRef = useRef(rescanNonce);
   // Field reports accumulate across wizard pages, keyed by (page ?? "") + fieldId, re-sent cumulatively.
   const reportsRef = useRef<Map<string, FieldReport>>(new Map());
@@ -781,8 +790,44 @@ export function FillPanel({
   const onDone = async () => {
     const b = bundleRef.current;
     if (!b) return;
-    await api.postReport(b.taskId, allReports(), true);
+    // Re-entry guard: `reported` state lands only after the await, so a
+    // double-click would post the complete report twice. The server is
+    // idempotent about it now, but the second request (and a duplicate
+    // evidence pass) is still pure waste.
+    if (doneRef.current) return;
+    doneRef.current = true;
+    const posted = await api.postReport(b.taskId, allReports(), true);
+    if (!posted.ok) {
+      doneRef.current = false; // a failed post may be retried
+      return;
+    }
     setReported(true);
+    // Evidence pass, strictly after the report and strictly best-effort: the
+    // user pressed Done and IS done — a slow or failing screenshot changes
+    // nothing they can see. Scroll each incident field into view, let the
+    // page settle, photograph, upload. Sequential on purpose: captureVisibleTab
+    // photographs whatever is visible NOW, so parallel scrolls would caption
+    // every shot with the wrong field.
+    if (captureTab && scrollToField) {
+      void (async () => {
+        try {
+          for (const report of pickEvidenceFields(allReports())) {
+            await scrollToField(report.fieldId).catch(() => {});
+            // Scroll animation + the highlight flash need a moment; a shot
+            // taken mid-scroll photographs the wrong part of the page.
+            await new Promise((resolve) => setTimeout(resolve, 400));
+            const shot = await captureTab();
+            if (!shot.ok) return; // background gone or not permitted — stop, silently
+            await api.postEvidence(b.applicationId, {
+              label: report.label,
+              dataUrl: shot.dataUrl,
+            });
+          }
+        } catch {
+          // Evidence must never surface an error a fill did not have.
+        }
+      })();
+    }
   };
 
   useEffect(() => {

@@ -25,6 +25,7 @@ import {
   getPending,
   instantFill,
   listAnswers,
+  postEvidence,
   postReport,
   postRepairEvent,
   resolveFillAction,
@@ -32,6 +33,7 @@ import {
   undoSubmission,
   updateAnswer,
 } from "../../src/lib/offeros-api";
+import { requestTabCapture } from "../../src/lib/tab-capture";
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
 import { getFillBinding } from "../../src/lib/fill-binding";
@@ -52,6 +54,7 @@ const api = {
   getPending: () => getPending(),
   claim,
   postReport,
+  postEvidence,
   generateAnswer,
   findApplicationsByJobUrl,
   createTaskFromJd,
@@ -181,6 +184,7 @@ export default function App() {
     (fieldId: string) => sendEngineScrollToField(tabId, fieldId),
     [tabId],
   );
+  const captureTab = useCallback(() => requestTabCapture(tabId), [tabId]);
   const getBoundHandoff = useCallback(
     () => (tabId >= 0 ? getFillBinding(tabId) : Promise.resolve(null)),
     [tabId],
@@ -263,6 +267,7 @@ export default function App() {
             capture={capture}
             attachFile={attachFile}
             scrollToField={scrollToField}
+            captureTab={captureTab}
             api={api}
             rescanNonce={rescanNonce}
             openWebApp={openWebApp}

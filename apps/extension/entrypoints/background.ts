@@ -1,6 +1,7 @@
 import { startDevReload } from "../src/lib/dev-reload";
 import { matchAts } from "../src/lib/autofill/recipes";
 import { isStartWebAppRequest, startWebAppViaHost } from "../src/lib/web-launcher";
+import { captureTab, isCaptureTabRequest } from "../src/lib/tab-capture";
 import {
   isOpenFillTabRequest,
   isGetFillBindingRequest,
@@ -128,6 +129,7 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener(
     (msg: unknown, sender: { tab?: { id?: number } }): Promise<unknown> | undefined => {
       if (isStartWebAppRequest(msg)) return startWebAppViaHost();
+      if (isCaptureTabRequest(msg)) return captureTab(msg.tabId ?? sender.tab?.id);
       if (isOpenFillTabRequest(msg)) return openFillTab(msg.handoffId, msg.url);
       if (isGetFillBindingRequest(msg)) {
         return getFillBindingFor(msg.tabId ?? sender.tab?.id);

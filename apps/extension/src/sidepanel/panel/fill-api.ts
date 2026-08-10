@@ -18,6 +18,10 @@ export interface FillApi {
     reports: FieldReport[],
     complete?: boolean,
   ) => Promise<ApiResult<unknown>>;
+  postEvidence: (
+    applicationId: string,
+    body: { label?: string; dataUrl: string },
+  ) => Promise<ApiResult<{ file: string; bytes: number }>>;
   generateAnswer: (
     taskId: string,
     body: {

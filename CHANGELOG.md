@@ -44,6 +44,32 @@ you to check.
 **Bring your own model.** Anthropic or OpenAI, with your key. Keys are stored
 locally and never sent to the browser. System prompts are editable per task.
 
+**Campaigns.** Group applications into named batches — select jobs on the
+list, move them into a campaign, and run the whole batch through the same
+queue and the same gates as anything else. Each campaign shows how far the
+batch is: submitted, in progress, waiting on you. Deleting a campaign only
+removes the grouping; the applications stay.
+
+**A verification lab for the fill engine.** Captured forms can be replayed
+offline through the exact same engine that fills live pages. Three synthetic
+test personas with deliberately distinguishable values prove every filled value
+came from the active profile — a value carrying another persona's material is
+flagged as cross-contamination automatically. Captures that lost information
+(a dropdown without its choices, a question without its text) are refused at
+the door instead of quietly replaying against a form that never existed. When
+a real fill leaves problems behind, the extension photographs those fields and
+stores the screenshots locally beside the database, so a later review can
+compare what the engine reported against what the page actually showed.
+
+**A record of what the forms actually asked.** Each completed fill stores the
+questions it met, identified by their content rather than by any page-specific
+id, so the same question on two different postings is recognised as one
+question. Fills that went genuinely wrong — a value the page refused, a required
+question never seen before, a question failing again on another application, a
+new form that broadly did not fill — are recorded separately from fills where a
+guard simply did its job. The agent page shows how often each happens. No model
+is involved in any of it; every figure is a count.
+
 ### Security and privacy
 
 - The local API refuses any request whose `Host` is not loopback, and checks

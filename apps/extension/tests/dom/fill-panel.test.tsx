@@ -129,6 +129,7 @@ const emptyApi = (): FillApi => ({
   getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [] })),
   claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: false, error: "no" })),
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
+  postEvidence: vi.fn(async () => ({ ok: true as const, value: { file: "", bytes: 0 } })),
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
     ok: true,
@@ -811,6 +812,7 @@ describe("FillPanel", () => {
       })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
+      postEvidence: vi.fn(async () => ({ ok: true as const, value: { file: "", bytes: 0 } })),
       generateAnswer: vi.fn(async () => ({
         ok: true as const,
         value: { answer: "Because I build compilers." },
@@ -1208,6 +1210,7 @@ describe("FillPanel", () => {
       })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
+      postEvidence: vi.fn(async () => ({ ok: true as const, value: { file: "", bytes: 0 } })),
       generateAnswer: vi.fn(async () => ({
         ok: true as const,
         value: { answer: generatedAnswer },
@@ -1431,6 +1434,7 @@ describe("FillPanel", () => {
       })),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
+      postEvidence: vi.fn(async () => ({ ok: true as const, value: { file: "", bytes: 0 } })),
       generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
     };
     const { container } = render(
@@ -1462,6 +1466,7 @@ describe("FillPanel", () => {
       getPending: vi.fn(async () => tickets),
       claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
       postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
+      postEvidence: vi.fn(async () => ({ ok: true as const, value: { file: "", bytes: 0 } })),
       generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
     };
     const scan = async () => scanOk;
