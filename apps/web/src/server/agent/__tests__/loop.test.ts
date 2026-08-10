@@ -241,6 +241,101 @@ describe("acting tools", () => {
   });
 });
 
+describe("campaign scope", () => {
+  /** Records the application each call was scoped to, which is what the trace
+   *  would have recorded. */
+  function spyingTool(seen: string[]): Tool<never, unknown> {
+    return {
+      id: "read_fill_report",
+      description: "reads one job's fill",
+      run: async (c) => {
+        seen.push(c.applicationId);
+        return { ok: true, summary: `read ${c.applicationId}` };
+      },
+      verify: async () => null,
+    };
+  }
+
+  it("re-scopes a call to the application the agent named", async () => {
+    // The whole point of a campaign conversation: one turn, several jobs. The
+    // subject has to move with the call, because runTool writes the trace
+    // against ctx.applicationId — otherwise work lands on the wrong job's
+    // ledger.
+    const seen: string[] = [];
+    const chooseNext = script(
+      {
+        kind: "use-tool",
+        tool: "read_fill_report",
+        input: { applicationId: "app-2" },
+        reason: "b",
+      },
+      {
+        kind: "use-tool",
+        tool: "read_fill_report",
+        input: { applicationId: "app-3" },
+        reason: "c",
+      },
+      { kind: "answer", text: "both read" },
+    );
+    await runTurn({
+      ctx,
+      question: "why are these stuck?",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { read_fill_report: spyingTool(seen) },
+      // No taskId: runTool independently checks that a task belongs to the
+      // application it is filed under, and that guard has its own test.
+      focus: (id) => ({ applicationId: id }),
+    });
+    expect(seen).toEqual(["app-2", "app-3"]);
+  });
+
+  it("stays on the pinned application when no focus resolver is given", async () => {
+    // A per-application conversation must not wander, even if the model asks.
+    const seen: string[] = [];
+    const chooseNext = script(
+      {
+        kind: "use-tool",
+        tool: "read_fill_report",
+        input: { applicationId: "app-9" },
+        reason: "x",
+      },
+      { kind: "answer", text: "done" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "look at another job",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { read_fill_report: spyingTool(seen) },
+    });
+    expect(seen).toEqual([]);
+    expect(out.steps[0]).toMatchObject({ ok: false, summary: "no such application" });
+  });
+
+  it("tells the agent when it names an id that does not exist", async () => {
+    const chooseNext = script(
+      {
+        kind: "use-tool",
+        tool: "read_fill_report",
+        input: { applicationId: "made-up" },
+        reason: "x",
+      },
+      { kind: "answer", text: "I used a bad id." },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "why is X stuck?",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { read_fill_report: spyingTool([]) },
+      focus: () => null,
+    });
+    expect(out.steps[0]!.ok).toBe(false);
+    expect(chooseNext.mock.calls.at(-1)![0].context).toContain("no application with id");
+  });
+});
+
 describe("parseDecision", () => {
   it("reads both decision shapes", () => {
     expect(parseDecision('{"kind":"use-tool","tool":"read_trace","reason":"check"}')).toEqual({

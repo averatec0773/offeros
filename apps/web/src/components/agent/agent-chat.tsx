@@ -26,13 +26,22 @@ interface Turn {
   incomplete?: boolean;
 }
 
-const SUGGESTIONS = [
-  "Why did this one not finish?",
-  "What still needs me?",
-  "Tailor my résumé for this job",
-];
+/** What to offer before the user has asked anything. Different questions make
+ *  sense when the conversation is about one job than about all of them. */
+const SUGGESTIONS = {
+  one: ["Why did this one not finish?", "What still needs me?", "Tailor my résumé for this job"],
+  all: [
+    "What needs me right now?",
+    "Which of these are stuck, and why?",
+    "Which should I do first?",
+  ],
+};
 
-export function AgentChat({ applicationId }: { applicationId: string }) {
+/**
+ * Omit `applicationId` for a conversation about every application. The agent
+ * then names the job it is working on per tool call, and the trace follows it.
+ */
+export function AgentChat({ applicationId }: { applicationId?: string }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,7 +56,7 @@ export function AgentChat({ applicationId }: { applicationId: string }) {
     // Scroll after the question renders, so the user sees it land.
     requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: "smooth" }));
     try {
-      const result = await api.agent.chat(applicationId, trimmed);
+      const result = await api.agent.chat(trimmed, applicationId);
       setTurns((t) =>
         replaceLast(t, {
           question: trimmed,
@@ -74,7 +83,9 @@ export function AgentChat({ applicationId }: { applicationId: string }) {
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4">
       <header className="flex items-baseline justify-between">
-        <h2 className="text-body font-semibold text-foreground">Ask about this application</h2>
+        <h2 className="text-body font-semibold text-foreground">
+          {applicationId ? "Ask about this application" : "Ask about your applications"}
+        </h2>
         <span className="text-caption text-muted-foreground">
           one change per turn · never submits
         </span>
@@ -82,7 +93,7 @@ export function AgentChat({ applicationId }: { applicationId: string }) {
 
       {turns.length === 0 && (
         <div className="flex flex-wrap gap-2">
-          {SUGGESTIONS.map((s) => (
+          {(applicationId ? SUGGESTIONS.one : SUGGESTIONS.all).map((s) => (
             <button
               key={s}
               type="button"
@@ -127,8 +138,8 @@ export function AgentChat({ applicationId }: { applicationId: string }) {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask about this application…"
-          aria-label="Ask about this application"
+          placeholder={applicationId ? "Ask about this application…" : "Ask about your search…"}
+          aria-label={applicationId ? "Ask about this application" : "Ask about your applications"}
           disabled={busy}
           className="flex-1 rounded-full border border-border bg-bg-base px-4 py-2 text-body-sm outline-none focus:border-primary disabled:opacity-60"
         />

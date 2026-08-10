@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Circle, XCircle } from "lucide-react";
+import { AgentChat } from "./agent-chat";
 import { api } from "@/lib/api-client";
 import { subscribeToAgentEvents } from "@/lib/agent-events";
 import type { AttentionItem, AttentionKind } from "@/server/services/attention-service";
@@ -67,6 +68,11 @@ export function ConsoleClient({
   return (
     <div className="space-y-8">
       <QueueBar eligible={eligible} jobs={jobs} />
+
+      {/* Above the inbox: the inbox says what needs you, and this is where you
+          ask why. Scoped to every application — the per-application version
+          lives in the workspace. */}
+      <AgentChat />
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">

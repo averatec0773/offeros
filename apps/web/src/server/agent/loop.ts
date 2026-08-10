@@ -47,6 +47,12 @@ export interface RunTurnArgs {
   ctx: ToolContext;
   question: string;
   /**
+   * Resolve an application the agent named, so a campaign-level conversation
+   * can move between jobs. Absent means the conversation is pinned to one
+   * application and the agent may not wander.
+   */
+  focus?: (applicationId: string) => { applicationId: string; taskId?: string } | null;
+  /**
    * Who the conversation is about, in one line ("Senior Engineer at Acme").
    *
    * Without it the agent asks which job the user means — reasonably, since the
@@ -133,6 +139,30 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       continue;
     }
 
+    // A tool call may name a different application — that is how one
+    // conversation covers a whole campaign. Re-scoping here rather than inside
+    // the tools keeps the ledger honest: `runTool` writes the trace against
+    // ctx.applicationId, so the subject has to move with the call.
+    const named = applicationIdIn(decision.input);
+    let callCtx = args.ctx;
+    if (named && named !== args.ctx.applicationId) {
+      const resolved = args.focus?.(named);
+      if (!resolved) {
+        findings.push(
+          `There is no application with id "${named}". Use list_applications to get real ids.`,
+        );
+        steps.push({
+          tool: tool.id,
+          reason: decision.reason,
+          ok: false,
+          summary: "no such application",
+          acted: false,
+        });
+        continue;
+      }
+      callCtx = { ...args.ctx, ...resolved };
+    }
+
     const acting = actingIds.has(tool.id);
     if (acting && actionsTaken >= maxActions) {
       // Refuse, and say so as a finding rather than an error: the agent can
@@ -152,7 +182,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     }
     const observation = await runTool(
       tool,
-      { ...args.ctx, reason: decision.reason },
+      { ...callCtx, reason: decision.reason },
       decision.input,
     );
     // The budget counts CHANGES, so it is spent after the fact and only when
@@ -181,6 +211,13 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   };
 }
 
+/** An application id the agent put in a tool's input, if it did. */
+function applicationIdIn(input: unknown): string | null {
+  if (typeof input !== "object" || input === null) return null;
+  const value = (input as { applicationId?: unknown }).applicationId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 /**
  * What the model sees.
  *
@@ -197,7 +234,7 @@ function buildContext(
 ): string {
   const scope = subject
     ? `You are looking at one application: ${subject}. Every tool you call is already scoped to it, so "this one" means this application — never ask the user which job they mean.`
-    : "";
+    : `You are looking at ALL of the user's applications. Start with list_applications to get their ids, then pass {"applicationId":"<id>"} to any tool that is about one job. Answer about the whole set unless the user names one.`;
   const menu = `Tools you can use:\n${toolMenu(tools)}`;
   const found =
     findings.length === 0

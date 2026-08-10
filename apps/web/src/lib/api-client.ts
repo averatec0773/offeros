@@ -122,10 +122,11 @@ export const api = {
     inbox: () => request<{ inbox: AttentionItem[]; trace: TraceEntry[] }>(`/agent/inbox`),
     /** One turn of the agent chat. The steps come back with the answer so the
      *  UI can show what was read to produce it. */
-    chat: (applicationId: string, question: string) =>
+    /** Omit applicationId to talk about the whole campaign. */
+    chat: (question: string, applicationId?: string) =>
       request<{ answer: string; steps: AgentStep[]; ranOutOfSteps: boolean }>(
         `/agent/chat`,
-        json("POST", { applicationId, question }),
+        json("POST", { question, ...(applicationId ? { applicationId } : {}) }),
       ),
   },
   queue: {
