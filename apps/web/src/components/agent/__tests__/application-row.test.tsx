@@ -15,7 +15,12 @@ const application: Application = {
 };
 
 describe("ApplicationRow", () => {
-  it("renders the role, company and progress", () => {
+  /**
+   * The row says what happened to the application, not which pipeline step it
+   * stopped at. After a few dozen applications "step 6 of 7" tells you nothing
+   * you can act on; "filled 2/3, 1 needs you" is the thing being remembered.
+   */
+  it("renders the role, company and what the last fill did", () => {
     const task: AgentTask = {
       id: "t1",
       applicationId: "app-1",
@@ -23,14 +28,35 @@ describe("ApplicationRow", () => {
       coverLetterRequirement: "unknown",
       skippedCoverLetter: false,
       step: 6,
-      fieldReports: [],
+      fieldReports: [
+        {
+          fieldId: "a",
+          label: "Name",
+          classifiedType: "fullName",
+          status: "filled",
+          source: "personal",
+          reason: "",
+          outcome: "filled",
+          required: true,
+        },
+        {
+          fieldId: "b",
+          label: "Why us?",
+          classifiedType: "unknown",
+          status: "needs-user",
+          source: "none",
+          reason: "",
+          outcome: "needs-user",
+          required: true,
+        },
+      ],
       createdAt: 1,
       updatedAt: 2,
     };
     render(<ApplicationRow application={application} task={task} />);
+    expect(screen.getByText("Filled 1/2 · 1 need you")).toBeTruthy();
     expect(screen.getByText("GenAI Engineer")).toBeTruthy();
     expect(screen.getByText(/Evolver/)).toBeTruthy();
-    expect(screen.getByText(/6\s*\/\s*7/)).toBeTruthy();
   });
 
   it("surfaces the action-required state", () => {
@@ -48,6 +74,8 @@ describe("ApplicationRow", () => {
     };
     render(<ApplicationRow application={application} task={task} />);
     expect(screen.getByText(/Action Required/i)).toBeTruthy();
+    // The badge must not hide what happened — it answers a different question.
+    expect(screen.getByText("Not started")).toBeTruthy();
   });
 
   it("renders without a task", () => {

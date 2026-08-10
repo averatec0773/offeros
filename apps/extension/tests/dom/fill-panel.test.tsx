@@ -1529,7 +1529,11 @@ describe("FillPanel", () => {
         await userEvent.click(fillBtn);
       });
 
-      expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume");
+      // The fill is asynchronous end to end — the scan itself now awaits the
+      // page's field metadata — so this waits for the effect rather than
+      // assuming it has already happened. Asserting synchronously was a latent
+      // flake that only showed up under load.
+      await waitFor(() => expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume"));
       expect(api.fetchResumeFile).not.toHaveBeenCalled();
       expect(attachFile).toHaveBeenCalledWith("r1", {
         fileName: "Jordan_Rivera_Resume.pdf",
@@ -1745,7 +1749,11 @@ describe("FillPanel", () => {
       });
 
       // résumé attached (tailored), but the cover-letter route/attach never fired.
-      expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume");
+      // The fill is asynchronous end to end — the scan itself now awaits the
+      // page's field metadata — so this waits for the effect rather than
+      // assuming it has already happened. Asserting synchronously was a latent
+      // flake that only showed up under load.
+      await waitFor(() => expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume"));
       expect(api.fetchArtifactPdf).not.toHaveBeenCalledWith("t1", "cover-letter");
       expect(attachFile).toHaveBeenCalledTimes(1);
     });

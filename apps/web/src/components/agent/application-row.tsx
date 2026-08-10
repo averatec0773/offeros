@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { PIPELINE_STEPS, type Application, type AgentTask, type FitAnalysis } from "@offeros/core";
+import {
+  describeTracking,
+  trackApplication,
+  type Application,
+  type AgentTask,
+  type FitAnalysis,
+} from "@offeros/core";
 import { MatchScoreRing } from "./match-score-ring";
 
 function initials(company: string): string {
@@ -46,6 +52,16 @@ export function ApplicationRow({
 }) {
   const actionRequired = task?.applicationInfo?.status === 2;
   const { jobInfo } = application;
+  // What actually happened to this application, rather than which pipeline
+  // step it stopped at. Applying to a lot of jobs makes "step 3 of 7"
+  // meaningless three days later; "filled 23/41, 8 need you" is the thing
+  // being remembered.
+  const tracking = trackApplication({
+    status: application.status,
+    ...(application.appliedAt ? { appliedAt: application.appliedAt } : {}),
+    updatedAt: task?.updatedAt ?? application.updatedAt,
+    ...(task?.fieldReports ? { fieldReports: task.fieldReports } : {}),
+  });
 
   return (
     <Link
@@ -65,14 +81,22 @@ export function ApplicationRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-4">
-        {actionRequired ? (
+        {/* Two different questions, so two different things on the row. The
+            badge answers "does this need me"; the line answers "what happened
+            here" — which is the one you cannot reconstruct three days and forty
+            applications later. Showing only the badge, as this did, left the
+            second question unanswerable without opening the job. */}
+        <span
+          className={`text-caption ${
+            tracking.stage === "submitted" ? "text-success" : "text-muted-foreground"
+          }`}
+        >
+          {describeTracking(tracking)}
+        </span>
+        {actionRequired && (
           <span className="flex items-center gap-1.5 rounded-full bg-warn-bg px-3 py-1 text-caption font-semibold">
             <span className="size-1.5 rounded-full bg-warn" />
             Action Required
-          </span>
-        ) : (
-          <span className="text-caption text-muted-foreground">
-            {task ? `${task.step} / ${PIPELINE_STEPS.length}` : "Not started"}
           </span>
         )}
         {fit ? <FitBadge fit={fit} /> : null}

@@ -9,3 +9,6 @@ export * from "./template";
 export * from "./fit";
 export * from "./resume";
 export * from "./application-event";
+
+export type { ApplicationTracking, TrackingStage, TrackingInput } from "./tracking";
+export { trackApplication, describeTracking } from "./tracking";

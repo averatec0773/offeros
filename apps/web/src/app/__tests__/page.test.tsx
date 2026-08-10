@@ -49,7 +49,7 @@ describe("HomePage", () => {
     expect(screen.queryByText("Set up your profile first")).toBeNull();
   });
 
-  it("splits applications into in-progress/finished and wires each row's task step + fit score", () => {
+  it("splits applications into in-progress/finished and gives each row its own tracking + fit", () => {
     const db = getDb();
     const active = createApplication(db, {
       jobInfo: { jobId: "j1", jobTitle: "GenAI Engineer", companyName: "Evolver" },
@@ -81,7 +81,8 @@ describe("HomePage", () => {
 
     const inProgress = screen.getByText("In progress").closest("section")!;
     expect(inProgress.textContent).toContain("GenAI Engineer");
-    expect(inProgress.textContent).toContain("3 / 7");
+    // The row reports what the fill did, not the pipeline step it reached.
+    expect(inProgress.textContent).toContain("Not started");
     expect(inProgress.querySelector('[data-testid="fit-badge"]')?.textContent).toBe("82%");
 
     const finishedSection = screen.getByText("Finished").closest("section")!;
