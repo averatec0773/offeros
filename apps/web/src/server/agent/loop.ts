@@ -35,6 +35,11 @@ export interface AgentStep {
   summary: string;
   /** True when this step changed something rather than looked at it. */
   acted?: boolean;
+  /** Which application the step ran against — what lets the UI link a
+   *  produced artifact ("tailored résumé v2") to the workspace it lives in.
+   *  A step whose output cannot be found is an output that may as well not
+   *  exist; this field is the fix for exactly that report. */
+  applicationId?: string;
 }
 
 export interface TurnResult {
@@ -212,6 +217,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       ok: observation.ok,
       summary: observation.summary,
       acted: acting && observation.ok,
+      applicationId: callCtx.applicationId,
     });
     findings.push(renderObservation(tool.id, observation));
   }

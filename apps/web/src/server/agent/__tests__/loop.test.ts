@@ -64,6 +64,9 @@ describe("runTurn", () => {
         ok: true,
         summary: "2 applications",
         acted: false,
+        // Steps carry the application they ran against, so the UI can link a
+        // produced artifact to the workspace it lives in.
+        applicationId: "app-1",
       },
     ]);
   });

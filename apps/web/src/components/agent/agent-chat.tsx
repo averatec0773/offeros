@@ -45,7 +45,17 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  /** Scroll the MESSAGE LIST, never the page. The old scrollIntoView walked
+   *  the whole viewport down to the chat after every answer — on a page with
+   *  content above the chat, that read as the app "jumping". */
+  const scrollList = (smooth = true) => {
+    requestAnimationFrame(() => {
+      const el = listRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    });
+  };
 
   // The thread is server-side and shared by scope (this application, or the
   // global console thread) — load it on mount so the conversation survives
@@ -71,6 +81,7 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
           }
         }
         setTurns((current) => (current.length === 0 ? loaded : current));
+        scrollList(false); // land at the latest message, no animation on mount
       } catch {
         // No history is not an error worth surfacing — the chat just starts fresh.
       }
@@ -87,7 +98,7 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
     setBusy(true);
     setTurns((t) => [...t, { question: trimmed }]);
     // Scroll after the question renders, so the user sees it land.
-    requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: "smooth" }));
+    scrollList();
     try {
       const result = await api.agent.chat(trimmed, applicationId);
       setTurns((t) =>
@@ -109,7 +120,7 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
       setTurns((t) => replaceLast(t, { question: trimmed, error }));
     } finally {
       setBusy(false);
-      requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: "smooth" }));
+      scrollList();
     }
   }
 
@@ -120,7 +131,7 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
           {applicationId ? "Ask about this application" : "Ask about your applications"}
         </h2>
         <span className="text-caption text-muted-foreground">
-          one change per turn · never submits
+          two changes per turn · never submits
         </span>
       </header>
 
@@ -140,26 +151,32 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
         </div>
       )}
 
-      <ol className="flex flex-col gap-4">
-        {turns.map((turn, i) => (
-          <li key={i} className="flex flex-col gap-2">
-            <p className="self-end rounded-2xl bg-primary px-3 py-2 text-body-sm text-primary-foreground">
-              {turn.question}
-            </p>
-            {turn.steps && turn.steps.length > 0 && <StepList steps={turn.steps} />}
-            {turn.answer && (
-              <p className="whitespace-pre-wrap text-body-sm text-foreground">{turn.answer}</p>
-            )}
-            {turn.incomplete && (
-              <p className="text-caption text-warning">
-                Stopped at the step limit — ask something narrower and it will get further.
+      {/* The list scrolls INSIDE this box; the page never moves. Bounded so
+          the composer stays reachable however long the thread grows. */}
+      <div ref={listRef} className="max-h-[420px] overflow-y-auto">
+        <ol className="flex flex-col gap-4">
+          {turns.map((turn, i) => (
+            <li key={i} className="flex flex-col gap-2">
+              <p className="self-end rounded-2xl bg-primary px-3 py-2 text-body-sm text-primary-foreground">
+                {turn.question}
               </p>
-            )}
-            {turn.error && <p className="text-caption text-destructive">{turn.error}</p>}
-            {!turn.answer && !turn.error && <Thinking />}
-          </li>
-        ))}
-      </ol>
+              {turn.steps && turn.steps.length > 0 && (
+                <StepList steps={turn.steps} fallbackApplicationId={applicationId} />
+              )}
+              {turn.answer && (
+                <p className="whitespace-pre-wrap text-body-sm text-foreground">{turn.answer}</p>
+              )}
+              {turn.incomplete && (
+                <p className="text-caption text-warning">
+                  Stopped at the step limit — ask something narrower and it will get further.
+                </p>
+              )}
+              {turn.error && <p className="text-caption text-destructive">{turn.error}</p>}
+              {!turn.answer && !turn.error && <Thinking />}
+            </li>
+          ))}
+        </ol>
+      </div>
 
       <form
         onSubmit={(e) => {
@@ -184,7 +201,6 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
           {busy ? "Thinking…" : "Ask"}
         </button>
       </form>
-      <div ref={endRef} />
     </section>
   );
 }
@@ -196,27 +212,50 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
  * step stays on the list: "I looked and there was nothing there" is information,
  * and hiding it would make the answer look better-founded than it is.
  */
-function StepList({ steps }: { steps: AgentStep[] }) {
+/** Steps whose output lives in a workspace — a produced artifact the user
+ *  will want to OPEN, not just hear about. The link is the fix for a real
+ *  report: "the agent tailored my résumé and I had no idea where it went". */
+const ARTIFACT_STEPS = new Set(["tailor_resume", "generate_cover_letter"]);
+
+function StepList({
+  steps,
+  fallbackApplicationId,
+}: {
+  steps: AgentStep[];
+  fallbackApplicationId?: string;
+}) {
   return (
     <ul className="flex flex-col gap-1 rounded-xl bg-bg-base p-2.5">
-      {steps.map((step, i) => (
-        <li key={i} className="flex items-baseline gap-2 text-caption">
-          <span aria-hidden className={step.ok ? "text-success" : "text-warning"}>
-            {step.ok ? "✓" : "!"}
-          </span>
-          {/* A step that changed something is not the same as a step that
-              looked at something, and the difference should not need reading
-              the tool name to spot. */}
-          {step.acted && (
-            <span className="rounded-full bg-primary/10 px-1.5 text-micro font-semibold text-primary">
-              did
+      {steps.map((step, i) => {
+        const workspaceId = step.applicationId ?? fallbackApplicationId;
+        const linkToWorkspace = step.ok && ARTIFACT_STEPS.has(step.tool) && workspaceId;
+        return (
+          <li key={i} className="flex items-baseline gap-2 text-caption">
+            <span aria-hidden className={step.ok ? "text-success" : "text-warning"}>
+              {step.ok ? "✓" : "!"}
             </span>
-          )}
-          <span className="font-medium text-text-secondary">{step.tool}</span>
-          <span className="text-muted-foreground">— {step.summary}</span>
-          {step.reason && <span className="text-muted-foreground/70">({step.reason})</span>}
-        </li>
-      ))}
+            {/* A step that changed something is not the same as a step that
+                looked at something, and the difference should not need reading
+                the tool name to spot. */}
+            {step.acted && (
+              <span className="rounded-full bg-primary/10 px-1.5 text-micro font-semibold text-primary">
+                did
+              </span>
+            )}
+            <span className="font-medium text-text-secondary">{step.tool}</span>
+            <span className="text-muted-foreground">— {step.summary}</span>
+            {linkToWorkspace && (
+              <a
+                href={`/applications/${workspaceId}`}
+                className="shrink-0 font-semibold text-primary hover:underline"
+              >
+                view in workspace →
+              </a>
+            )}
+            {step.reason && <span className="text-muted-foreground/70">({step.reason})</span>}
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -8,6 +8,7 @@ import { computeFillStats } from "@offeros/autofill";
 import { FillQuality } from "@/components/agent/fill-quality";
 import { FormMemoryCard } from "@/components/agent/form-memory-card";
 import { formMemorySummary } from "@/server/repositories/form-memory-repo";
+import { DashboardPeek } from "@/components/agent/dashboard-peek";
 import { ConsoleClient } from "@/components/agent/console-client";
 
 export const dynamic = "force-dynamic";
@@ -28,21 +29,26 @@ export default function AgentConsolePage() {
     })),
   );
 
+  const memory = formMemorySummary(db);
+
   return (
     <main className="mx-auto w-full max-w-[860px] px-6 py-10">
-      <header className="mb-8">
-        <h1 className="text-heading font-semibold">Agent</h1>
-        <span className="text-body text-muted-foreground">
-          {active.length} in progress · {applications.length} tracked
-        </span>
+      {/* The chat is what this page is FOR, so the analytics fold into a chip
+          up here — one line, click for the full cards. */}
+      <header className="mb-8 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-heading font-semibold">Agent</h1>
+          <span className="text-body text-muted-foreground">
+            {active.length} in progress · {applications.length} tracked
+          </span>
+        </div>
+        <DashboardPeek
+          line={`${stats.coverage}% fill · ${memory.knownQuestions} questions · ${memory.totalIncidents} incidents`}
+        >
+          <FillQuality stats={stats} />
+          <FormMemoryCard memory={memory} fills={stats.applications} />
+        </DashboardPeek>
       </header>
-
-      {/* Before the queue and the inbox: those say what to do next, this says
-          how well the last hundred went. */}
-      <div className="mb-6 space-y-4">
-        <FillQuality stats={stats} />
-        <FormMemoryCard memory={formMemorySummary(db)} fills={stats.applications} />
-      </div>
 
       <ConsoleClient
         eligible={active

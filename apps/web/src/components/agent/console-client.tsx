@@ -67,12 +67,13 @@ export function ConsoleClient({
 
   return (
     <div className="space-y-8">
-      <QueueBar eligible={eligible} jobs={jobs} />
-
-      {/* Above the inbox: the inbox says what needs you, and this is where you
-          ask why. Scoped to every application — the per-application version
-          lives in the workspace. */}
+      {/* First thing on the page: the conversation IS the console. The queue
+          bar and inbox below say what's happening; this is where you ask why
+          and tell the agent what to do about it. Scoped to every application —
+          the per-application thread lives in the workspace. */}
       <AgentChat />
+
+      <QueueBar eligible={eligible} jobs={jobs} />
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
