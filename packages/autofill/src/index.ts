@@ -46,3 +46,6 @@ export { diagnoseFill } from "./diagnose";
 
 export type { WizardState, WizardStep } from "./wizard";
 export { readWizardState, canAdvance, describeWizard } from "./wizard";
+
+export type { FillStats, CauseCount, AtsBreakdown, ApplicationFill } from "./fill-stats";
+export { computeFillStats, atsFromUrl } from "./fill-stats";

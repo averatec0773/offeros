@@ -78,6 +78,7 @@ apps/extension/test-fixtures/
 docs/
 conventions/
 ROADMAP.md
+DEVLOG.md
 
 # Local form-capture tooling + its test (not part of the published repo) ------
 scripts/capture-form.mjs

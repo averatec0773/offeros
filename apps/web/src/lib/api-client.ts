@@ -19,6 +19,7 @@ import type { ParsedResume } from "@offeros/llm";
 import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
 import type { QueueStatus } from "@/server/services/queue-service";
 import type { AgentStep } from "@/server/agent/loop";
+import type { FillStats } from "@offeros/autofill";
 import type { TraceEntry } from "@/server/agent/types";
 import type { AttentionItem } from "@/server/services/attention-service";
 import type { LineDiff } from "./diff";
@@ -120,6 +121,8 @@ export const api = {
   },
   agent: {
     inbox: () => request<{ inbox: AttentionItem[]; trace: TraceEntry[] }>(`/agent/inbox`),
+    /** Fill quality across every application, computed from the field reports. */
+    stats: () => request<FillStats>(`/agent/stats`),
     /** One turn of the agent chat. The steps come back with the answer so the
      *  UI can show what was read to produce it. */
     /** Omit applicationId to talk about the whole campaign. */

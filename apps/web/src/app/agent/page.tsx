@@ -4,6 +4,8 @@ import { listAgentTasks } from "@/server/repositories/agent-task-repo";
 import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
 import { listRecentTrace } from "@/server/repositories/agent-trace-repo";
 import { buildInbox } from "@/server/services/attention-service";
+import { computeFillStats } from "@offeros/autofill";
+import { FillQuality } from "@/components/agent/fill-quality";
 import { ConsoleClient } from "@/components/agent/console-client";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,19 @@ export default function AgentConsolePage() {
           {active.length} in progress · {applications.length} tracked
         </span>
       </header>
+
+      {/* Before the queue and the inbox: those say what to do next, this says
+          how well the last hundred went. */}
+      <div className="mb-6">
+        <FillQuality
+          stats={computeFillStats(
+            applications.map((a) => ({
+              applyLink: a.jobInfo.applyLink,
+              fields: taskByApplication.get(a.id)?.fieldReports ?? [],
+            })),
+          )}
+        />
+      </div>
 
       <ConsoleClient
         eligible={active

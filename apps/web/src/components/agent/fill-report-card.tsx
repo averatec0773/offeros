@@ -90,7 +90,7 @@ function CauseBlock({ group }: { group: CauseGroup }) {
     <div className={`mt-3 rounded-xl p-3 ${expected ? "bg-bg-base" : "bg-warn-bg"}`}>
       <h4 className="flex items-center gap-1.5 text-caption font-semibold text-foreground">
         <Icon className={`size-4 shrink-0 ${expected ? "text-muted-foreground" : "text-warn"}`} />
-        {HEADINGS[group.cause]} ({group.fields.length}
+        {HEADINGS[group.cause]} ({group.count}
         {group.requiredCount > 0 && `, ${group.requiredCount} required`})
       </h4>
       <p className="mt-1 text-caption text-foreground/75">{group.explanation}</p>
@@ -103,6 +103,11 @@ function CauseBlock({ group }: { group: CauseGroup }) {
             {field}
           </li>
         ))}
+        {group.count > group.fields.length && (
+          <li className="px-1 py-0.5 text-caption text-muted-foreground">
+            +{group.count - group.fields.length} more
+          </li>
+        )}
       </ul>
     </div>
   );

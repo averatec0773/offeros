@@ -52,6 +52,14 @@ export interface CauseGroup {
   cause: FailureCause;
   /** One line the UI or an agent can use verbatim. */
   explanation: string;
+  /**
+   * How many fields share this cause. Separate from `fields` because that list
+   * is capped for readability — reading its length as the count under-reports,
+   * silently, exactly the way this module warns against elsewhere. Real data
+   * caught it: eighteen unrecognised fields were reported as eight.
+   */
+  count: number;
+  /** Up to NAMES_PER_CAUSE names, for showing. Not for counting. */
   fields: string[];
   requiredCount: number;
 }
@@ -138,6 +146,7 @@ export function diagnoseFill(fields: DiagnosableField[]): FillDiagnosis {
     return {
       cause,
       explanation: EXPLANATIONS[cause],
+      count: group.length,
       // A field with no label is still a field; naming it by nothing would
       // silently shorten the list and make the count disagree.
       fields: group.slice(0, NAMES_PER_CAUSE).map((f) => f.label || "(unlabelled field)"),
