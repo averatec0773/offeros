@@ -44,15 +44,39 @@ export interface ApplicationLine {
   taskStatus?: string;
 }
 
-/** Everything in flight, one line each. The agent's starting picture. */
-export const listApplicationsTool: Tool<void, { applications: ApplicationLine[] }> = {
+/**
+ * Everything in flight — as COUNTS first, rows second.
+ *
+ * This tool used to hand the model every application as a row, and the model
+ * dutifully echoed the rows back: a real "summarise my applications" turn
+ * produced nineteen bullet lines because nineteen lines is what the tool
+ * said. The synthesis a summary needs (totals, the split by state) is
+ * arithmetic, so it is computed HERE, deterministically — the model receives
+ * the summary material, plus the most recent ROW_BUDGET rows for naming
+ * individual jobs. `query` narrows by company/title when the user asked
+ * about one job by name.
+ */
+export const listApplicationsTool: Tool<
+  { query?: string } | void,
+  { total: number; byStatus: Record<string, number>; applications: ApplicationLine[] }
+> = {
   id: "list_applications",
   description:
-    "List the user's applications with their current pipeline step. Start here when the question is about more than one job, or when you do not know which application is meant.",
-  run: async (ctx) => {
-    const apps = listApplications(ctx.db);
+    'List the user\'s applications: totals and a split by status, plus the most recent rows (capped). Pass {"query":"<company or title>"} to find a specific job\'s id by name. Start here when the question is about more than one job, or when you do not know which application is meant.',
+  parse: (input) => {
+    const query = (input as Record<string, unknown> | null)?.query;
+    return typeof query === "string" && query.trim() !== "" ? { query: query.trim() } : undefined;
+  },
+  run: async (ctx, input) => {
     const byApp = newestTaskByApplication(listAgentTasks(ctx.db));
-    const applications = apps.map((a): ApplicationLine => {
+    const needle = input?.query?.toLowerCase();
+    const apps = listApplications(ctx.db).filter(
+      (a) =>
+        !needle ||
+        a.jobInfo.companyName.toLowerCase().includes(needle) ||
+        a.jobInfo.jobTitle.toLowerCase().includes(needle),
+    );
+    const lines = apps.map((a): ApplicationLine => {
       const task = byApp.get(a.id);
       return {
         id: a.id,
@@ -62,10 +86,35 @@ export const listApplicationsTool: Tool<void, { applications: ApplicationLine[] 
         ...(task ? { step: PIPELINE_STEPS[task.step]?.key, taskStatus: task.status } : {}),
       };
     });
+    // The split the summary answer is made of: application status, refined by
+    // where the task is parked when the application is still moving.
+    const byStatus: Record<string, number> = {};
+    for (const line of lines) {
+      const key =
+        line.status === "saved" || line.status === "applying"
+          ? `${line.status}${line.step ? ` at ${line.step}` : ""}`
+          : line.status;
+      byStatus[key] = (byStatus[key] ?? 0) + 1;
+    }
+    const split = Object.entries(byStatus)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${n} ${k}`)
+      .join(", ");
     return {
       ok: true,
-      summary: `${applications.length} applications`,
-      result: { applications },
+      summary:
+        lines.length === 0
+          ? needle
+            ? `no application matches "${input?.query}"`
+            : "no applications"
+          : `${lines.length} application${lines.length === 1 ? "" : "s"}${split ? ` — ${split}` : ""}`,
+      result: {
+        total: lines.length,
+        byStatus,
+        // Most recent first is how listApplications already orders; the cap
+        // keeps one runaway list from eating the reasoning window.
+        applications: lines.slice(0, ROW_BUDGET),
+      },
     };
   },
   verify: async () => null,

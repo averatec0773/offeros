@@ -133,6 +133,12 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   // into the prompt each time rather than kept as chat history: the model needs
   // the findings, not a transcript of its own earlier phrasing.
   const findings: string[] = [];
+  // Calls already made this turn, by tool + exact input. A real transcript
+  // showed the same report being read FOUR times with reworded reasons while
+  // the answer sat in step two — the model treats an unused result as a
+  // failed call and retries. Refusing the repeat (and saying why) snaps it
+  // out after one attempt instead of three.
+  const callsMade = new Set<string>();
 
   for (let step = 0; step < maxSteps; step++) {
     const decision: Decision = await chooseNext({
@@ -183,6 +189,23 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       }
       callCtx = { ...args.ctx, ...resolved };
     }
+
+    const callKey = `${tool.id}:${JSON.stringify(decision.input ?? null)}`;
+    if (callsMade.has(callKey)) {
+      findings.push(
+        `You already called ${tool.id} with exactly this input — its result is in your findings above. Use it to answer, or try a genuinely different call.`,
+      );
+      steps.push({
+        tool: tool.id,
+        reason: decision.reason,
+        ok: false,
+        summary: "duplicate call — result already above",
+        acted: false,
+        applicationId: callCtx.applicationId,
+      });
+      continue;
+    }
+    callsMade.add(callKey);
 
     const acting = actingIds.has(tool.id);
     if (acting && actionsTaken >= maxActions) {

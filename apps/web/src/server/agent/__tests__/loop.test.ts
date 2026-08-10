@@ -378,3 +378,53 @@ describe("parseDecision", () => {
     expect((parseDecision("") as { text: string }).text).not.toBe("");
   });
 });
+
+describe("duplicate-call guard", () => {
+  it("refuses an identical repeat and tells the agent its result is already there", async () => {
+    // The real transcript this pins: the same report read four times with
+    // reworded reasons while the answer sat unused in step two.
+    const tools = { look: tool("look", "the answer") };
+    const chooseNext = script(
+      { kind: "use-tool", tool: "look", reason: "first read" },
+      { kind: "use-tool", tool: "look", reason: "read it again to be sure" },
+      { kind: "answer", text: "fine, using what I have" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "what is it",
+      runLlm: noLlm,
+      chooseNext,
+      tools,
+      actingToolIds: new Set(),
+    });
+    expect(out.steps[0]).toMatchObject({ tool: "look", ok: true });
+    expect(out.steps[1]).toMatchObject({ tool: "look", ok: false });
+    expect(out.steps[1]!.summary).toContain("duplicate call");
+    expect(chooseNext.mock.calls.at(-1)![0].context).toContain("already called look");
+  });
+
+  it("the same tool with DIFFERENT input is not a duplicate", async () => {
+    const byInput: Tool<{ q: string }, unknown> = {
+      id: "look",
+      description: "look",
+      parse: (i) => i as { q: string },
+      run: async (_c, i) => ({ ok: true, summary: `saw ${i.q}` }),
+      verify: async () => null,
+    };
+    const chooseNext = script(
+      { kind: "use-tool", tool: "look", reason: "a", input: { q: "one" } },
+      { kind: "use-tool", tool: "look", reason: "b", input: { q: "two" } },
+      { kind: "answer", text: "both seen" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "compare",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { look: byInput as never },
+      actingToolIds: new Set(),
+    });
+    expect(out.steps[0]).toMatchObject({ ok: true, summary: "saw one" });
+    expect(out.steps[1]).toMatchObject({ ok: true, summary: "saw two" });
+  });
+});

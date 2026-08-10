@@ -15,6 +15,7 @@ import {
   updateApplicationTool,
   updateProfileTool,
 } from "../write-tools";
+import { listApplicationsTool } from "../read-tools";
 import { appendChatMessage, listRecentMessages, listThread } from "../../repositories/chat-repo";
 
 let db: Db;
@@ -133,5 +134,33 @@ describe("chat threads", () => {
 
     expect(listThread(db, applicationId)).toHaveLength(12);
     expect(listThread(db, "global")).toHaveLength(1); // scopes never bleed
+  });
+});
+
+describe("list_applications aggregation (the nineteen-bullet-lines fix)", () => {
+  it("returns counts + capped rows, and the summary carries the split", async () => {
+    // 14 more applications on top of the fixture's one → 15 total, rows capped at 12.
+    for (let i = 0; i < 14; i++) {
+      createApplication(db, {
+        jobInfo: { jobId: `j${i}`, jobTitle: `Role ${i}`, companyName: `Co${i}` },
+      });
+    }
+    const out = await runTool(listApplicationsTool, ctx(), undefined);
+    expect(out.ok).toBe(true);
+    const result = out.result as {
+      total: number;
+      byStatus: Record<string, number>;
+      applications: unknown[];
+    };
+    expect(result.total).toBe(15);
+    expect(result.applications.length).toBeLessThanOrEqual(12);
+    expect(Object.values(result.byStatus).reduce((a, b) => a + b, 0)).toBe(15);
+    expect(out.summary).toContain("15 applications —");
+  });
+
+  it("query narrows to a named job", async () => {
+    const out = await runTool(listApplicationsTool, ctx(), { query: "acme" });
+    const result = out.result as { total: number };
+    expect(result.total).toBe(1);
   });
 });
