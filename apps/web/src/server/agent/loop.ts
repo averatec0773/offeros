@@ -222,8 +222,22 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     findings.push(renderObservation(tool.id, observation));
   }
 
-  // Out of steps. Say so plainly and hand back what was gathered; a loop that
-  // silently truncates is indistinguishable from one that finished.
+  // Out of steps. This used to return a raw English tool-dump ("here is what
+  // I found so far: - list_applications: 19 applications"), which read as a
+  // crash to the user — observed on a real thread where the loop had ALREADY
+  // read the answer (15/17 fields) and then threw it on the floor. One more
+  // model call, tools off, synthesizes a real answer from the findings; the
+  // ranOutOfSteps flag still tells the UI the loop was truncated.
+  try {
+    const answer = await args.runLlm({
+      system:
+        "You are the OfferOS agent. Your research budget for this question is spent. Answer the user's question NOW using only the findings below — synthesized, concrete, in the user's language. If the findings genuinely cannot answer it, say specifically what is known and what one thing you would look at next.",
+      userPrompt: `Findings, in the order gathered:\n${findings.join("\n\n")}\n\nThe user asked:\n${args.question}`,
+    });
+    if (answer.trim() !== "") return { answer: answer.trim(), steps, ranOutOfSteps: true };
+  } catch {
+    // The synthesis call failing must not lose what was gathered.
+  }
   return {
     answer:
       "I ran out of steps before I could answer that. Here is what I found so far:\n" +

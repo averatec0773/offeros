@@ -217,6 +217,10 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
  *  report: "the agent tailored my résumé and I had no idea where it went". */
 const ARTIFACT_STEPS = new Set(["tailor_resume", "generate_cover_letter"]);
 
+/** Collapse the tool trail once it is longer than this — one glance says
+ *  "the agent worked", the disclosure says exactly what it did. */
+const COLLAPSE_FROM = 3;
+
 function StepList({
   steps,
   fallbackApplicationId,
@@ -224,8 +228,40 @@ function StepList({
   steps: AgentStep[];
   fallbackApplicationId?: string;
 }) {
+  const [open, setOpen] = useState(steps.length < COLLAPSE_FROM);
+  const did = steps.filter((s) => s.acted).length;
+  const failed = steps.filter((s) => !s.ok).length;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-expanded={false}
+        className="flex w-fit items-center gap-1.5 rounded-xl bg-bg-base px-2.5 py-1.5 text-caption text-muted-foreground transition-colors hover:bg-muted"
+      >
+        <span aria-hidden>▸</span>
+        {steps.length} steps
+        {did > 0 && <span className="font-semibold text-primary">· {did} did</span>}
+        {failed > 0 && <span className="text-warning">· {failed} failed</span>}
+      </button>
+    );
+  }
+
   return (
     <ul className="flex flex-col gap-1 rounded-xl bg-bg-base p-2.5">
+      {steps.length >= COLLAPSE_FROM && (
+        <li>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-expanded={true}
+            className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground"
+          >
+            <span aria-hidden>▾</span> hide steps
+          </button>
+        </li>
+      )}
       {steps.map((step, i) => {
         const workspaceId = step.applicationId ?? fallbackApplicationId;
         const linkToWorkspace = step.ok && ARTIFACT_STEPS.has(step.tool) && workspaceId;
