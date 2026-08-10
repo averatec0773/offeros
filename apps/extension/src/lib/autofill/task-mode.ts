@@ -66,8 +66,18 @@ function tenantOf(url: string): string | null {
     const u = new URL(url);
     const host = u.hostname.toLowerCase();
     if (!MULTI_TENANT_HOSTS.has(host)) return host;
-    const slug = u.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? "";
-    return slug ? `${host}/${slug}` : host;
+    const first = u.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? "";
+    // Greenhouse embed routes (/embed/job_app?for=<org>&token=<id>) carry the
+    // company in the QUERY, and their first path segment — "embed" — is shared
+    // by every company on the host. Ten live fills proved what that does: any
+    // old embed tab's panel tenant-matched any new embed ticket and claimed it
+    // out from under the tab it was bound to. The company slug for these URLs
+    // is `for=`, and an embed URL without one identifies nobody.
+    if (first === "embed") {
+      const org = u.searchParams.get("for")?.toLowerCase() ?? "";
+      return org ? `${host}/${org}` : null;
+    }
+    return first ? `${host}/${first}` : host;
   } catch {
     return null;
   }

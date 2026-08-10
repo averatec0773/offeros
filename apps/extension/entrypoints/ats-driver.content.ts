@@ -7,6 +7,7 @@ import {
   isReadMetaMsg,
 } from "../src/lib/autofill/combobox-protocol";
 import { annotateFieldMeta } from "../src/lib/autofill/read-field-meta";
+import { verifyCommitted } from "../src/lib/autofill/select-commit";
 import { matchOptionValue, type SelectOption } from "@offeros/autofill";
 import { fillSkills } from "../src/lib/autofill/skills-fill";
 
@@ -21,36 +22,24 @@ interface SelectLike {
   props?: { options?: unknown };
 }
 
-function fiberSelect(input: HTMLInputElement, value: string): boolean {
+// Returns the option that was selected (so the caller can verify against its
+// label — the widget may render it differently from the wanted value), or
+// null when no react-select fiber or no matching option was found.
+function fiberSelect(input: HTMLInputElement, value: string): SelectOption | null {
   const key = Object.keys(input).find((k) => k.startsWith("__reactFiber$"));
-  if (!key) return false;
+  if (!key) return null;
   let fiber = (input as unknown as Record<string, FiberNode | undefined>)[key] ?? null;
   for (let hops = 0; fiber && hops < 40; hops++) {
     const sn = fiber.stateNode as SelectLike | null;
     if (sn && typeof sn.selectOption === "function" && Array.isArray(sn.props?.options)) {
       const opt = matchOptionValue(sn.props.options as SelectOption[], value);
-      if (!opt) return false;
+      if (!opt) return null;
       sn.selectOption(opt);
-      return true;
+      return opt;
     }
     fiber = fiber.return;
   }
-  return false;
-}
-
-// After a select, react-select renders the choice into a *-single-value node.
-// strict=true (DOM fallback) requires seeing it; strict=false (fiber path)
-// tolerates non-react-select widgets that lack the node.
-function verifyCommitted(input: HTMLInputElement, value: string, strict: boolean): boolean {
-  const scope =
-    input.closest('[class*="control"]')?.parentElement ?? input.parentElement ?? document.body;
-  const single = scope.querySelector('[class*="single-value"], [class*="singleValue"]');
-  if (!single) return !strict;
-  const shown = (single.textContent ?? "").trim().toLowerCase();
-  return (
-    shown !== "" &&
-    (shown.includes(value.trim().toLowerCase()) || value.trim().toLowerCase().includes(shown))
-  );
+  return null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -78,7 +67,7 @@ async function domFallback(input: HTMLInputElement, value: string): Promise<bool
       hit.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
       hit.click();
       await sleep(200);
-      return verifyCommitted(input, value, true);
+      return verifyCommitted(input, value, true, hit.textContent ?? undefined);
     }
   }
   return false;
@@ -87,9 +76,10 @@ async function domFallback(input: HTMLInputElement, value: string): Promise<bool
 async function driveCombobox(fieldId: string, value: string): Promise<boolean> {
   const el = document.querySelector<HTMLElement>(`[data-offeros-id="${CSS.escape(fieldId)}"]`);
   if (!(el instanceof HTMLInputElement)) return false;
-  if (fiberSelect(el, value)) {
+  const chosen = fiberSelect(el, value);
+  if (chosen) {
     await sleep(150);
-    return verifyCommitted(el, value, false);
+    return verifyCommitted(el, value, false, String(chosen.label ?? chosen.value ?? ""));
   }
   return domFallback(el, value);
 }

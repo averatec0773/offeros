@@ -64,6 +64,39 @@ describe("matchHandoff", () => {
     expect(matchHandoff(tickets, page, jobIdFromUrl)?.id).toBe("hB");
   });
 
+  it("greenhouse embed URLs are tenanted by ?for=, never by the shared /embed path", () => {
+    // The wave-1 steal: every embed posting shares path segment "embed", so a
+    // Trillium tab's panel tenant-matched an XPENG ticket and claimed it. The
+    // company lives in ?for=; two different orgs must never tenant-match.
+    const tickets = [
+      ticket({
+        id: "hXpeng",
+        applyLink:
+          "https://job-boards.greenhouse.io/embed/job_app?for=xpengmotors&token=8680036002",
+      }),
+    ];
+    const otherOrgPage =
+      "https://job-boards.greenhouse.io/embed/job_app?for=trillium&token=5207089007";
+    expect(matchHandoff(tickets, otherOrgPage, jobIdFromUrl)).toBeNull();
+
+    // The RIGHT tab still matches — by exact token id first, and the same-org
+    // tenant fallback also holds when ids are absent.
+    const sameOrgPage =
+      "https://job-boards.greenhouse.io/embed/job_app?for=xpengmotors&token=8680036002";
+    expect(matchHandoff(tickets, sameOrgPage, jobIdFromUrl)?.id).toBe("hXpeng");
+  });
+
+  it("an embed URL with no ?for= identifies nobody — no tenant fallback at all", () => {
+    const tickets = [
+      ticket({
+        id: "h1",
+        applyLink: "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1",
+      }),
+    ];
+    const anonymousEmbed = "https://job-boards.greenhouse.io/embed/job_app";
+    expect(matchHandoff(tickets, anonymousEmbed, jobIdFromUrl)).toBeNull();
+  });
+
   it("never claims a ticket for another tenant on a multi-tenant board host", () => {
     // Real incident: a pending ticket for another company's Ashby posting was
     // claimed on jobs.ashbyhq.com/<other-company> because bare hostnames match.
