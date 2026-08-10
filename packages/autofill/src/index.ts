@@ -49,3 +49,5 @@ export { readWizardState, canAdvance, describeWizard } from "./wizard";
 
 export type { FillStats, CauseCount, AtsBreakdown, ApplicationFill } from "./fill-stats";
 export { computeFillStats, atsFromUrl } from "./fill-stats";
+
+export { fnv1a64, questionKey, formFingerprint, newQuestions } from "./fingerprint";
