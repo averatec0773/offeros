@@ -52,6 +52,7 @@ type OkScan = Extract<ScanResponse, { ok: true }>;
 // owns the generate → preview → attach machine that used to be written out
 // twice, once per artifact kind.
 import type { FillApi } from "./panel/fill-api";
+import { describeWizard } from "@offeros/autofill";
 import { CoverageBar } from "./panel/coverage-bar";
 import { FieldGroup } from "./panel/field-group";
 import { ArtifactCard } from "./panel/artifact-card";
@@ -959,6 +960,8 @@ export function FillPanel({
     );
   }
 
+  const wizard = scanResult?.ok ? scanResult.wizard : undefined;
+
   if (!scanResult.ok) {
     const noForm = scanResult.reason === "no_form";
     // Evidence-based close: the form is gone AND the page reads like a
@@ -1321,7 +1324,21 @@ export function FillPanel({
           writtenValue={writtenValueFor}
           revealKey={pageSigRef.current ?? undefined}
         />
-        {done && (
+        {/* A multi-page application is not finished because this page is.
+            Saying "filled" on step 2 of 7 would be wrong in the way that
+            matters most — it reads as "done". */}
+        {done && wizard && !wizard.onFinalStep && (
+          <p className="mt-3 text-caption text-text-secondary">
+            {describeWizard(wizard)} filled — review it, then continue on the page. I will pick up
+            the next step when it loads.
+          </p>
+        )}
+        {done && wizard?.onFinalStep && (
+          <p className="mt-3 text-caption text-success">
+            Last step — review everything, then submit it yourself.
+          </p>
+        )}
+        {done && !wizard && (
           <p className="mt-3 text-caption text-success">
             Filled — review the page, then report to the workspace.
           </p>

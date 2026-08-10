@@ -1,3 +1,4 @@
+import type { WizardState } from "@offeros/autofill";
 import type { FieldDescriptor } from "@offeros/autofill";
 import type { AtsId } from "./recipes";
 import type { FillValue } from "./dom-fill";
@@ -10,6 +11,11 @@ export type ScanResponse =
       company: string;
       title: string;
       descriptors: FieldDescriptor[];
+      /** Where a multi-page application is up to, when the page says. Present
+       *  on Workday, absent on single-page forms — and the difference matters:
+       *  "every field on this page is filled" is not "the application is
+       *  finished" when six pages follow. */
+      wizard?: WizardState;
     }
   | {
       ok: false;

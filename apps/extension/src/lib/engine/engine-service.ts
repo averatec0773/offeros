@@ -9,6 +9,7 @@ import {
   type FillValue,
 } from "../autofill/dom-fill";
 import { readFieldMeta } from "../autofill/field-meta-bridge";
+import { readWizard } from "../autofill/wizard-dom";
 import { captureJd, sanitizeLabel } from "../autofill/jd-capture";
 import { base64ToBytes } from "../autofill/base64";
 import { effectiveDocOf, watchPage } from "./page-watcher";
@@ -174,6 +175,7 @@ export function createEngine(doc: Document): Engine {
       };
     }
     const meta = pageMeta();
+    const wizard = readWizard(d0);
     return {
       ok: true,
       atsId: recipe.atsId,
@@ -181,6 +183,7 @@ export function createEngine(doc: Document): Engine {
       company: meta.company,
       title: meta.title,
       descriptors: scanned.map((s) => s.descriptor),
+      ...(wizard ? { wizard } : {}),
     };
   };
 

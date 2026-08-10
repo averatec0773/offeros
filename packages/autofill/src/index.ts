@@ -43,3 +43,6 @@ export { toControl, fromSemanticId, toFieldMeta, groupFieldMeta } from "./field-
 
 export type { FailureCause, CauseGroup, FillDiagnosis, DiagnosableField } from "./diagnose";
 export { diagnoseFill } from "./diagnose";
+
+export type { WizardState, WizardStep } from "./wizard";
+export { readWizardState, canAdvance, describeWizard } from "./wizard";
