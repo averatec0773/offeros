@@ -5,7 +5,7 @@ import { EeoEditor, EEO_PRESETS } from "../eeo-editor";
 import { api } from "@/lib/api-client";
 
 vi.mock("@/lib/api-client", () => ({
-  api: { answers: { list: vi.fn(), create: vi.fn(), update: vi.fn() } },
+  api: { answers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } },
 }));
 
 afterEach(() => {
@@ -280,6 +280,46 @@ describe("EeoEditor", () => {
         answer: "I don't wish to answer",
       }),
     );
+  });
+
+  /**
+   * The one-click defaults action wrote decline answers to every blank
+   * voluntary question and was later removed — but the entries it created
+   * outlived it, and nothing could take them back: the select refused an empty
+   * value, so an answer made in one click was permanent. On a real form that
+   * showed up as "Prefer not to answer" ticked for a question the user had
+   * never decided.
+   */
+  it("clears a saved answer when the user chooses to leave it blank", async () => {
+    vi.mocked(api.answers.list).mockResolvedValue([
+      {
+        id: "pronouns-1",
+        questionPatterns: ["What are your pronouns?", "pronouns"],
+        answer: "Prefer not to say",
+        type: "enum",
+        category: "eeo",
+      },
+    ]);
+    vi.mocked(api.answers.remove).mockResolvedValue({ id: "pronouns-1" });
+
+    render(<EeoEditor />);
+    const select = (await screen.findByLabelText("What are your pronouns?")) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("Prefer not to say"));
+
+    fireEvent.change(select, { target: { value: "" } });
+
+    await waitFor(() => expect(api.answers.remove).toHaveBeenCalledWith("pronouns-1"));
+    // And nothing is re-created in its place.
+    expect(api.answers.create).not.toHaveBeenCalled();
+    expect(api.answers.update).not.toHaveBeenCalled();
+  });
+
+  it("does not call the API to clear a question that was never answered", async () => {
+    render(<EeoEditor />);
+    const select = (await screen.findByLabelText("What are your pronouns?")) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "" } });
+    await new Promise((r) => setTimeout(r, 900));
+    expect(api.answers.remove).not.toHaveBeenCalled();
   });
 
   it("every preset carries short keyword patterns so terse form labels ('Gender') can match", () => {

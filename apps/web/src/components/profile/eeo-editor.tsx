@@ -253,13 +253,31 @@ export function EeoEditor() {
     };
   }, []);
 
+  /**
+   * Write a value, or clear the answer when the value is empty.
+   *
+   * Clearing has to be possible. A bulk action that no longer exists wrote
+   * decline answers to every blank voluntary question, and until now nothing
+   * could take them back — the select refused an empty value, so an answer
+   * created in one click was permanent. "No saved answer" is also a real
+   * choice: it leaves the question blank on the form and lets the user decide
+   * on the page, which is the sensible default for a voluntary question.
+   */
   const commit = (preset: EeoPreset, value: string) => {
-    if (!value.trim()) return;
     setRows((r) => ({ ...r, [preset.pattern]: { ...r[preset.pattern]!, status: "saving" } }));
     setError(null);
     const run = async () => {
       const bound = boundRef.current[preset.pattern]!;
       try {
+        if (!value.trim()) {
+          if (bound.entryId) await api.answers.remove(bound.entryId);
+          boundRef.current[preset.pattern] = { entryId: null, patterns: [] };
+          setRows((r) => ({
+            ...r,
+            [preset.pattern]: { ...r[preset.pattern]!, entryId: null, status: "saved" },
+          }));
+          return;
+        }
         // On update, preserve any other patterns already on the shared entry and
         // union in this preset's full variant set. Never truncate to just our own.
         const patterns = bound.entryId
@@ -320,6 +338,7 @@ export function EeoEditor() {
       ...r,
       [preset.pattern]: { ...r[preset.pattern]!, other: false, value: selected, status: "idle" },
     }));
+    // An empty selection means "forget my answer", which commit handles.
     commit(preset, selected);
   }
 
@@ -340,7 +359,9 @@ export function EeoEditor() {
                 value={row.other ? OTHER : row.value}
                 onChange={(v) => selectOption(preset, v)}
                 options={[
-                  { value: "", label: "Select…" },
+                  // Named for what it does, not for what it is: this option
+                  // removes a saved answer, and "Select…" reads like a no-op.
+                  { value: "", label: row.entryId ? "— leave blank —" : "Select…" },
                   ...(preset.options ?? []).map((o) => ({ value: o, label: o })),
                   { value: OTHER, label: "Other…" },
                 ]}
