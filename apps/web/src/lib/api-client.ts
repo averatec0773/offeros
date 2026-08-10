@@ -6,6 +6,7 @@ import type {
   ApplicationStatus,
   Artifact,
   ArtifactVersion,
+  Campaign,
   FillHandoff,
   FitAnalysis,
   JdAnalysis,
@@ -130,6 +131,20 @@ export const api = {
       request<{ answer: string; steps: AgentStep[]; ranOutOfSteps: boolean }>(
         `/agent/chat`,
         json("POST", { question, ...(applicationId ? { applicationId } : {}) }),
+      ),
+  },
+  campaigns: {
+    list: () => request<Campaign[]>("/campaigns"),
+    create: (input: { name: string; note?: string }) =>
+      request<Campaign>("/campaigns", json("POST", input)),
+    update: (id: string, patch: Partial<Pick<Campaign, "name" | "note" | "status">>) =>
+      request<Campaign>(`/campaigns/${id}`, json("PATCH", patch)),
+    remove: (id: string) => request<{ deleted: boolean }>(`/campaigns/${id}`, { method: "DELETE" }),
+    /** campaignId null = move the applications out of any campaign. */
+    assign: (campaignId: string | null, applicationIds: string[]) =>
+      request<{ assigned: number }>(
+        "/campaigns/assign",
+        json("POST", { campaignId, applicationIds }),
       ),
   },
   queue: {

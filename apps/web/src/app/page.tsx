@@ -6,9 +6,9 @@ import { listAgentTasks } from "@/server/repositories/agent-task-repo";
 import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
 import { getProfile } from "@/server/repositories/profile-repo";
 import { listFits } from "@/server/repositories/fit-repo";
-import { ApplicationRow } from "@/components/agent/application-row";
+import { listCampaigns } from "@/server/repositories/campaign-repo";
+import { ApplicationList } from "@/components/agent/application-list";
 import { QueueBar } from "@/components/agent/queue-bar";
-import { EmptyState } from "@/components/empty-state";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,11 @@ export default function HomePage() {
 
   const active = applications.filter((a) => a.status === "saved" || a.status === "applying");
   const finished = applications.filter((a) => a.status !== "saved" && a.status !== "applying");
+  const toRow = (application: (typeof applications)[number]) => ({
+    application,
+    task: taskByApplication.get(application.id) ?? null,
+    fit: fitByApplication.get(application.id) ?? null,
+  });
 
   return (
     <main className="mx-auto w-full max-w-[860px] px-6 py-10">
@@ -88,37 +93,11 @@ export default function HomePage() {
           )}
         </div>
       ) : (
-        <div className="space-y-8">
-          <section className="space-y-3">
-            <h2 className="text-body font-semibold text-muted-foreground">In progress</h2>
-            {active.length === 0 ? (
-              <EmptyState title="Nothing in progress" body="Every application has moved on." />
-            ) : (
-              active.map((application) => (
-                <ApplicationRow
-                  key={application.id}
-                  application={application}
-                  task={taskByApplication.get(application.id) ?? null}
-                  fit={fitByApplication.get(application.id) ?? null}
-                />
-              ))
-            )}
-          </section>
-
-          {finished.length > 0 ? (
-            <section className="space-y-3">
-              <h2 className="text-body font-semibold text-muted-foreground">Finished</h2>
-              {finished.map((application) => (
-                <ApplicationRow
-                  key={application.id}
-                  application={application}
-                  task={taskByApplication.get(application.id) ?? null}
-                  fit={fitByApplication.get(application.id) ?? null}
-                />
-              ))}
-            </section>
-          ) : null}
-        </div>
+        <ApplicationList
+          active={active.map(toRow)}
+          finished={finished.map(toRow)}
+          campaigns={listCampaigns(db)}
+        />
       )}
     </main>
   );

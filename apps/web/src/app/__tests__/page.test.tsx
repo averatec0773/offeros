@@ -2,11 +2,18 @@
 // Wiring test for the homepage server component: it calls four repos
 // directly (applications, tasks, profile, fits) and hand-assembles the
 // active/finished split + per-row task/fit lookups before handing rows to
-// <ApplicationRow>. There's no client-component boundary to mock — the page
-// itself does the data assembly — so this renders the real component tree
-// and asserts on output that only appears if each repo's data actually made
-// it through (task step, fit percentage, profile-gated CTA).
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+// <ApplicationList>. The page itself does the data assembly, so this renders
+// the real component tree and asserts on output that only appears if each
+// repo's data actually made it through (task step, fit percentage,
+// profile-gated CTA). The one thing stubbed is next/navigation's router —
+// the list is a client component that holds a router handle for post-assign
+// refreshes, and no app router is mounted outside Next itself.
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useRouter: () => ({ refresh: () => {}, push: () => {} }),
+}));
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
