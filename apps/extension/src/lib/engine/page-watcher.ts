@@ -1,5 +1,11 @@
+import { deepQueryAll } from "../autofill/deep-query";
+
+// Includes Workday's listbox-button dropdowns: a wizard page can be made ONLY
+// of those (Application Questions), and its section pages ("My Experience")
+// materialize fields after an "Add" click — if the signature cannot see the
+// gained widgets, PAGE_CHANGED never fires and the panel never re-scans.
 const FIELD_SELECTOR =
-  "input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea";
+  'input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea, button[aria-haspopup="listbox"]';
 
 /**
  * The document that actually hosts the application content. Some ATS (iCIMS
@@ -27,10 +33,16 @@ export function effectiveDocOf(top: Document): Document {
   return best;
 }
 
-/** Cheap page identity: top URL + effective-doc URL + field count + name hash. */
-export function pageSignature(doc: Document): string {
+/** Cheap page identity: top URL + effective-doc URL + field count + name hash.
+ *  `pierce` counts fields through open shadow roots too — Workday materializes
+ *  section fields inside web components, invisible to a light-DOM count, so
+ *  without it the signature stays constant and the gained fields never trigger
+ *  a rescan. One deep walk per debounced check (600ms) keeps it cheap. */
+export function pageSignature(doc: Document, opts: { pierce?: boolean } = {}): string {
   const eff = effectiveDocOf(doc);
-  const fields = eff.querySelectorAll(FIELD_SELECTOR);
+  const fields = opts.pierce
+    ? deepQueryAll(eff, FIELD_SELECTOR)
+    : eff.querySelectorAll(FIELD_SELECTOR);
   let hash = 0;
   for (const el of fields) {
     const key = `${el.getAttribute("name") ?? el.id ?? el.tagName};`;
@@ -52,9 +64,10 @@ export function pageSignature(doc: Document): string {
 export function watchPage(
   doc: Document,
   onChange: () => void,
-  opts: { debounceMs?: number } = {},
+  opts: { debounceMs?: number; pierce?: boolean } = {},
 ): () => void {
   const debounceMs = opts.debounceMs ?? 600;
+  const sig = () => pageSignature(doc, { pierce: opts.pierce });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let attachedDoc: Document | null = null;
   let attachedObserver: MutationObserver | null = null;
@@ -70,9 +83,9 @@ export function watchPage(
   const check = (): void => {
     const eff = effectiveDocOf(doc);
     if (eff !== doc) attachTo(eff); // follow the live iframe document
-    const sig = pageSignature(doc);
-    if (sig !== last) {
-      last = sig;
+    const s = sig();
+    if (s !== last) {
+      last = s;
       onChange();
     }
   };
@@ -81,7 +94,7 @@ export function watchPage(
     timer = setTimeout(check, debounceMs);
   };
 
-  let last = pageSignature(doc);
+  let last = sig();
   const win = doc.defaultView;
   win?.addEventListener("popstate", schedule);
   win?.addEventListener("hashchange", schedule);

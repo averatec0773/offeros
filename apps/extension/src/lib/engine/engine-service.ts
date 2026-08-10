@@ -242,7 +242,11 @@ export function createEngine(doc: Document): Engine {
     return { ok: true };
   };
 
-  const watch = (cb: () => void) => watchPage(doc, cb);
+  // Pierce shadow roots in the change signature exactly where the scan does
+  // (recipe.pierceShadow) — Workday materializes section fields inside web
+  // components, and a light-DOM signature would never see them appear.
+  const watch = (cb: () => void) =>
+    watchPage(doc, cb, { pierce: matchAts(url())?.pierceShadow === true });
 
   return { scan, fill, capture, attachFile, scrollToField, watch };
 }

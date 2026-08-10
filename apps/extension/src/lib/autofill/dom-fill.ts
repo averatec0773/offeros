@@ -71,6 +71,19 @@ function isRequired(el: HTMLElement, label: string): boolean {
   return /\*/.test(label);
 }
 
+/** A Workday-style dropdown: a plain <button> that opens a listbox popup.
+ *  Not a <select> and not a react-select combobox — its own scan/fill path. */
+function isListboxButton(el: HTMLElement): boolean {
+  return el instanceof HTMLButtonElement && el.getAttribute("aria-haspopup") === "listbox";
+}
+
+/** The button's rendered text is its current value; "Select One" (and the
+ *  empty string) are Workday's unselected placeholders, not values. */
+function listboxButtonValue(el: HTMLElement): string {
+  const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  return /^select one$/i.test(text) ? "" : text;
+}
+
 function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
   // Conventional label first; custom widgets with no label association (Ashby
   // comboboxes) fall back to the title element that precedes them — otherwise
@@ -80,7 +93,13 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
   const label = li.text || fallback?.text || "";
   const titleRequired = li.required || fallback?.required || false;
   const name = el.getAttribute("name") || el.id || "";
-  const type = (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text";
+  // A listbox button reports as "listbox", never its literal type="button":
+  // it is semantically a select whose options exist only while the popup is
+  // open, so the descriptor honestly carries no option list. Classification
+  // still works from the label; options are matched live at fill time.
+  const type = isListboxButton(el)
+    ? "listbox"
+    : (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text";
   const autocomplete = el.getAttribute("autocomplete") ?? "";
   const fieldId = stableFieldId(`${type}|${name}|${label}|${autocomplete}`, used);
   el.setAttribute("data-offeros-id", fieldId);
@@ -94,7 +113,11 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
     autocomplete,
     type,
     placeholder: el.getAttribute("placeholder") ?? "",
-    ariaLabel: el.getAttribute("aria-label") ?? "",
+    // Workday bakes the CURRENT value into the button's aria-label ("How Did
+    // You Hear About Us? LinkedIn Required") — carrying it would let the
+    // classifier read the value as a signal ("linkedin" → linkedin field).
+    // The label association is authoritative for these; drop the aria-label.
+    ariaLabel: type === "listbox" ? "" : (el.getAttribute("aria-label") ?? ""),
     required: isRequired(el, label) || titleRequired,
     currentValue: currentValueOf(el, type),
   };
@@ -107,6 +130,7 @@ function currentValueOf(el: HTMLElement, type: string): string {
     const f = (el as HTMLInputElement).files?.[0];
     return f ? f.name : "";
   }
+  if (type === "listbox") return listboxButtonValue(el);
   const v = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
   return typeof v === "string" ? v : "";
 }
@@ -428,6 +452,63 @@ async function fillYesNoWidget(container: HTMLElement, value: string): Promise<b
   return /(^|\s)_active_/.test(btn.className);
 }
 
+/**
+ * Answer a Workday listbox-button dropdown: click the button, wait for the
+ * popup listbox (a portal appended near <body> — detected as a [role=listbox]
+ * that was NOT there before the click, because the phone-code multiselect
+ * keeps a permanent pill listbox on the page), match the wanted value against
+ * the live [role=option] rows, click the match, and verify the button's
+ * rendered text changed to the chosen option. Plain DOM widget — an
+ * isolated-world click sequence suffices; no MAIN-world driver needed
+ * (verified live on a wd1.myworkdayjobs.com tenant).
+ */
+async function fillListboxButton(el: HTMLElement, value: string): Promise<boolean> {
+  const doc = el.ownerDocument;
+  const win = doc.defaultView;
+  const sleep = (ms: number) => new Promise((r) => (win ?? window).setTimeout(r, ms));
+  const listboxes = () => Array.from(doc.querySelectorAll<HTMLElement>('[role="listbox"]'));
+  const current = listboxButtonValue(el);
+  if (current !== "" && matchOption([{ label: current, value: current }], value) !== null) {
+    return true; // already showing the wanted option — never reopen a settled field
+  }
+  const before = new Set(listboxes());
+  el.click();
+  let popup: HTMLElement | undefined;
+  for (let i = 0; i < 20 && !popup; i += 1) {
+    await sleep(100);
+    popup = listboxes().find((lb) => !before.has(lb));
+  }
+  if (!popup) return false;
+  const closePopup = () => {
+    // Escape is unreliable on this widget (observed live); the button toggles.
+    if (popup?.isConnected) el.click();
+  };
+  const opts = Array.from(popup.querySelectorAll<HTMLElement>('[role="option"]'));
+  const target = matchOption(
+    opts.map((o, idx) => ({ label: (o.textContent ?? "").trim(), value: idx })),
+    value,
+  );
+  const hit = target && typeof target.value === "number" ? opts[target.value] : undefined;
+  if (!target || !hit) {
+    closePopup();
+    return false;
+  }
+  const want = String(target.label ?? "");
+  // Real mouse sequence, same as the MAIN-world react-select fallback uses.
+  hit.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+  hit.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }));
+  hit.click();
+  for (let i = 0; i < 10; i += 1) {
+    const now = listboxButtonValue(el);
+    // The widget may re-render the label slightly (ellipsis, spacing) — accept
+    // any rendered text the shared matcher maps to the chosen option.
+    if (now !== "" && matchOption([{ label: now, value: now }], want) !== null) return true;
+    await sleep(100);
+  }
+  closePopup();
+  return false;
+}
+
 type Fillable = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
 export function setControlledValue(el: Fillable, value: string): void {
@@ -563,6 +644,18 @@ export async function applyFillDetailed(
     }
     const { fieldId, value } = item;
     const el = resolveFieldEl(doc, fieldId);
+    // Workday listbox-button dropdowns: click-through driver with live option
+    // matching. A miss reports "failed" — the panel shows a needs-user row.
+    if (el && isListboxButton(el)) {
+      if (await fillListboxButton(el, value)) {
+        highlight(el);
+        filled++;
+        outcomes.set(fieldId, "filled");
+      } else {
+        outcomes.set(fieldId, "failed");
+      }
+      continue;
+    }
     if (el && isYesNoWidget(el)) {
       if (await fillYesNoWidget(el, value)) {
         highlight(el);

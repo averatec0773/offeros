@@ -11,6 +11,15 @@ export interface AtsRecipe {
 
 const FIELDS = "input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea";
 
+// Workday renders its dropdowns as custom widgets, not <select>: a
+// <button aria-haspopup="listbox" id name> inside a
+// div[data-automation-id^="formField-"], with a <label for> pointing at the
+// button's id and the current value as the button's text (verified live on a
+// wd1.myworkdayjobs.com tenant, 2026-08-10). Without the button in the field
+// selector, a wizard page made only of these (Application Questions) scans as
+// "no form". Workday-only — other ATSs keep the plain selector.
+const WORKDAY_FIELDS = `${FIELDS}, button[aria-haspopup="listbox"]`;
+
 export const RECIPES: AtsRecipe[] = [
   {
     atsId: "greenhouse",
@@ -51,7 +60,7 @@ export const RECIPES: AtsRecipe[] = [
     // scanFields falls back to the document root when no <form> matches.
     urlPatterns: [/^https?:\/\/([a-z0-9-]+\.)*myworkdayjobs\.com\//i],
     formSelector: "form",
-    fieldSelector: FIELDS,
+    fieldSelector: WORKDAY_FIELDS,
     pierceShadow: true,
   },
 ];
