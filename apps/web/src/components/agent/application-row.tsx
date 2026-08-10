@@ -1,5 +1,9 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MessageSquare } from "lucide-react";
+import { AgentChat } from "./agent-chat";
 import {
   describeTracking,
   trackApplication,
@@ -50,6 +54,7 @@ export function ApplicationRow({
   task: AgentTask | null;
   fit?: FitAnalysis | null;
 }) {
+  const [asking, setAsking] = useState(false);
   const actionRequired = task?.applicationInfo?.status === 2;
   const { jobInfo } = application;
   // What actually happened to this application, rather than which pipeline
@@ -64,47 +69,80 @@ export function ApplicationRow({
   });
 
   return (
-    <Link
-      href={`/applications/${application.id}`}
-      className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition hover:bg-muted"
-    >
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-body font-semibold">
-        {initials(jobInfo.companyName)}
-      </div>
+    <div className="rounded-2xl border border-border bg-card">
+      {/* The link and the Ask button are siblings, not nested: a button inside
+          a link is neither keyboard-navigable nor clickable the way either one
+          promises. */}
+      <div className="flex items-center gap-4 p-4">
+        <Link
+          href={`/applications/${application.id}`}
+          className="flex min-w-0 flex-1 items-center gap-4 rounded-xl transition hover:opacity-80"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-body font-semibold">
+            {initials(jobInfo.companyName)}
+          </span>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-body text-muted-foreground">
-          {jobInfo.companyName}
-          {jobInfo.jobLocation ? ` · ${jobInfo.jobLocation}` : ""}
-        </p>
-        <p className="truncate text-title font-semibold">{jobInfo.jobTitle}</p>
-      </div>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-body text-muted-foreground">
+              {jobInfo.companyName}
+              {jobInfo.jobLocation ? ` · ${jobInfo.jobLocation}` : ""}
+            </span>
+            <span className="block truncate text-title font-semibold">{jobInfo.jobTitle}</span>
+          </span>
+        </Link>
 
-      <div className="flex shrink-0 items-center gap-4">
-        {/* Two different questions, so two different things on the row. The
+        <div className="flex shrink-0 items-center gap-3">
+          {/* Two different questions, so two different things on the row. The
             badge answers "does this need me"; the line answers "what happened
             here" — which is the one you cannot reconstruct three days and forty
             applications later. Showing only the badge, as this did, left the
             second question unanswerable without opening the job. */}
-        <span
-          className={`text-caption ${
-            tracking.stage === "submitted" ? "text-success" : "text-muted-foreground"
-          }`}
-        >
-          {describeTracking(tracking)}
-        </span>
-        {actionRequired && (
-          <span className="flex items-center gap-1.5 rounded-full bg-warn-bg px-3 py-1 text-caption font-semibold">
-            <span className="size-1.5 rounded-full bg-warn" />
-            Action Required
+          <span
+            className={`text-caption ${
+              tracking.stage === "submitted" ? "text-success" : "text-muted-foreground"
+            }`}
+          >
+            {describeTracking(tracking)}
           </span>
-        )}
-        {fit ? <FitBadge fit={fit} /> : null}
-        {jobInfo.displayScore !== undefined ? (
-          <MatchScoreRing score={jobInfo.displayScore} />
-        ) : null}
-        <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
+          {actionRequired && (
+            <span className="flex items-center gap-1.5 rounded-full bg-warn-bg px-3 py-1 text-caption font-semibold">
+              <span className="size-1.5 rounded-full bg-warn" />
+              Action Required
+            </span>
+          )}
+          {fit ? <FitBadge fit={fit} /> : null}
+          {jobInfo.displayScore !== undefined ? (
+            <MatchScoreRing score={jobInfo.displayScore} />
+          ) : null}
+          {/* Asking about a job you just spotted in the list should not require
+            leaving the list. Same conversation as the workspace, scoped here. */}
+          <button
+            type="button"
+            onClick={() => setAsking((open) => !open)}
+            aria-expanded={asking}
+            aria-label={`Ask about ${jobInfo.jobTitle} at ${jobInfo.companyName}`}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-caption font-semibold transition-colors ${
+              asking ? "bg-primary text-primary-foreground" : "text-text-secondary hover:bg-muted"
+            }`}
+          >
+            <MessageSquare aria-hidden className="size-3.5" />
+            Ask
+          </button>
+          <Link
+            href={`/applications/${application.id}`}
+            aria-label={`Open ${jobInfo.jobTitle}`}
+            className="rounded-full p-1 hover:bg-muted"
+          >
+            <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
+          </Link>
+        </div>
       </div>
-    </Link>
+
+      {asking && (
+        <div className="border-t border-border p-3">
+          <AgentChat applicationId={application.id} />
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, it, expect } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 import { ApplicationRow, fitLabelFor } from "../application-row";
 import type { Application, AgentTask, FitAnalysis } from "@offeros/core";
 
@@ -76,6 +76,32 @@ describe("ApplicationRow", () => {
     expect(screen.getByText(/Action Required/i)).toBeTruthy();
     // The badge must not hide what happened — it answers a different question.
     expect(screen.getByText("Not started")).toBeTruthy();
+  });
+
+  /**
+   * Spotting something odd in the list and asking about it should not mean
+   * leaving the list. The conversation is the same one the workspace runs,
+   * scoped to this application — the row only decides whether it is showing.
+   */
+  it("opens a conversation about this application, in place", async () => {
+    render(<ApplicationRow application={application} task={null} />);
+    const ask = screen.getByRole("button", { name: /Ask about GenAI Engineer/i });
+
+    expect(screen.queryByLabelText("Ask about this application")).toBeNull();
+    fireEvent.click(ask);
+    expect(await screen.findByLabelText("Ask about this application")).toBeTruthy();
+    expect(ask.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(ask);
+    expect(screen.queryByLabelText("Ask about this application")).toBeNull();
+  });
+
+  it("keeps the Ask control out of the link", () => {
+    // A button nested in a link is neither keyboard-navigable nor clickable
+    // the way either one promises.
+    render(<ApplicationRow application={application} task={null} />);
+    const ask = screen.getByRole("button", { name: /Ask about/i });
+    expect(ask.closest("a")).toBeNull();
   });
 
   it("renders without a task", () => {

@@ -5,7 +5,17 @@ import globals from "globals";
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/.next/**", "**/.output/**", "**/.wxt/**", "**/drizzle/**"],
+    ignores: [
+      "**/node_modules/**",
+      "**/.next/**",
+      // The pre-push hook builds here rather than into .next, so a
+      // verification build cannot freeze whatever a running dev server is
+      // serving. Build output either way.
+      "**/.next-verify/**",
+      "**/.output/**",
+      "**/.wxt/**",
+      "**/drizzle/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
