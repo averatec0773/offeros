@@ -1656,16 +1656,21 @@ describe("FillPanel", () => {
         await userEvent.click(fillBtn);
       });
 
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({
-            fieldId: "r1",
-            outcome: "needs-user",
-            reason: CUSTOM_UPLOADER_REASON,
-          }),
-        ]),
-        false,
+      // The report follows the attach attempt, which is two awaits deep (fetch
+      // the PDF, try to attach, then post) — asserting straight after the click
+      // races that chain and failed intermittently in CI.
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "r1",
+              outcome: "needs-user",
+              reason: CUSTOM_UPLOADER_REASON,
+            }),
+          ]),
+          false,
+        ),
       );
     });
 
