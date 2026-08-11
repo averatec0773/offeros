@@ -95,6 +95,13 @@ export const api = {
     ) => request<Application>(`/applications/${id}`, json("PATCH", patch)),
     events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
     trace: (id: string) => request<TraceEntry[]>(`/applications/${id}/trace`),
+    /** Track a job from its link. Returns the existing one, flagged, when the
+     *  posting is already tracked. */
+    create: (url: string) =>
+      request<{ application: Application; duplicate: boolean; recon?: ReconResult }>(
+        "/applications",
+        json("POST", { url }),
+      ),
     /** Check whether the posting is still up, and learn what its form asks. */
     recon: (id: string) => request<ReconResult>(`/applications/${id}/recon`, json("POST", {})),
     /** What the form asks and how much of it we can already answer. */

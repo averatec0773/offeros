@@ -188,6 +188,39 @@ export async function reconApplication(
   }
 }
 
+/**
+ * What a platform can tell us about a URL before anything is saved.
+ *
+ * Used when adding a job by pasting its link: on a platform we can read, the
+ * title, company and description come from the platform itself rather than
+ * from the user retyping them. Anywhere else this returns null and the caller
+ * keeps what it has — a minimal record with an editable title is honest; a
+ * guessed one is not.
+ */
+export async function describeJobUrl(
+  url: string,
+  deps: ReconDeps = {},
+): Promise<{ title: string; company: string; location: string; jdText: string } | null> {
+  const platform = PLATFORMS.find((p) => p.matches(url));
+  if (!platform?.probe) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const probe = await platform.probe(url, deps.fetchImpl ?? fetch, controller.signal);
+    if (!probe?.job) return null;
+    return {
+      title: probe.job.title,
+      company: probe.job.company,
+      location: probe.job.location,
+      jdText: htmlToText(probe.job.descriptionHtml),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Store what a platform probe returned: questions, and a JD if we had none. */
 function applyProbe(
   db: Db,

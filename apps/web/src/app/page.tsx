@@ -6,6 +6,7 @@ import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
 import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { getProfile } from "@/server/repositories/profile-repo";
 import { listFits } from "@/server/repositories/fit-repo";
+import { AddJobDialog } from "@/components/agent/add-job-dialog";
 import { ApplicationList } from "@/components/agent/application-list";
 import { QueueBar } from "@/components/agent/queue-bar";
 
@@ -37,13 +38,15 @@ export default function HomePage() {
             {applications.length} total · {active.length} active
           </span>
         </div>
-        <Link
-          href="/applications/new"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground press hover:bg-primary/85"
-        >
-          <Plus className="size-4" strokeWidth={2.5} />
-          New application
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <AddJobDialog />
+          <Link
+            href="/applications/new"
+            className="text-caption font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Paste a description instead
+          </Link>
+        </div>
       </header>
 
       {applications.length > 0 && (
