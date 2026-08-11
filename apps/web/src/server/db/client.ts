@@ -110,6 +110,11 @@ const ADDED_COLUMNS: ReadonlyArray<readonly [table: string, column: string, ddl:
   // Persisted so a reloaded thread still shows the "stopped at the limit"
   // notice, and so out-of-steps rate is measurable after the fact.
   ["chat_messages", "ran_out_of_steps", "ran_out_of_steps INTEGER"],
+  // Questions can now be learned from an ATS's public API before applying
+  // ("prescan"), not only from a real fill. Existing rows are all real fills,
+  // which is exactly what the default says.
+  ["form_shapes", "required", "required INTEGER NOT NULL DEFAULT 0"],
+  ["form_shapes", "source", "source TEXT NOT NULL DEFAULT 'fill'"],
 ];
 
 /** SQLite errors on `ALTER TABLE ADD COLUMN` if the column already exists, so

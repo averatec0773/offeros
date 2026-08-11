@@ -23,7 +23,18 @@ export interface ShapeSighting {
    *  Guard refusals and manual uploads are NOT failures; the caller has
    *  already applied that distinction. */
   failed: boolean;
+  /** Whether the form marks it required. Absent leaves the stored value alone. */
+  required?: boolean;
 }
+
+/**
+ * Where a sighting came from.
+ *
+ * "fill" is the engine meeting the question on the real page. "prescan" is
+ * reading an ATS's public API before applying — cheaper and earlier, but it
+ * describes the form as the platform advertises it, not as it rendered.
+ */
+export type ShapeSource = "fill" | "prescan";
 
 /**
  * Fold one fill's questions into the shape table.
@@ -43,7 +54,9 @@ export function recordShapes(
   applicationId: string,
   sightings: ShapeSighting[],
   now: number,
+  source: ShapeSource = "fill",
 ): void {
+  const prescan = source === "prescan";
   for (const sighting of sightings) {
     db.insert(formShapes)
       .values({
@@ -51,7 +64,13 @@ export function recordShapes(
         vendor,
         question: sighting.question,
         classifiedType: sighting.classifiedType,
-        seenCount: 1,
+        required: sighting.required ?? false,
+        source,
+        // A prescan is not a sighting on a real form, so it does not claim to
+        // have "seen" the question in the sense every counter here means.
+        // Otherwise reading an API would inflate the same numbers that answer
+        // "how often has this actually come up".
+        seenCount: prescan ? 0 : 1,
         failedCount: sighting.failed ? 1 : 0,
         firstFailedApplicationId: sighting.failed ? applicationId : null,
         firstSeenAt: now,
@@ -60,21 +79,62 @@ export function recordShapes(
       .onConflictDoUpdate({
         target: formShapes.questionKey,
         set: {
-          seenCount: sql`${formShapes.seenCount} + 1`,
+          seenCount: prescan ? sql`${formShapes.seenCount}` : sql`${formShapes.seenCount} + 1`,
           failedCount: sql`${formShapes.failedCount} + ${sighting.failed ? 1 : 0}`,
           firstFailedApplicationId: sighting.failed
             ? sql`COALESCE(${formShapes.firstFailedApplicationId}, ${applicationId})`
             : sql`${formShapes.firstFailedApplicationId}`,
-          // The question text and classified type follow the latest sighting:
-          // if the engine's classifier improves, the row should say what it
-          // thinks NOW, not what it thought the first time.
-          question: sighting.question,
-          classifiedType: sighting.classifiedType,
-          lastSeenAt: now,
+          // A real fill outranks a prescan, always: it met the form as it
+          // actually rendered, while the prescan only read what the platform
+          // advertises. So a prescan leaves an existing fill row's description
+          // untouched, and a fill overwrites a prescan's.
+          question: prescan
+            ? sql`CASE WHEN ${formShapes.source} = 'prescan' THEN ${sighting.question} ELSE ${formShapes.question} END`
+            : sql`${sighting.question}`,
+          classifiedType: prescan
+            ? sql`CASE WHEN ${formShapes.source} = 'prescan' THEN ${sighting.classifiedType} ELSE ${formShapes.classifiedType} END`
+            : sql`${sighting.classifiedType}`,
+          required: prescan
+            ? sql`CASE WHEN ${formShapes.source} = 'prescan' THEN ${sighting.required ? 1 : 0} ELSE ${formShapes.required} END`
+            : sql`${(sighting.required ?? false) ? 1 : 0}`,
+          source: prescan ? sql`${formShapes.source}` : sql`'fill'`,
+          lastSeenAt: prescan
+            ? sql`CASE WHEN ${formShapes.source} = 'prescan' THEN ${now} ELSE ${formShapes.lastSeenAt} END`
+            : sql`${now}`,
         },
       })
       .run();
   }
+}
+
+export interface StoredShape {
+  questionKey: string;
+  vendor: string;
+  question: string;
+  classifiedType: string;
+  required: boolean;
+  source: ShapeSource;
+  seenCount: number;
+}
+
+/** The stored questions for these keys — what the "what will this form ask"
+ *  card reads, whether they were learned from a fill or a prescan. */
+export function shapesFor(db: Db, keys: string[]): StoredShape[] {
+  if (keys.length === 0) return [];
+  return db
+    .select()
+    .from(formShapes)
+    .where(inArray(formShapes.questionKey, keys))
+    .all()
+    .map((row) => ({
+      questionKey: row.questionKey,
+      vendor: row.vendor,
+      question: row.question,
+      classifiedType: row.classifiedType,
+      required: row.required,
+      source: (row.source === "prescan" ? "prescan" : "fill") as ShapeSource,
+      seenCount: row.seenCount,
+    }));
 }
 
 export interface KnownShapes {

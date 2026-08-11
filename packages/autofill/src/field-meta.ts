@@ -84,6 +84,12 @@ const CONTROL_VOCABULARY: Record<string, MetaControl> = {
   textarea: "long-text",
   select: "single-select",
   multi_select: "multi-select",
+  // …and the same platform's public job-board API, which names its selects
+  // differently from its own DOM props. Both must land on one control, or a
+  // question learned from the API would not match the same question met on
+  // the page.
+  multi_value_single_select: "single-select",
+  multi_value_multi_select: "multi-select",
   tel: "phone",
   // Workday — props.property.type
   boolean: "boolean",

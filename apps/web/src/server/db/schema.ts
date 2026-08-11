@@ -201,6 +201,11 @@ export const formShapes = sqliteTable("form_shapes", {
   classifiedType: text("classified_type").notNull(),
   seenCount: integer("seen_count").notNull().default(0),
   failedCount: integer("failed_count").notNull().default(0),
+  /** Whether the form marks this question required. */
+  required: integer("required", { mode: "boolean" }).notNull().default(false),
+  /** "fill" = seen during a real fill; "prescan" = read from an ATS's public
+   *  API before applying. A real fill always wins: it saw the actual form. */
+  source: text("source").notNull().default("fill"),
   firstFailedApplicationId: text("first_failed_application_id"),
   firstSeenAt: integer("first_seen_at").notNull(),
   lastSeenAt: integer("last_seen_at").notNull(),
