@@ -148,6 +148,15 @@
   }
   html {
     @apply font-sans;
+    /* Always reserve the scrollbar's track, whether or not the page scrolls.
+     * Every container in the app is `mx-auto max-w-…`, so a viewport that
+     * widens by the scrollbar's width when a short page stops scrolling
+     * re-centres all of them — the top nav visibly slid sideways when moving
+     * between a long page and a short one. Reserving the gutter makes the
+     * layout width constant, which is what centring assumed all along.
+     * Costs a few px of width on pages that never scroll; a nav that stays
+     * put is worth more. */
+    scrollbar-gutter: stable;
   }
 }
 
