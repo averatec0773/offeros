@@ -4,6 +4,7 @@ import { listApplications, getApplication } from "../repositories/application-re
 import { listPipelineTasks, getPipelineTask } from "../repositories/pipeline-task-repo";
 import { newestTaskByApplication } from "../repositories/pipeline-task-by-application";
 import { listTrace } from "../repositories/agent-trace-repo";
+import { listEvents } from "../repositories/application-event-repo";
 import { listAnswers } from "../repositories/answer-repo";
 import { getFit } from "../repositories/fit-repo";
 import { getProfile } from "../repositories/profile-repo";
@@ -183,6 +184,63 @@ export const readFillReportTool: Tool<
       ok: true,
       summary: `${diagnosis.filled} of ${fillable} fillable fields filled${shown}${skippedNote}; ${causeCount === 0 ? "nothing outstanding" : `${causeCount} reason${causeCount === 1 ? "" : "s"} it did not finish`}`,
       result: { ...diagnosis, fillable, filledFields },
+    };
+  },
+  verify: async () => null,
+};
+
+export interface TimelineLine {
+  kind: string;
+  /** When it happened, to the minute — enough for "when did I trim it?" and
+   *  short enough not to spend the window on milliseconds. */
+  at: string;
+  /** The payload, flattened to one short line. Absent when there was none. */
+  detail?: string;
+}
+
+/** One payload value as a bare scalar; objects/arrays are JSON so a future
+ *  event kind still renders something rather than "[object Object]". */
+const scalar = (v: unknown): string =>
+  typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+    ? String(v)
+    : JSON.stringify(v);
+
+/**
+ * What has HAPPENED to this application — the human/pipeline timeline.
+ *
+ * Distinct from read_trace, and the distinction is the point: read_trace is
+ * the agent's own tool calls, this is `application_events` — every state
+ * change the pipeline, the panel and the user made (task started, step
+ * completed, résumé tweaked with the instruction that tweaked it, fill
+ * reported, marked submitted). The workspace has rendered this log since it
+ * shipped and the agent could not see it, so "what has happened with this
+ * one?" and "when did I shorten the résumé?" were unanswerable from a table
+ * sitting right there.
+ */
+export const readTimelineTool: Tool<void, { total: number; events: TimelineLine[] }> = {
+  id: "read_timeline",
+  description:
+    "Read what has HAPPENED to this application over time, oldest first: started, steps completed, résumé/letter tweaked (with the instruction), fill reported, answers saved, marked submitted. Use for 'what happened with this one', 'when did I …', or any question about history. Different from read_trace, which is only the agent's own tool calls.",
+  run: async (ctx) => {
+    const all = listEvents(ctx.db, ctx.applicationId);
+    const events = all.slice(-ROW_BUDGET).map((e): TimelineLine => {
+      const entries = Object.entries(e.payload ?? {});
+      const detail = entries.map(([k, v]) => `${k}: ${scalar(v)}`).join(", ");
+      return {
+        kind: e.kind,
+        // "2026-08-11 14:05" — local time, because the user asking "when did
+        // I do this" means their clock, not UTC.
+        at: new Date(e.at).toLocaleString("sv-SE").slice(0, 16),
+        ...(detail ? { detail: detail.slice(0, 160) } : {}),
+      };
+    });
+    const dropped = all.length - events.length;
+    return {
+      ok: true,
+      summary: all.length
+        ? `${all.length} event(s) on this application${dropped > 0 ? `; the ${events.length} most recent are listed` : ""}`
+        : "nothing has happened on this application yet",
+      result: { total: all.length, events },
     };
   },
   verify: async () => null,
@@ -563,6 +621,7 @@ export const READ_TOOLS = {
   [readApplicationTool.id]: readApplicationTool,
   [readFillReportTool.id]: readFillReportTool,
   [readTraceTool.id]: readTraceTool,
+  [readTimelineTool.id]: readTimelineTool,
   [searchAnswersTool.id]: searchAnswersTool,
   [readProfileTool.id]: readProfileTool,
   [readResumeTool.id]: readResumeTool,

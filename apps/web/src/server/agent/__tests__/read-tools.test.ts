@@ -6,7 +6,8 @@ import type { FieldReport } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
 import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
-import { readFillReportTool } from "../read-tools";
+import { appendEvent } from "../../repositories/application-event-repo";
+import { readFillReportTool, readTimelineTool, READ_TOOLS, type TimelineLine } from "../read-tools";
 import type { ToolContext } from "../types";
 
 /**
@@ -249,5 +250,69 @@ describe("read_profile now returns the structured background, not just skills", 
     expect(r.experience[0]).toMatchObject({ title: "ML Engineer", company: "Acme" });
     expect(r.experience[0]!.bullets).toContain("Cut latency 40%");
     expect(r.education[0]).toMatchObject({ degree: "BS", school: "State U" });
+  });
+});
+
+describe("read_timeline exposes the application_events log the agent could not see", () => {
+  it("returns the events oldest-first, with the payload flattened onto each line", async () => {
+    appendEvent(db, { applicationId: appId, kind: "task-started" });
+    appendEvent(db, {
+      applicationId: appId,
+      kind: "artifact-tweaked",
+      payload: { kind: "resume", instruction: "make it shorter" },
+    });
+    appendEvent(db, { applicationId: appId, kind: "marked-submitted" });
+
+    const obs = await readTimelineTool.run({ db, applicationId: appId }, undefined);
+
+    expect(obs.ok).toBe(true);
+    const r = obs.result as { total: number; events: TimelineLine[] };
+    expect(r.total).toBe(3);
+    expect(r.events.map((e) => e.kind)).toEqual([
+      "task-started",
+      "artifact-tweaked",
+      "marked-submitted",
+    ]);
+    // The instruction is what makes "when did I shorten the résumé?" answerable.
+    expect(r.events[1]!.detail).toContain("make it shorter");
+    expect(r.events[1]!.at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    // No payload, no detail — an empty string would be noise in the window.
+    expect(r.events[0]!.detail).toBeUndefined();
+  });
+
+  it("caps the rows at the row budget, keeping the most recent, and says so", async () => {
+    for (let i = 0; i < 20; i++) {
+      appendEvent(db, { applicationId: appId, kind: "step-completed", payload: { step: `s${i}` } });
+    }
+
+    const obs = await readTimelineTool.run({ db, applicationId: appId }, undefined);
+
+    const r = obs.result as { total: number; events: TimelineLine[] };
+    expect(r.total).toBe(20);
+    expect(r.events).toHaveLength(12);
+    expect(r.events[11]!.detail).toContain("s19");
+    expect(obs.summary).toContain("20 event(s)");
+    expect(obs.summary).toContain("12 most recent");
+  });
+
+  it("is honest about an application nothing has happened to", async () => {
+    const obs = await readTimelineTool.run({ db, applicationId: appId }, undefined);
+    expect(obs.ok).toBe(true);
+    expect(obs.summary).toBe("nothing has happened on this application yet");
+    expect((obs.result as { events: TimelineLine[] }).events).toEqual([]);
+  });
+
+  it("does not leak another application's timeline", async () => {
+    const other = createApplication(db, {
+      jobInfo: { jobId: "j2", jobTitle: "Data Engineer", companyName: "Other Co" },
+    }).id;
+    appendEvent(db, { applicationId: other, kind: "task-started" });
+
+    const obs = await readTimelineTool.run({ db, applicationId: appId }, undefined);
+    expect((obs.result as { total: number }).total).toBe(0);
+  });
+
+  it("is registered as a read tool", () => {
+    expect(READ_TOOLS.read_timeline).toBe(readTimelineTool);
   });
 });

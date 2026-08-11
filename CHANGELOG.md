@@ -63,8 +63,9 @@ compare what the engine reported against what the page actually showed.
 
 **An agent you can ask about your search.** A conversational agent, on `/agent`
 and inside each application, answers questions about your applications in plain
-language — "which of these are stuck, and why?", "what got filled in here?" — by
-reading the real records (fill reports, decision traces, your saved answers, form
+language — "which of these are stuck, and why?", "what got filled in here?",
+"what has happened with this one?" — by reading the real records (fill reports,
+decision traces, the application's own timeline, your saved answers, form
 memory) and showing the steps that produced each answer, not just the answer. It
 works in a loop of small verified tool calls: it can also make gated changes
 (save an answer, update an application's status, tailor a résumé), at most two
