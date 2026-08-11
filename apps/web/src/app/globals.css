@@ -150,3 +150,68 @@
     @apply font-sans;
   }
 }
+
+/* --- Motion foundation -----------------------------------------------------
+ * A tiny, deliberate vocabulary. Custom easing curves (the built-in CSS ones
+ * are too weak to feel intentional); enter animations for occasional overlays;
+ * and a reduced-motion guard that neutralizes movement while keeping the
+ * opacity/colour transitions that aid comprehension. UI durations stay <300ms.
+ */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* Overlay backdrop: a quick fade in. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Modal/panel: scale up from 0.97 (never from 0 — nothing appears from
+ * nothing) with a fade. Centered modals scale from their own center. */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-overlay-in {
+  animation: overlay-in 150ms var(--ease-out);
+}
+.animate-panel-in {
+  animation: panel-in 200ms var(--ease-out);
+}
+
+/* Press feedback for pressable elements: a subtle scale-down on :active makes
+ * the UI feel like it heard the click. Transitions transform + background-color
+ * only (never `all`), on the custom ease-out. Purpose is feedback, so it's fine
+ * even on frequently-pressed buttons. Replaces a bare `transition-colors`. */
+.press {
+  transition:
+    transform 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    opacity 150ms var(--ease-out);
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

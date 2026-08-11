@@ -42,7 +42,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     .map((a) => a.id);
 
   return (
-    <main className="mx-auto w-full max-w-[860px] px-6 py-10">
+    <main className="mx-auto w-full max-w-[1120px] px-6 py-10">
       <Link
         href="/campaigns"
         className="mb-4 inline-flex items-center gap-1.5 text-caption font-semibold text-muted-foreground hover:text-foreground"

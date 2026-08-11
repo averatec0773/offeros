@@ -91,7 +91,7 @@ export function ConsolePeek({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-caption font-semibold text-foreground transition-colors hover:bg-muted"
+        className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-caption font-semibold text-foreground press hover:bg-muted"
       >
         <ListChecks aria-hidden className="size-3.5 text-muted-foreground" />
         Console
@@ -107,17 +107,20 @@ export function ConsolePeek({
           role="dialog"
           aria-modal="true"
           aria-label="Agent console"
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/30 p-6 backdrop-blur-sm"
+          className="animate-overlay-in fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/30 p-6 backdrop-blur-sm"
           onClick={() => setOpen(false)}
         >
-          <div className="my-6 w-full max-w-[720px] space-y-6" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="animate-panel-in my-6 w-full max-w-[720px] space-y-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h2 className="text-body-lg font-semibold text-foreground">Console</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close console"
-                className="rounded-full bg-card p-2 text-muted-foreground shadow hover:bg-muted"
+                className="rounded-full bg-card press p-2 text-muted-foreground shadow hover:bg-muted"
               >
                 <X aria-hidden className="size-4" />
               </button>
@@ -145,7 +148,7 @@ export function ConsolePeek({
                       <li key={`${item.applicationId}-${item.kind}`}>
                         <Link
                           href={`/applications/${item.applicationId}`}
-                          className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted"
+                          className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 press hover:bg-muted"
                         >
                           <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${cls}`} />
                           <span className="min-w-0 flex-1">

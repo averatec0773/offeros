@@ -111,7 +111,7 @@ export function ApplicationRow({
             onClick={onToggleSelect}
             aria-pressed={selected}
             aria-label={`${selected ? "Deselect" : "Select"} ${jobInfo.jobTitle} at ${jobInfo.companyName}`}
-            className="flex min-w-0 flex-1 items-center gap-4 rounded-xl text-left transition hover:opacity-80"
+            className="flex min-w-0 flex-1 items-center gap-4 rounded-xl text-left transition-opacity duration-150 hover:opacity-80"
           >
             <span
               aria-hidden
@@ -126,7 +126,7 @@ export function ApplicationRow({
         ) : (
           <Link
             href={`/applications/${application.id}`}
-            className="flex min-w-0 flex-1 items-center gap-4 rounded-xl transition hover:opacity-80"
+            className="flex min-w-0 flex-1 items-center gap-4 rounded-xl transition-opacity duration-150 hover:opacity-80"
           >
             {body}
           </Link>

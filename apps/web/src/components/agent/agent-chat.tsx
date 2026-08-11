@@ -219,7 +219,7 @@ export function AgentChat({
         <button
           type="submit"
           disabled={busy || !draft.trim()}
-          className="rounded-full bg-primary px-4 py-2 text-caption font-semibold text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50"
+          className="rounded-full bg-primary px-4 py-2 text-caption font-semibold text-primary-foreground press hover:bg-primary/85 disabled:opacity-50"
         >
           {busy ? "Thinking…" : "Ask"}
         </button>

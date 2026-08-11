@@ -211,7 +211,7 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
   const completeness = completenessChecks.filter(Boolean).length;
 
   return (
-    <main className="mx-auto w-full max-w-[860px] px-6 py-10">
+    <main className="mx-auto w-full max-w-[1120px] px-6 py-10">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-heading font-semibold text-foreground">Profile</h1>

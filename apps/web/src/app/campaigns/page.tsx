@@ -25,7 +25,7 @@ export default function CampaignsPage() {
   const archived = campaigns.filter((campaign) => campaign.status === "archived");
 
   return (
-    <main className="mx-auto w-full max-w-[860px] px-6 py-10">
+    <main className="mx-auto w-full max-w-[1120px] px-6 py-10">
       <header className="mb-8 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-heading font-semibold">Campaigns</h1>
@@ -54,7 +54,7 @@ export default function CampaignsPage() {
                 <Link
                   key={campaign.id}
                   href={`/campaigns/${campaign.id}`}
-                  className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition hover:opacity-80"
+                  className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-opacity duration-150 hover:opacity-80"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-title font-semibold">{campaign.name}</span>

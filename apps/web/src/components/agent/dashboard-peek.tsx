@@ -36,7 +36,7 @@ export function DashboardPeek({ line, children }: { line: string; children: Reac
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-caption font-semibold text-foreground transition-colors hover:bg-muted"
+        className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-caption font-semibold text-foreground press hover:bg-muted"
       >
         <BarChart3 aria-hidden className="size-3.5 text-muted-foreground" />
         {line}
@@ -47,11 +47,11 @@ export function DashboardPeek({ line, children }: { line: string; children: Reac
           role="dialog"
           aria-modal="true"
           aria-label="Fill analytics"
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/30 p-6 backdrop-blur-sm"
+          className="animate-overlay-in fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/30 p-6 backdrop-blur-sm"
           onClick={() => setOpen(false)}
         >
           <div
-            className="my-6 w-full max-w-[720px] space-y-4"
+            className="animate-panel-in my-6 w-full max-w-[720px] space-y-4"
             // Clicks inside the cards must not close the overlay.
             onClick={(e) => e.stopPropagation()}
           >
@@ -60,7 +60,7 @@ export function DashboardPeek({ line, children }: { line: string; children: Reac
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close analytics"
-                className="rounded-full bg-card p-2 text-muted-foreground shadow hover:bg-muted"
+                className="rounded-full bg-card press p-2 text-muted-foreground shadow hover:bg-muted"
               >
                 <X aria-hidden className="size-4" />
               </button>

@@ -405,7 +405,7 @@ export function WorkspaceClient({
     isGateAwait || busy ? undefined : statusBarState === "running" ? handlePause : handleStart;
 
   return (
-    <main className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 flex-col px-6 py-6">
+    <main className="mx-auto flex min-h-0 w-full max-w-[1120px] flex-1 flex-col px-6 py-6">
       <AgentStatusBar
         state={statusBarState}
         jobCount={queue?.length ?? 1}

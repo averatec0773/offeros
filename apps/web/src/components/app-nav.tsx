@@ -23,7 +23,7 @@ export function AppNav() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
-      <nav className="mx-auto flex h-14 w-full max-w-[860px] items-center gap-6 px-6">
+      <nav className="mx-auto flex h-14 w-full max-w-[1120px] items-center gap-6 px-6">
         <Link href="/" className="text-body-lg font-semibold text-foreground">
           OfferOS
         </Link>

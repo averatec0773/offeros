@@ -30,7 +30,7 @@ export default function HomePage() {
   });
 
   return (
-    <main className="mx-auto w-full max-w-[860px] px-6 py-10">
+    <main className="mx-auto w-full max-w-[1120px] px-6 py-10">
       <header className="mb-8 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-heading font-semibold">Applications</h1>
@@ -40,7 +40,7 @@ export default function HomePage() {
         </div>
         <Link
           href="/applications/new"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground transition-colors hover:bg-primary/85"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground press hover:bg-primary/85"
         >
           <Plus className="size-4" strokeWidth={2.5} />
           New application
@@ -71,7 +71,7 @@ export default function HomePage() {
             </p>
             <Link
               href="/applications/new"
-              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground transition-colors hover:bg-primary/85"
+              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground press hover:bg-primary/85"
             >
               <Plus className="size-4" strokeWidth={2.5} />
               New application
@@ -85,7 +85,7 @@ export default function HomePage() {
               </p>
               <Link
                 href="/profile"
-                className="mt-4 inline-flex items-center rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground transition-colors hover:bg-primary/85"
+                className="mt-4 inline-flex items-center rounded-full bg-primary px-4 py-2 text-body font-semibold text-primary-foreground press hover:bg-primary/85"
               >
                 Set up your profile
               </Link>
