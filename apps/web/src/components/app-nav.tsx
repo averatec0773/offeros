@@ -23,18 +23,18 @@ export function AppNav() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
-      <nav className="mx-auto flex h-14 w-full max-w-[1120px] items-center gap-6 px-6">
-        <Link href="/" className="text-body-lg font-semibold text-foreground">
+      <nav className="mx-auto flex h-16 w-full max-w-[1120px] items-center gap-8 px-6">
+        <Link href="/" className="text-title font-semibold text-foreground">
           OfferOS
         </Link>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
           {LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               aria-current={isActive(link.href) ? "page" : undefined}
               className={cn(
-                "text-body font-medium transition-colors",
+                "text-body-lg font-medium transition-colors",
                 isActive(link.href)
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground",

@@ -8,7 +8,7 @@ export default function AgentSettingsPage() {
   return (
     // Nav FIRST, then the header — identical to every other settings page, so
     // the pill nav sits at the same spot and switching tabs doesn't jump.
-    <main className="mx-auto w-full max-w-[720px] px-6 py-10">
+    <main className="mx-auto w-full max-w-[880px] px-6 py-10">
       <SettingsNav />
       <h1 className="mb-1 text-heading font-semibold text-foreground">Agent</h1>
       <p className="mb-6 text-body text-muted-foreground">

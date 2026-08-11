@@ -37,9 +37,9 @@ export default function AgentConsolePage() {
   const memory = formMemorySummary(db);
 
   return (
-    // Fixed to the viewport minus the 3.5rem (h-14) top nav, so the page never
+    // Fixed to the viewport minus the 4rem (h-16) top nav, so the page never
     // scrolls; the chat's own message list takes the slack.
-    <main className="mx-auto flex h-[calc(100dvh-3.5rem)] w-full max-w-[1120px] flex-col gap-4 px-6 py-6">
+    <main className="mx-auto flex h-[calc(100dvh-4rem)] w-full max-w-[1120px] flex-col gap-4 px-6 py-6">
       <header className="flex shrink-0 items-center justify-between gap-4">
         <div>
           <h1 className="text-heading font-semibold">Agent</h1>
