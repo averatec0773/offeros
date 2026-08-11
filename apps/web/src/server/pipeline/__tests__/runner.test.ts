@@ -6,7 +6,11 @@ import { PIPELINE_STEPS, type CoverLetterRequirement } from "@offeros/core";
 import { LlmError } from "@offeros/llm";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, getApplication } from "../../repositories/application-repo";
-import { createAgentTask, getAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import {
+  createPipelineTask,
+  getPipelineTask,
+  updatePipelineTask,
+} from "../../repositories/pipeline-task-repo";
 import { listEvents } from "../../repositories/application-event-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
 import { getStyleMemory } from "../../repositories/style-memory-repo";
@@ -59,7 +63,9 @@ function makeSteps(
       ran.push(key);
       if (opts.throwAt === key) throw opts.throwError ?? new Error(`boom at ${key}`);
       if (key === "analyze-site" && opts.requirement) {
-        await ctx.repos.updateAgentTask(ctx.taskId, { coverLetterRequirement: opts.requirement });
+        await ctx.repos.updatePipelineTask(ctx.taskId, {
+          coverLetterRequirement: opts.requirement,
+        });
       }
     },
   }));
@@ -69,7 +75,7 @@ function seedTask(): string {
   const app = createApplication(db, {
     jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
   });
-  return createAgentTask(db, { applicationId: app.id }).id;
+  return createPipelineTask(db, { applicationId: app.id }).id;
 }
 
 /** Seeds a `resume` artifact parked at the confirm-resume gate, ready to
@@ -100,7 +106,7 @@ function seedResumeAtConfirmGate(taskId: string, opts: { withInstruction: boolea
     createdAt: now,
     updatedAt: now,
   });
-  updateAgentTask(db, taskId, { step: CONFIRM_RESUME_STEP, status: "awaiting_user" });
+  updatePipelineTask(db, taskId, { step: CONFIRM_RESUME_STEP, status: "awaiting_user" });
 }
 
 describe("pipeline runner", () => {
@@ -203,7 +209,7 @@ describe("pipeline runner", () => {
 
   it("a plain advance at the fill-form boundary is a no-op (the extension fills, not the runner)", async () => {
     const taskId = seedTask();
-    updateAgentTask(db, taskId, { step: FILL_FORM_STEP, status: "awaiting_user" });
+    updatePipelineTask(db, taskId, { step: FILL_FORM_STEP, status: "awaiting_user" });
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps() });
     const task = await advance(ctx);
     expect(task.status).toBe("awaiting_user");
@@ -213,8 +219,8 @@ describe("pipeline runner", () => {
 
   it("a plain advance at the submit gate marks the task done AND the application applied", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
-    updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
+    updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps() });
     const task = await advance(ctx);
     expect(task.status).toBe("done");
@@ -224,9 +230,9 @@ describe("pipeline runner", () => {
 
   it("advancing before the submit gate does not touch the application (guarded by the service)", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     // Sitting at fill-form: even though we call advance, no submit transition runs.
-    updateAgentTask(db, taskId, { step: FILL_FORM_STEP, status: "awaiting_user" });
+    updatePipelineTask(db, taskId, { step: FILL_FORM_STEP, status: "awaiting_user" });
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps() });
     await advance(ctx);
     expect(getApplication(db, applicationId)?.status).not.toBe("applied");
@@ -234,8 +240,8 @@ describe("pipeline runner", () => {
 
   it("a bare advance on a running task is a no-op (no double-run / reentrancy)", async () => {
     const taskId = seedTask();
-    updateAgentTask(db, taskId, { status: "running" }); // already in-flight (e.g. a second tab)
-    const before = getAgentTask(db, taskId)!;
+    updatePipelineTask(db, taskId, { status: "running" }); // already in-flight (e.g. a second tab)
+    const before = getPipelineTask(db, taskId)!;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     const task = await advance(ctx);
     expect(ran).toEqual([]); // no step body ran
@@ -251,7 +257,7 @@ describe("pipeline runner", () => {
     const origRun = analyze.run;
     analyze.run = async (ctx, task) => {
       await origRun(ctx, task); // records "analyze-site" + sets requirement=required
-      await ctx.repos.updateAgentTask(ctx.taskId, { status: "paused" });
+      await ctx.repos.updatePipelineTask(ctx.taskId, { status: "paused" });
     };
     const ctx = makePipelineContext(db, taskId, { steps });
     await advance(ctx); // → résumé confirm gate (ran: tailor-resume)
@@ -264,10 +270,10 @@ describe("pipeline runner", () => {
 
   it("resuming a task paused at submit parks at the submit boundary instead of silently completing", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     // Task was parked at submit + awaiting_user, then paused (status overwritten,
     // as POST pause does unconditionally) without ever calling advance to complete it.
-    updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "paused" });
+    updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "paused" });
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps() });
     const task = await advance(ctx);
     expect(task.status).toBe("awaiting_user");
@@ -302,7 +308,7 @@ describe("pipeline runner", () => {
       steps: makeSteps({ requirement: "optional", throwAt: "tailor-resume", throwError: noKey }),
     });
     await expect(advance(ctx)).rejects.toBe(noKey);
-    const task = getAgentTask(db, taskId)!;
+    const task = getPipelineTask(db, taskId)!;
     expect(task.status).toBe("failed");
     expect(task.failureReason).toBe(
       "No API key configured for anthropic. Add one in Settings → AI.",
@@ -313,7 +319,7 @@ describe("pipeline runner", () => {
 describe("pipeline runner — application events", () => {
   it("startTask appends a task-started event", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     await startTask(ctx);
     const events = listEvents(db, applicationId);
@@ -322,7 +328,7 @@ describe("pipeline runner — application events", () => {
 
   it("calling startTask twice yields exactly ONE task-started event (a repeat call is not a new start)", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     await startTask(ctx); // queued → runs tailor-resume → awaiting_user at the résumé confirm gate
     await startTask(ctx); // not queued anymore — must not log a second start
@@ -332,8 +338,8 @@ describe("pipeline runner — application events", () => {
 
   it("a second /start while the task is still `running` (the second-tab reentrancy case) does not log a second task-started", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
-    updateAgentTask(db, taskId, { status: "running" }); // simulate: first /start call is already mid-flight
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
+    updatePipelineTask(db, taskId, { status: "running" }); // simulate: first /start call is already mid-flight
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     const task = await startTask(ctx); // advance()'s reentrancy guard no-ops this call
     expect(task.status).toBe("running");
@@ -344,7 +350,7 @@ describe("pipeline runner — application events", () => {
 
   it("each successful step body run appends a step-completed event with its step key", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     await advance(ctx); // runs tailor-resume → résumé confirm gate
     const events = listEvents(db, applicationId);
@@ -354,7 +360,7 @@ describe("pipeline runner — application events", () => {
 
   it("approving the résumé confirm gate appends an artifact-approved event for kind resume", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     await advance(ctx); // → résumé confirm gate
     await advance(ctx); // approve → runs analyze-site → choice gate
@@ -369,7 +375,7 @@ describe("pipeline runner — application events", () => {
 
   it("approving the cover-letter confirm gate appends an artifact-approved event for kind cover-letter", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "required" }) });
     await advance(ctx); // résumé gate
     await advance(ctx); // approve résumé → analyze → auto-generate cover letter → confirm-cover-letter gate
@@ -381,7 +387,7 @@ describe("pipeline runner — application events", () => {
 
   it("choosing generate at the cover-letter choice gate appends a step-completed event", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     await advance(ctx); // résumé gate
     await advance(ctx); // → choice gate
@@ -398,7 +404,7 @@ describe("pipeline runner — application events", () => {
 
   it("choosing skip does not append a step-completed event for the skipped step", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "optional" }) });
     await advance(ctx); // résumé gate
     await advance(ctx); // → choice gate
@@ -413,7 +419,7 @@ describe("pipeline runner — application events", () => {
 
   it("skipping a not-applicable cover-letter step (requirement none) does not append a step-completed event", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     const ctx = makePipelineContext(db, taskId, { steps: makeSteps({ requirement: "none" }) });
     await advance(ctx); // résumé gate
     await advance(ctx); // approve → analyze (sets none) → skip cover steps → fill-form
@@ -429,7 +435,7 @@ describe("pipeline runner — application events", () => {
 describe("pipeline runner — style memory distill trigger", () => {
   it("approving a tweaked artifact fires distill asynchronously and appends a style-distilled event on success", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     seedResumeAtConfirmGate(taskId, { withInstruction: true });
 
     let capturedInput: unknown;
@@ -466,7 +472,7 @@ describe("pipeline runner — style memory distill trigger", () => {
 
   it("approving an untweaked (single-version) artifact does not fire distill", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     seedResumeAtConfirmGate(taskId, { withInstruction: false });
 
     const ctx = makePipelineContext(db, taskId, {
@@ -485,7 +491,7 @@ describe("pipeline runner — style memory distill trigger", () => {
 
   it("a distill rejection is silent: the approve response is unaffected and no style-distilled event is written", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     seedResumeAtConfirmGate(taskId, { withInstruction: true });
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -513,7 +519,7 @@ describe("pipeline runner — style memory distill trigger", () => {
 
   it("a degraded (non-JSON) distill response resolves without error but appends no style-distilled event", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     seedResumeAtConfirmGate(taskId, { withInstruction: true });
 
     const ctx = makePipelineContext(db, taskId, {
@@ -539,7 +545,7 @@ describe("pipeline runner — style memory distill trigger", () => {
 
   it("a corrupt-row throw from getArtifact inside the trigger never fails the caller's approve", async () => {
     const taskId = seedTask();
-    const applicationId = getAgentTask(db, taskId)!.applicationId;
+    const applicationId = getPipelineTask(db, taskId)!.applicationId;
     seedResumeAtConfirmGate(taskId, { withInstruction: true });
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -569,7 +575,7 @@ describe("runTargetedStep", () => {
     const app = createApplication(db, {
       jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
     });
-    return createAgentTask(db, {
+    return createPipelineTask(db, {
       applicationId: app.id,
       status: "awaiting_user",
       step: FILL_FORM_STEP,
@@ -584,7 +590,7 @@ describe("runTargetedStep", () => {
     expect(ran).toEqual(["tailor-resume"]);
     expect(task.status).toBe("awaiting_user");
     expect(task.step).toBe(FILL_FORM_STEP);
-    const app = getAgentTask(db, taskId)!;
+    const app = getPipelineTask(db, taskId)!;
     const events = listEvents(db, app.applicationId).map((e) => e.kind);
     expect(events).toContain("step-completed");
   });
@@ -595,7 +601,7 @@ describe("runTargetedStep", () => {
       steps: makeSteps({ throwAt: "tailor-resume" }),
     });
     await expect(runTargetedStep(ctx, "tailor-resume")).rejects.toThrow("boom at tailor-resume");
-    const task = getAgentTask(db, taskId)!;
+    const task = getPipelineTask(db, taskId)!;
     expect(task.status).toBe("awaiting_user");
     expect(task.step).toBe(FILL_FORM_STEP);
     expect(task.failureReason).toBeUndefined();
@@ -614,7 +620,7 @@ describe("runTargetedStep", () => {
     const app = createApplication(db, {
       jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
     });
-    const taskId = createAgentTask(db, {
+    const taskId = createPipelineTask(db, {
       applicationId: app.id,
       status: "awaiting_user",
       step: SUBMIT_STEP,

@@ -2,13 +2,13 @@
 import { afterEach, describe, it, expect } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { StepTimeline } from "../step-timeline";
-import { PIPELINE_STEPS, type AgentTask } from "@offeros/core";
+import { PIPELINE_STEPS, type PipelineTask } from "@offeros/core";
 
 afterEach(cleanup);
 
 describe("StepTimeline", () => {
   it("shows every milestone as done and none as in progress when step = 7", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "done",
@@ -30,7 +30,7 @@ describe("StepTimeline", () => {
   });
 
   it("renders generation steps as Skipped (never done) for a fillFirst task parked at the fill gate", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "awaiting_user",
@@ -53,7 +53,7 @@ describe("StepTimeline", () => {
   });
 
   it("keeps generation steps Skipped (not done) after the instant fill moves to the submit gate", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "awaiting_user",
@@ -73,7 +73,7 @@ describe("StepTimeline", () => {
   });
 
   it("marks Submit Application as current and the six before it as done when step = 6", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "awaiting_user",
@@ -99,7 +99,7 @@ describe("StepTimeline", () => {
   });
 
   it('shows "Queued" instead of "In progress" for the current step while the task is queued', () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "queued",
@@ -120,7 +120,7 @@ describe("StepTimeline", () => {
   });
 
   it('shows "Failed" instead of "In progress" for the current step when the task has failed', () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "failed",
@@ -140,7 +140,7 @@ describe("StepTimeline", () => {
   });
 
   it("shows the failure reason under the current step when the task has failed with one", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "failed",
@@ -160,7 +160,7 @@ describe("StepTimeline", () => {
   });
 
   it('shows "Paused" instead of "In progress" for the current step when the task is paused', () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "paused",
@@ -180,7 +180,7 @@ describe("StepTimeline", () => {
   });
 
   it('still shows "In progress" for the current step while the task is running (regression)', () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "running",
@@ -200,7 +200,7 @@ describe("StepTimeline", () => {
   });
 
   it("renders the ActionRequiredCard when applicationInfo.status is 2 at the fill-form step", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "awaiting_user",

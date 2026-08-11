@@ -1,5 +1,5 @@
 import { PIPELINE_STEPS } from "@offeros/core";
-import { getAgentTask } from "../repositories/agent-task-repo";
+import { getPipelineTask } from "../repositories/pipeline-task-repo";
 import { getArtifact } from "../repositories/artifact-repo";
 import { getApplication } from "../repositories/application-repo";
 import { getFit } from "../repositories/fit-repo";
@@ -28,7 +28,7 @@ import type { Tool, ToolContext, ToolObservation } from "./types";
 const HUMAN_GATES = new Set(["fill-form", "submit"]);
 
 function stepKeyOf(db: ToolContext["db"], taskId: string): string | undefined {
-  const task = getAgentTask(db, taskId);
+  const task = getPipelineTask(db, taskId);
   if (!task || task.status !== "awaiting_user") return undefined;
   return PIPELINE_STEPS[task.step]?.key;
 }

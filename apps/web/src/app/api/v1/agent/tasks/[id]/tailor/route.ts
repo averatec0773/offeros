@@ -1,5 +1,5 @@
 import { getDb } from "@/server/db/client";
-import { getAgentTask } from "@/server/repositories/agent-task-repo";
+import { getPipelineTask } from "@/server/repositories/pipeline-task-repo";
 import { buildPipelineContext } from "@/server/pipeline/route-context";
 import { runTargetedStep } from "@/server/pipeline/runner";
 import { handle, ok, notFound } from "@/server/http/envelope";
@@ -16,7 +16,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(_request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
-    if (!getAgentTask(getDb(), id)) return notFound("agent task");
+    if (!getPipelineTask(getDb(), id)) return notFound("agent task");
     return ok(await runTargetedStep(buildPipelineContext(id), "tailor-resume"));
   });
 }

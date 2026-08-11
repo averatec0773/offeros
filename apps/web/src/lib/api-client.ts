@@ -1,7 +1,7 @@
 import type {
   AnswerEntry,
   Application,
-  AgentTask,
+  PipelineTask,
   ApplicationEvent,
   ApplicationStatus,
   Artifact,
@@ -95,30 +95,31 @@ export const api = {
     events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
     trace: (id: string) => request<TraceEntry[]>(`/applications/${id}/trace`),
   },
-  agentTasks: {
+  pipelineTasks: {
     create: (input: { applicationId: string }) =>
-      request<AgentTask>("/agent/tasks", json("POST", input)),
+      request<PipelineTask>("/agent/tasks", json("POST", input)),
     createFromJd: (input: { jobInfo: JobInfo; jdText?: string; source?: string }) =>
-      request<AgentTask>("/agent/tasks", json("POST", input)),
+      request<PipelineTask>("/agent/tasks", json("POST", input)),
     get: (id: string) =>
-      request<{ task: AgentTask; jdAnalysis: JdAnalysis | null; artifacts: Artifact[] }>(
+      request<{ task: PipelineTask; jdAnalysis: JdAnalysis | null; artifacts: Artifact[] }>(
         `/agent/tasks/${id}`,
       ),
-    start: (id: string) => request<AgentTask>(`/agent/tasks/${id}/start`, json("POST", {})),
-    advance: (id: string) => request<AgentTask>(`/agent/tasks/${id}/advance`, json("POST", {})),
+    start: (id: string) => request<PipelineTask>(`/agent/tasks/${id}/start`, json("POST", {})),
+    advance: (id: string) => request<PipelineTask>(`/agent/tasks/${id}/advance`, json("POST", {})),
     tweak: (id: string, kind: "resume" | "cover-letter", instruction: string) =>
       request<{ version: ArtifactVersion; diff: LineDiff }>(
         `/agent/tasks/${id}/tweak`,
         json("POST", { kind, instruction }),
       ),
     choice: (id: string, choice: "skip" | "generate") =>
-      request<AgentTask>(`/agent/tasks/${id}/choice`, json("POST", { choice })),
-    pause: (id: string) => request<AgentTask>(`/agent/tasks/${id}/pause`, json("POST", {})),
+      request<PipelineTask>(`/agent/tasks/${id}/choice`, json("POST", { choice })),
+    pause: (id: string) => request<PipelineTask>(`/agent/tasks/${id}/pause`, json("POST", {})),
     fillHandoff: (id: string) =>
       request<FillHandoff>(`/agent/tasks/${id}/fill/handoff`, json("POST", {})),
     fillResolve: (id: string, action: "fixed" | "applied-manually") =>
-      request<AgentTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
-    fillUndo: (id: string) => request<AgentTask>(`/agent/tasks/${id}/fill/undo`, json("POST", {})),
+      request<PipelineTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
+    fillUndo: (id: string) =>
+      request<PipelineTask>(`/agent/tasks/${id}/fill/undo`, json("POST", {})),
   },
   agent: {
     inbox: () => request<{ inbox: AttentionItem[]; trace: TraceEntry[] }>(`/agent/inbox`),

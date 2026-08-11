@@ -1,13 +1,13 @@
 import { desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { agentTaskSchema, type AgentTask } from "@offeros/core";
+import { pipelineTaskSchema, type PipelineTask } from "@offeros/core";
 import type { Db } from "../db/client";
-import { agentTasks } from "../db/schema";
+import { pipelineTasks } from "../db/schema";
 
-type Row = typeof agentTasks.$inferSelect;
+type Row = typeof pipelineTasks.$inferSelect;
 
-export function toDomain(row: Row): AgentTask {
-  return agentTaskSchema.parse({
+export function toDomain(row: Row): PipelineTask {
+  return pipelineTaskSchema.parse({
     id: row.id,
     applicationId: row.applicationId,
     status: row.status,
@@ -25,24 +25,24 @@ export function toDomain(row: Row): AgentTask {
   });
 }
 
-export function listAgentTasks(db: Db): AgentTask[] {
-  return db.select().from(agentTasks).orderBy(desc(agentTasks.updatedAt)).all().map(toDomain);
+export function listPipelineTasks(db: Db): PipelineTask[] {
+  return db.select().from(pipelineTasks).orderBy(desc(pipelineTasks.updatedAt)).all().map(toDomain);
 }
 
-export function getAgentTask(db: Db, id: string): AgentTask | null {
-  const row = db.select().from(agentTasks).where(eq(agentTasks.id, id)).get();
+export function getPipelineTask(db: Db, id: string): PipelineTask | null {
+  const row = db.select().from(pipelineTasks).where(eq(pipelineTasks.id, id)).get();
   return row ? toDomain(row) : null;
 }
 
-export function createAgentTask(
+export function createPipelineTask(
   db: Db,
   input: {
     applicationId: string;
-    status?: AgentTask["status"];
+    status?: PipelineTask["status"];
     step?: number;
     fillFirst?: boolean;
   },
-): AgentTask {
+): PipelineTask {
   const now = Date.now();
   const row = {
     id: randomUUID(),
@@ -60,16 +60,16 @@ export function createAgentTask(
     createdAt: now,
     updatedAt: now,
   };
-  db.insert(agentTasks).values(row).run();
+  db.insert(pipelineTasks).values(row).run();
   return toDomain(row as Row);
 }
 
-export function updateAgentTask(
+export function updatePipelineTask(
   db: Db,
   id: string,
   patch: Partial<
     Pick<
-      AgentTask,
+      PipelineTask,
       | "status"
       | "step"
       | "applicationInfo"
@@ -81,10 +81,10 @@ export function updateAgentTask(
       | "failureReason"
     >
   >,
-): AgentTask | null {
-  const existing = db.select().from(agentTasks).where(eq(agentTasks.id, id)).get();
+): PipelineTask | null {
+  const existing = db.select().from(pipelineTasks).where(eq(pipelineTasks.id, id)).get();
   if (!existing) return null;
-  db.update(agentTasks)
+  db.update(pipelineTasks)
     .set({
       status: patch.status ?? existing.status,
       step: patch.step ?? existing.step,
@@ -97,7 +97,7 @@ export function updateAgentTask(
       failureReason: patch.failureReason ?? existing.failureReason,
       updatedAt: Date.now(),
     })
-    .where(eq(agentTasks.id, id))
+    .where(eq(pipelineTasks.id, id))
     .run();
-  return getAgentTask(db, id);
+  return getPipelineTask(db, id);
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentTask, JdAnalysis } from "@offeros/core";
+import type { PipelineTask, JdAnalysis } from "@offeros/core";
 import type { JdAnalysisInput, JdAnalysisOutput } from "@offeros/llm";
 import type { PipelineContext } from "../types";
 import { buildProfileFacts } from "./grounding";
@@ -10,7 +10,7 @@ import { computeFit } from "../../services/fit-service";
  * result (incl. matchNotes/gaps), and sets the task's `coverLetterRequirement`
  * from the analysis so the generate-cover-letter gate can branch on it.
  */
-export async function run(ctx: PipelineContext, task: AgentTask): Promise<void> {
+export async function run(ctx: PipelineContext, task: PipelineTask): Promise<void> {
   const application = ctx.repos.getApplication(task.applicationId);
   if (!application) throw new Error(`application ${task.applicationId} not found`);
   const profile = ctx.repos.getProfile();
@@ -37,7 +37,7 @@ export async function run(ctx: PipelineContext, task: AgentTask): Promise<void> 
     createdAt: existing?.createdAt ?? Date.now(),
   };
   ctx.repos.saveJdAnalysis(analysis);
-  await ctx.repos.updateAgentTask(ctx.taskId, {
+  await ctx.repos.updatePipelineTask(ctx.taskId, {
     coverLetterRequirement: output.coverLetterRequirement,
   });
 

@@ -5,8 +5,8 @@ import { join } from "node:path";
 import type { Artifact, JdAnalysis, Profile } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
-import { createAgentTask } from "../../repositories/agent-task-repo";
-import { getAgentTaskByApplicationId } from "../../repositories/agent-task-by-application";
+import { createPipelineTask } from "../../repositories/pipeline-task-repo";
+import { getPipelineTaskByApplicationId } from "../../repositories/pipeline-task-by-application";
 import { saveProfile } from "../../repositories/profile-repo";
 import { saveJdAnalysis } from "../../repositories/jd-analysis-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
@@ -73,7 +73,7 @@ function seed(): { applicationId: string } {
     jdText: "We are hiring an ML Engineer.",
   });
   saveProfile(db, PROFILE);
-  createAgentTask(db, { applicationId: app.id });
+  createPipelineTask(db, { applicationId: app.id });
   saveJdAnalysis(db, JD_ANALYSIS(app.id));
   return { applicationId: app.id };
 }
@@ -125,7 +125,7 @@ describe("computeFit", () => {
 
   it("uses the current résumé artifact text as resumeText when one exists", async () => {
     const { applicationId } = seed();
-    const task = getAgentTaskByApplicationId(db, applicationId)!;
+    const task = getPipelineTaskByApplicationId(db, applicationId)!;
     const now = Date.now();
     const artifact: Artifact = {
       id: "art-1",

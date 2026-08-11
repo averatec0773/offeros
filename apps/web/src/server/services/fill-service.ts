@@ -3,7 +3,7 @@ import {
   deriveApplicationInfo,
   mergeFieldReports,
   answerSchema,
-  type AgentTask,
+  type PipelineTask,
   type Artifact,
   type FieldReport,
   type FillHandoff,
@@ -14,8 +14,12 @@ import { formatEvidence, selectEvidence } from "@offeros/autofill";
 import type { AnswerEntry, FillPersonalInfo, FillProfile } from "@offeros/autofill";
 import type { Db } from "../db/client";
 import { answers } from "../db/schema";
-import { createAgentTask, getAgentTask, updateAgentTask } from "../repositories/agent-task-repo";
-import { getAgentTaskByApplicationId } from "../repositories/agent-task-by-application";
+import {
+  createPipelineTask,
+  getPipelineTask,
+  updatePipelineTask,
+} from "../repositories/pipeline-task-repo";
+import { getPipelineTaskByApplicationId } from "../repositories/pipeline-task-by-application";
 import {
   createApplication,
   getApplication,
@@ -60,14 +64,18 @@ function closeOpenHandoffsForTask(db: Db, taskId: string): void {
   }
 }
 
-function requireTask(db: Db, taskId: string): AgentTask {
-  const task = getAgentTask(db, taskId);
+function requireTask(db: Db, taskId: string): PipelineTask {
+  const task = getPipelineTask(db, taskId);
   if (!task) throw new ServiceError(`agent task ${taskId} not found`);
   return task;
 }
 
-function persist(db: Db, taskId: string, patch: Parameters<typeof updateAgentTask>[2]): AgentTask {
-  const updated = updateAgentTask(db, taskId, patch);
+function persist(
+  db: Db,
+  taskId: string,
+  patch: Parameters<typeof updatePipelineTask>[2],
+): PipelineTask {
+  const updated = updatePipelineTask(db, taskId, patch);
   if (!updated) throw new ServiceError(`agent task ${taskId} not found`);
   return updated;
 }
@@ -123,7 +131,7 @@ export function startInstantFill(
 
   if (existing) {
     applicationId = existing.id;
-    const task = getAgentTaskByApplicationId(db, existing.id);
+    const task = getPipelineTaskByApplicationId(db, existing.id);
     if (task && task.status === "awaiting_user" && PIPELINE_STEPS[task.step]?.key === "fill-form") {
       taskId = task.id;
     } else if (task) {
@@ -149,7 +157,7 @@ export function startInstantFill(
 /** A task born at the fill gate: `fillFirst` marks the skipped generation
  *  steps so the timeline renders them as skipped, never as done. */
 function createFillFirstTask(db: Db, applicationId: string): string {
-  return createAgentTask(db, {
+  return createPipelineTask(db, {
     applicationId,
     status: "awaiting_user",
     step: stepIndex("fill-form"),
@@ -398,7 +406,7 @@ export function applyFillReport(
   taskId: string,
   reports: FieldReport[],
   complete: boolean,
-): AgentTask {
+): PipelineTask {
   const task = requireTask(db, taskId);
   if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "fill-form") {
     throw new ServiceError("task is not awaiting fill");
@@ -406,7 +414,7 @@ export function applyFillReport(
   const merged = mergeFieldReports(task.fieldReports ?? [], reports);
   const applicationInfo = deriveApplicationInfo(merged);
 
-  let result: AgentTask;
+  let result: PipelineTask;
   if (!complete) {
     result = persist(db, taskId, { fieldReports: merged, applicationInfo });
   } else {
@@ -497,7 +505,7 @@ export function resolveFill(
   db: Db,
   taskId: string,
   action: "fixed" | "applied-manually",
-): AgentTask {
+): PipelineTask {
   const task = requireTask(db, taskId);
 
   if (action === "applied-manually") {
@@ -568,7 +576,7 @@ export function resolveFill(
  * The "mark submitted" terminal action. Valid only when the task waits at the
  * submit gate; finishes the task and marks the application applied.
  */
-export function completeSubmitted(db: Db, taskId: string): AgentTask {
+export function completeSubmitted(db: Db, taskId: string): PipelineTask {
   const task = requireTask(db, taskId);
   if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "submit") {
     throw new ServiceError("task is not at the submit gate");
@@ -594,7 +602,7 @@ const UNDOABLE_APP_STATUSES = new Set(["saved", "applying"]);
  * recorded before payloads existed restore to the submit gate. Appends
  * `submission-undone` so the reversal itself is on the timeline.
  */
-export function undoSubmitted(db: Db, taskId: string): AgentTask {
+export function undoSubmitted(db: Db, taskId: string): PipelineTask {
   const task = requireTask(db, taskId);
   if (task.status !== "done") {
     throw new ServiceError("task is not completed — nothing to undo");

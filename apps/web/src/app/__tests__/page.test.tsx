@@ -25,7 +25,8 @@ process.env.OFFEROS_DB_PATH = join(dir, "home.db");
 const { default: HomePage } = await import("../page");
 const { getDb } = await import("@/server/db/client");
 const { createApplication } = await import("@/server/repositories/application-repo");
-const { createAgentTask, updateAgentTask } = await import("@/server/repositories/agent-task-repo");
+const { createPipelineTask, updatePipelineTask } =
+  await import("@/server/repositories/pipeline-task-repo");
 const { saveFit } = await import("@/server/repositories/fit-repo");
 const { saveProfile } = await import("@/server/repositories/profile-repo");
 
@@ -66,8 +67,8 @@ describe("HomePage", () => {
       jobInfo: { jobId: "j2", jobTitle: "Platform Engineer", companyName: "Nimbus" },
       status: "rejected",
     });
-    const task = createAgentTask(db, { applicationId: active.id });
-    updateAgentTask(db, task.id, { step: 3 });
+    const task = createPipelineTask(db, { applicationId: active.id });
+    updatePipelineTask(db, task.id, { step: 3 });
     saveFit(db, {
       id: "fit-1",
       applicationId: active.id,

@@ -1,6 +1,6 @@
 import { getDb } from "@/server/db/client";
 import { getApplication, listApplications } from "@/server/repositories/application-repo";
-import { getAgentTaskByApplicationId } from "@/server/repositories/agent-task-by-application";
+import { getPipelineTaskByApplicationId } from "@/server/repositories/pipeline-task-by-application";
 import {
   appendChatMessage,
   listRecentMessages,
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
      *  null so the loop can tell the agent rather than throwing. */
     const focus = (id: string) => {
       if (!getApplication(db, id)) return null;
-      const task = getAgentTaskByApplicationId(db, id);
+      const task = getPipelineTaskByApplicationId(db, id);
       return { applicationId: id, ...(task ? { taskId: task.id } : {}) };
     };
 

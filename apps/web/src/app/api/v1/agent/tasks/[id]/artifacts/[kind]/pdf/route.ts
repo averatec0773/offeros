@@ -1,6 +1,6 @@
 import { ARTIFACT_KINDS, type ArtifactKind, type JobInfo } from "@offeros/core";
 import { getDb } from "@/server/db/client";
-import { getAgentTask } from "@/server/repositories/agent-task-repo";
+import { getPipelineTask } from "@/server/repositories/pipeline-task-repo";
 import { getApplication } from "@/server/repositories/application-repo";
 import { getArtifact } from "@/server/repositories/artifact-repo";
 import { exportArtifactPdf } from "@/server/services/export-service";
@@ -44,7 +44,7 @@ export async function GET(_request: Request, ctx: Ctx) {
     const artifactKind = kind as ArtifactKind;
 
     const db = getDb();
-    const task = getAgentTask(db, id);
+    const task = getPipelineTask(db, id);
     if (!task) return notFound("agent task");
     if (!getArtifact(db, id, artifactKind)) return notFound(`${kind} artifact`);
 

@@ -1,8 +1,8 @@
 import { PIPELINE_STEPS } from "@offeros/core";
 import { diagnoseFill, type FillDiagnosis } from "@offeros/autofill";
 import { listApplications, getApplication } from "../repositories/application-repo";
-import { listAgentTasks, getAgentTask } from "../repositories/agent-task-repo";
-import { newestTaskByApplication } from "../repositories/agent-task-by-application";
+import { listPipelineTasks, getPipelineTask } from "../repositories/pipeline-task-repo";
+import { newestTaskByApplication } from "../repositories/pipeline-task-by-application";
 import { listTrace } from "../repositories/agent-trace-repo";
 import { listAnswers } from "../repositories/answer-repo";
 import { getFit } from "../repositories/fit-repo";
@@ -68,7 +68,7 @@ export const listApplicationsTool: Tool<
     return typeof query === "string" && query.trim() !== "" ? { query: query.trim() } : undefined;
   },
   run: async (ctx, input) => {
-    const byApp = newestTaskByApplication(listAgentTasks(ctx.db));
+    const byApp = newestTaskByApplication(listPipelineTasks(ctx.db));
     const needle = input?.query?.toLowerCase();
     const apps = listApplications(ctx.db).filter(
       (a) =>
@@ -142,7 +142,7 @@ export const readFillReportTool: Tool<
   description:
     "Read the last fill for this application: the fields that WERE filled (label, value, where the value came from), and the reasons the rest did not fill, grouped by cause. Use this both for 'what was filled in' and for 'why did it not complete'.",
   run: async (ctx) => {
-    const task = ctx.taskId ? getAgentTask(ctx.db, ctx.taskId) : undefined;
+    const task = ctx.taskId ? getPipelineTask(ctx.db, ctx.taskId) : undefined;
     const reports = task?.fieldReports ?? [];
     const diagnosis = diagnoseFill(reports);
     const filledFields = reports
@@ -263,7 +263,7 @@ export const readApplicationTool: Tool<void, JobDetail> = {
         failure: { kind: "precondition", reason: `application ${ctx.applicationId} not found` },
       };
     }
-    const task = ctx.taskId ? getAgentTask(ctx.db, ctx.taskId) : undefined;
+    const task = ctx.taskId ? getPipelineTask(ctx.db, ctx.taskId) : undefined;
     const fit = getFit(ctx.db, ctx.applicationId);
     return {
       ok: true,

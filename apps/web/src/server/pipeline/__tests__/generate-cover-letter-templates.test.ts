@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentTask, Profile } from "@offeros/core";
+import type { PipelineTask, Profile } from "@offeros/core";
 import { makeFakeProvider, type ProviderCallArgs } from "@offeros/llm";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
-import { createAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask } from "../../repositories/pipeline-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { upsertTemplate } from "../../repositories/template-repo";
 import { makePipelineContext } from "../context";
@@ -40,13 +40,13 @@ const COVER_RESPONSE = JSON.stringify({
   rationale: "Canned rationale.",
 });
 
-function seed(): AgentTask {
+function seed(): PipelineTask {
   const app = createApplication(db, {
     jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
     jdText: "We are hiring an ML Engineer.",
   });
   saveProfile(db, profile);
-  return createAgentTask(db, { applicationId: app.id });
+  return createPipelineTask(db, { applicationId: app.id });
 }
 
 /** Captures the exact user prompt sent to the (fake) provider for the

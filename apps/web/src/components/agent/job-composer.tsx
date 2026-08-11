@@ -20,7 +20,7 @@ export function JobComposer() {
     setPending(true);
     setError(null);
     try {
-      const task = await api.agentTasks.createFromJd({
+      const task = await api.pipelineTasks.createFromJd({
         jobInfo: {
           jobId: crypto.randomUUID(),
           jobTitle: jobTitle.trim() || "Untitled role",

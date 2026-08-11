@@ -2,11 +2,11 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { GateCard } from "../gate-card";
-import type { AgentTask } from "@offeros/core";
+import type { PipelineTask } from "@offeros/core";
 
 afterEach(cleanup);
 
-const task: AgentTask = {
+const task: PipelineTask = {
   id: "t1",
   applicationId: "app-1",
   status: "awaiting_user",

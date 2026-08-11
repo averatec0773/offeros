@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import {
   PIPELINE_STEPS,
-  type AgentTask,
+  type PipelineTask,
   type Application,
   type FitAnalysis,
   type ResumeSummary,
@@ -18,7 +18,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
   return {
     ...actual,
     api: {
-      agentTasks: {
+      pipelineTasks: {
         get: vi.fn(),
         create: vi.fn(),
         start: vi.fn(),
@@ -62,7 +62,7 @@ const application: Application = {
 const FILL_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
 const SUBMIT_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "submit");
 
-function baseTask(overrides: Partial<AgentTask>): AgentTask {
+function baseTask(overrides: Partial<PipelineTask>): PipelineTask {
   return {
     id: "t1",
     applicationId: "app-1",
@@ -78,12 +78,12 @@ function baseTask(overrides: Partial<AgentTask>): AgentTask {
 }
 
 beforeEach(() => {
-  vi.mocked(api.agentTasks.get).mockResolvedValue({
+  vi.mocked(api.pipelineTasks.get).mockResolvedValue({
     task: baseTask({}),
     jdAnalysis: null,
     artifacts: [],
   });
-  vi.mocked(api.agentTasks.fillHandoff).mockResolvedValue({
+  vi.mocked(api.pipelineTasks.fillHandoff).mockResolvedValue({
     id: "h1",
     taskId: "t1",
     applicationId: "app-1",
@@ -92,7 +92,7 @@ beforeEach(() => {
     createdAt: 1,
     updatedAt: 1,
   });
-  vi.mocked(api.agentTasks.advance).mockResolvedValue(
+  vi.mocked(api.pipelineTasks.advance).mockResolvedValue(
     baseTask({ status: "done", step: PIPELINE_STEPS.length }),
   );
   vi.mocked(api.resumes.list).mockResolvedValue([]);
@@ -115,7 +115,7 @@ describe("WorkspaceClient — fill handoff states", () => {
 
     fireEvent.click(screen.getByText(/Open & fill/i));
 
-    await waitFor(() => expect(api.agentTasks.fillHandoff).toHaveBeenCalledWith("t1"));
+    await waitFor(() => expect(api.pipelineTasks.fillHandoff).toHaveBeenCalledWith("t1"));
     expect(window.open).toHaveBeenCalledWith("https://ats.example/apply", "_blank");
     await waitFor(() => expect(screen.getByText(/Ticket created/i)).toBeTruthy());
   });
@@ -138,7 +138,7 @@ describe("WorkspaceClient — fill handoff states", () => {
     expect(screen.getByText("LinkedIn Profile")).toBeTruthy();
 
     fireEvent.click(screen.getByText(/Re-fill/i));
-    await waitFor(() => expect(api.agentTasks.fillHandoff).toHaveBeenCalledWith("t1"));
+    await waitFor(() => expect(api.pipelineTasks.fillHandoff).toHaveBeenCalledWith("t1"));
   });
 
   it("submit gate: Mark as submitted calls advance", async () => {
@@ -159,13 +159,13 @@ describe("WorkspaceClient — fill handoff states", () => {
     expect(screen.getByText(/Ready to submit/i)).toBeTruthy();
     fireEvent.click(screen.getByText(/Mark as submitted/i));
 
-    await waitFor(() => expect(api.agentTasks.advance).toHaveBeenCalledWith("t1"));
+    await waitFor(() => expect(api.pipelineTasks.advance).toHaveBeenCalledWith("t1"));
   });
 
   it("opens the apply link synchronously (before the handoff call resolves) to avoid popup blockers", async () => {
     const task = baseTask({});
-    let resolveHandoff!: (value: Awaited<ReturnType<typeof api.agentTasks.fillHandoff>>) => void;
-    vi.mocked(api.agentTasks.fillHandoff).mockReturnValue(
+    let resolveHandoff!: (value: Awaited<ReturnType<typeof api.pipelineTasks.fillHandoff>>) => void;
+    vi.mocked(api.pipelineTasks.fillHandoff).mockReturnValue(
       new Promise((resolve) => {
         resolveHandoff = resolve;
       }),
@@ -206,7 +206,7 @@ describe("WorkspaceClient — ticketCreated reset", () => {
     // After the handoff, the extension reports missing fields (gate leaves
     // fill-form for action-required); after "Fixed" is acknowledged, the
     // pipeline lands back on a fresh fill-form gate with no ticket yet.
-    vi.mocked(api.agentTasks.get)
+    vi.mocked(api.pipelineTasks.get)
       .mockResolvedValueOnce({
         task: baseTask({
           applicationInfo: { status: 2, filledFields: [], missingFields: ["LinkedIn Profile"] },
@@ -315,9 +315,9 @@ describe("WorkspaceClient — fit card", () => {
 
 describe("WorkspaceClient — provider not configured", () => {
   it("shows the connect-provider banner under the status bar when start fails with 42000", async () => {
-    vi.mocked(api.agentTasks.create).mockResolvedValue(baseTask({ status: "queued", step: 0 }));
-    vi.mocked(api.agentTasks.start).mockRejectedValue(new ApiError("no key", 42000));
-    vi.mocked(api.agentTasks.get).mockResolvedValue({
+    vi.mocked(api.pipelineTasks.create).mockResolvedValue(baseTask({ status: "queued", step: 0 }));
+    vi.mocked(api.pipelineTasks.start).mockRejectedValue(new ApiError("no key", 42000));
+    vi.mocked(api.pipelineTasks.get).mockResolvedValue({
       task: baseTask({ status: "queued", step: 0 }),
       jdAnalysis: null,
       artifacts: [],
@@ -345,9 +345,9 @@ describe("WorkspaceClient — provider not configured", () => {
   });
 
   it("keeps the generic error message for a non-42000 start failure", async () => {
-    vi.mocked(api.agentTasks.create).mockResolvedValue(baseTask({ status: "queued", step: 0 }));
-    vi.mocked(api.agentTasks.start).mockRejectedValue(new Error("boom"));
-    vi.mocked(api.agentTasks.get).mockResolvedValue({
+    vi.mocked(api.pipelineTasks.create).mockResolvedValue(baseTask({ status: "queued", step: 0 }));
+    vi.mocked(api.pipelineTasks.start).mockRejectedValue(new Error("boom"));
+    vi.mocked(api.pipelineTasks.get).mockResolvedValue({
       task: baseTask({ status: "queued", step: 0 }),
       jdAnalysis: null,
       artifacts: [],
@@ -377,13 +377,13 @@ describe("WorkspaceClient — tweak banner wiring", () => {
 
   it("shows the connect-provider banner on a 42000 tweak failure, then clears it once a retry succeeds", async () => {
     const task = baseTask({ status: "awaiting_user", step: CONFIRM_RESUME_STEP });
-    vi.mocked(api.agentTasks.tweak)
+    vi.mocked(api.pipelineTasks.tweak)
       .mockRejectedValueOnce(new ApiError("no key", 42000))
       .mockResolvedValueOnce({
         version: { id: "v2", content: "tweaked résumé", rationale: "", createdAt: 2 },
         diff: [],
       });
-    vi.mocked(api.agentTasks.get).mockResolvedValue({ task, jdAnalysis: null, artifacts: [] });
+    vi.mocked(api.pipelineTasks.get).mockResolvedValue({ task, jdAnalysis: null, artifacts: [] });
 
     render(
       <WorkspaceClient
@@ -409,7 +409,7 @@ describe("WorkspaceClient — tweak banner wiring", () => {
     // not linger once the provider is confirmed working.
     fireEvent.click(screen.getByRole("button", { name: "Apply Tweak" }));
 
-    await waitFor(() => expect(api.agentTasks.tweak).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.pipelineTasks.tweak).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(screen.queryByText(/Connect your AI provider to start/i)).toBeNull(),
     );
@@ -417,7 +417,7 @@ describe("WorkspaceClient — tweak banner wiring", () => {
 
   it("clears the banner when the tweak panel is cancelled after a 42000 failure", async () => {
     const task = baseTask({ status: "awaiting_user", step: CONFIRM_RESUME_STEP });
-    vi.mocked(api.agentTasks.tweak).mockRejectedValue(new ApiError("no key", 42000));
+    vi.mocked(api.pipelineTasks.tweak).mockRejectedValue(new ApiError("no key", 42000));
 
     render(
       <WorkspaceClient
@@ -718,7 +718,7 @@ describe("WorkspaceClient — timeline poll cadence", () => {
 
   it("re-fetches events on mount and again on every poll tick, riding the same cadence as syncFull", async () => {
     vi.mocked(api.applications.events).mockClear();
-    vi.mocked(api.agentTasks.get).mockClear();
+    vi.mocked(api.pipelineTasks.get).mockClear();
     vi.useFakeTimers();
     const task = baseTask({ status: "running" });
 
@@ -737,7 +737,7 @@ describe("WorkspaceClient — timeline poll cadence", () => {
     expect(api.applications.events).toHaveBeenCalledWith("app-1");
 
     await vi.advanceTimersByTimeAsync(1500);
-    expect(api.agentTasks.get).toHaveBeenCalledTimes(1);
+    expect(api.pipelineTasks.get).toHaveBeenCalledTimes(1);
     expect(api.applications.events).toHaveBeenCalledTimes(2);
 
     await vi.advanceTimersByTimeAsync(1500);

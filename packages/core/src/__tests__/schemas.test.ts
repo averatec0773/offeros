@@ -3,7 +3,7 @@ import {
   profileSchema,
   applicationSchema,
   resumeSchema,
-  agentTaskSchema,
+  pipelineTaskSchema,
   applicationInfoSchema,
   settingsSchema,
   PIPELINE_STEPS,
@@ -167,7 +167,7 @@ describe("resumeSchema", () => {
   });
 });
 
-describe("agentTaskSchema + applicationInfo gate", () => {
+describe("pipelineTaskSchema + applicationInfo gate", () => {
   it("models the action-required gate", () => {
     const info = applicationInfoSchema.parse({
       status: 2,
@@ -176,7 +176,7 @@ describe("agentTaskSchema + applicationInfo gate", () => {
     });
     expect(info.missingFields).toEqual(["LinkedIn Profile"]);
 
-    const task = agentTaskSchema.parse({
+    const task = pipelineTaskSchema.parse({
       id: "t1",
       applicationId: "app-1",
       status: "awaiting_user",

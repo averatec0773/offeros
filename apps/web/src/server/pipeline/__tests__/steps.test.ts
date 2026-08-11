@@ -6,12 +6,12 @@ import {
   PIPELINE_STEPS,
   buildResumeHeader,
   serializeResume,
-  type AgentTask,
+  type PipelineTask,
   type Profile,
 } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, updateApplication } from "../../repositories/application-repo";
-import { createAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask } from "../../repositories/pipeline-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { getFit } from "../../repositories/fit-repo";
 import { upsertStyleMemory } from "../../repositories/style-memory-repo";
@@ -101,13 +101,13 @@ async function fakeRunLlm(taskId: string, _input: unknown): Promise<unknown> {
   throw new Error(`steps.test fakeRunLlm: unexpected task id ${taskId}`);
 }
 
-function seed(): { applicationId: string; task: AgentTask } {
+function seed(): { applicationId: string; task: PipelineTask } {
   const app = createApplication(db, {
     jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
     jdText: "We are hiring an ML Engineer to own our inference pipeline.",
   });
   saveProfile(db, profile);
-  const task = createAgentTask(db, { applicationId: app.id });
+  const task = createPipelineTask(db, { applicationId: app.id });
   return { applicationId: app.id, task };
 }
 
@@ -234,7 +234,7 @@ describe("analyze-site step", () => {
     expect(analysis?.matchNotes).toEqual(JD_OUTPUT.matchNotes);
     expect(analysis?.coverLetterRequirement).toBe("optional");
 
-    const updated = ctx.repos.getAgentTask(task.id);
+    const updated = ctx.repos.getPipelineTask(task.id);
     expect(updated?.coverLetterRequirement).toBe("optional");
   });
 
@@ -250,7 +250,7 @@ describe("analyze-site step", () => {
     const analysis = ctx.repos.getJdAnalysis(applicationId);
     expect(analysis?.gaps).toEqual(JD_OUTPUT.gaps);
     expect(analysis?.coverLetterRequirement).toBe("optional");
-    expect(ctx.repos.getAgentTask(task.id)?.coverLetterRequirement).toBe("optional");
+    expect(ctx.repos.getPipelineTask(task.id)?.coverLetterRequirement).toBe("optional");
     // No fit row was written, since fit computation threw.
     expect(getFit(db, applicationId)).toBeNull();
   });
@@ -276,7 +276,7 @@ describe("generate-cover-letter step", () => {
     const { task } = seed();
     const ctx = makePipelineContext(db, task.id, { runLlm: fakeRunLlm });
     const step = STEPS.find((s) => s.key === "generate-cover-letter")!;
-    const noneTask: AgentTask = { ...task, coverLetterRequirement: "none" };
+    const noneTask: PipelineTask = { ...task, coverLetterRequirement: "none" };
 
     expect(await step.shouldRun(ctx, noneTask)).toBe(false);
   });

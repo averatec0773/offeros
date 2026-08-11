@@ -19,7 +19,8 @@ const { getDb } = await import("@/server/db/client");
 const { saveProfile } = await import("@/server/repositories/profile-repo");
 const { createApplication, getApplication } =
   await import("@/server/repositories/application-repo");
-const { createAgentTask, updateAgentTask } = await import("@/server/repositories/agent-task-repo");
+const { createPipelineTask, updatePipelineTask } =
+  await import("@/server/repositories/pipeline-task-repo");
 const { __setTestPipelineOverride } = await import("@/server/pipeline/route-context");
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -68,8 +69,8 @@ function seedTaskAtFillForm(): { taskId: string; applicationId: string } {
       applyLink: "https://apply.example.com/job/1",
     },
   });
-  const task = createAgentTask(db, { applicationId: app.id });
-  updateAgentTask(db, task.id, { step: FILL_FORM_STEP, status: "awaiting_user" });
+  const task = createPipelineTask(db, { applicationId: app.id });
+  updatePipelineTask(db, task.id, { step: FILL_FORM_STEP, status: "awaiting_user" });
   return { taskId: task.id, applicationId: app.id };
 }
 
@@ -106,7 +107,7 @@ describe("POST /agent/tasks/[id]/fill/handoff", () => {
 
   it("400s when the task is not at the fill-form gate", async () => {
     const { taskId } = seedTaskAtFillForm();
-    updateAgentTask(getDb(), taskId, { step: 0, status: "awaiting_user" });
+    updatePipelineTask(getDb(), taskId, { step: 0, status: "awaiting_user" });
     const res = await handoffRoute.POST(post(), idCtx(taskId));
     expect(res.status).toBe(400);
   });
@@ -187,7 +188,7 @@ describe("POST /agent/tasks/[id]/fill/report", () => {
 
   it("400s when the task is no longer at the fill-form gate", async () => {
     const { taskId } = seedTaskAtFillForm();
-    updateAgentTask(getDb(), taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    updatePipelineTask(getDb(), taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
     const res = await reportRoute.POST(post({ reports: [], complete: false }), idCtx(taskId));
     expect(res.status).toBe(400);
   });
@@ -270,7 +271,7 @@ describe("POST /agent/tasks/[id]/fill/resolve", () => {
 describe("POST /agent/tasks/[id]/advance at the submit gate", () => {
   it("completes the task and marks the application applied", async () => {
     const { taskId, applicationId } = seedTaskAtFillForm();
-    updateAgentTask(getDb(), taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    updatePipelineTask(getDb(), taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
     const res = await advanceRoute.POST(post(), idCtx(taskId));
     const body = await res.json();
     expect(res.status).toBe(200);

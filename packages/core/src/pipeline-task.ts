@@ -13,7 +13,7 @@ export const PIPELINE_STEPS = [
   { key: "submit", label: "Submit Application" },
 ] as const;
 
-export const AGENT_TASK_STATUSES = [
+export const PIPELINE_TASK_STATUSES = [
   "queued",
   "running",
   "paused",
@@ -30,10 +30,10 @@ export const applicationInfoSchema = z.object({
   totalFields: z.array(z.string()).optional(),
 });
 
-export const agentTaskSchema = z.object({
+export const pipelineTaskSchema = z.object({
   id: z.string().min(1),
   applicationId: z.string().min(1),
-  status: z.enum(AGENT_TASK_STATUSES),
+  status: z.enum(PIPELINE_TASK_STATUSES),
   step: z.number().int().min(0).max(PIPELINE_STEPS.length),
   applicationInfo: applicationInfoSchema.optional(),
   resumeId: z.string().optional(),
@@ -52,6 +52,6 @@ export const agentTaskSchema = z.object({
 });
 
 export type ApplicationInfo = z.infer<typeof applicationInfoSchema>;
-export type AgentTask = z.infer<typeof agentTaskSchema>;
-export type AgentTaskStatus = (typeof AGENT_TASK_STATUSES)[number];
+export type PipelineTask = z.infer<typeof pipelineTaskSchema>;
+export type PipelineTaskStatus = (typeof PIPELINE_TASK_STATUSES)[number];
 export type PipelineStepKey = (typeof PIPELINE_STEPS)[number]["key"];

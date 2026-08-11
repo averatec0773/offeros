@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getDb } from "@/server/db/client";
 import { getApplication, listApplications } from "@/server/repositories/application-repo";
-import { getAgentTaskByApplicationId } from "@/server/repositories/agent-task-by-application";
+import { getPipelineTaskByApplicationId } from "@/server/repositories/pipeline-task-by-application";
 import { getJdAnalysis } from "@/server/repositories/jd-analysis-repo";
 import { listArtifacts } from "@/server/repositories/artifact-repo";
 import { getFit } from "@/server/repositories/fit-repo";
@@ -19,7 +19,7 @@ export default async function ApplicationWorkspace({
   const application = getApplication(db, id);
   if (!application) notFound();
 
-  const task = getAgentTaskByApplicationId(db, id);
+  const task = getPipelineTaskByApplicationId(db, id);
   const jdAnalysis = getJdAnalysis(db, id);
   const artifacts = task ? listArtifacts(db, task.id) : [];
   const fit = getFit(db, id);

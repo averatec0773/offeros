@@ -10,7 +10,11 @@ import {
   getApplication,
   updateApplication,
 } from "../../repositories/application-repo";
-import { createAgentTask, updateAgentTask, getAgentTask } from "../../repositories/agent-task-repo";
+import {
+  createPipelineTask,
+  updatePipelineTask,
+  getPipelineTask,
+} from "../../repositories/pipeline-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
 import { saveJdAnalysis } from "../../repositories/jd-analysis-repo";
@@ -63,8 +67,8 @@ function seedTaskAtFillForm(): { taskId: string; applicationId: string } {
       applyLink: "https://apply.example.com/job/1",
     },
   });
-  const task = createAgentTask(db, { applicationId: app.id });
-  updateAgentTask(db, task.id, { step: FILL_FORM_STEP, status: "awaiting_user" });
+  const task = createPipelineTask(db, { applicationId: app.id });
+  updatePipelineTask(db, task.id, { step: FILL_FORM_STEP, status: "awaiting_user" });
   return { taskId: task.id, applicationId: app.id };
 }
 
@@ -132,13 +136,13 @@ function report(over: Partial<FieldReport> & Pick<FieldReport, "fieldId">): Fiel
 describe("createHandoffForTask", () => {
   it("throws when the task is not awaiting_user at fill-form", () => {
     const { taskId } = seedTaskAtFillForm();
-    updateAgentTask(db, taskId, { status: "running" });
+    updatePipelineTask(db, taskId, { status: "running" });
     expect(() => createHandoffForTask(db, taskId)).toThrow(ServiceError);
   });
 
   it("throws when the task is not at the fill-form step", () => {
     const { taskId } = seedTaskAtFillForm();
-    updateAgentTask(db, taskId, { step: 0, status: "awaiting_user" });
+    updatePipelineTask(db, taskId, { step: 0, status: "awaiting_user" });
     expect(() => createHandoffForTask(db, taskId)).toThrow(ServiceError);
   });
 
@@ -213,7 +217,7 @@ describe("claimHandoff", () => {
   it("returns null cover-letter text when the task skipped it", () => {
     const { taskId } = seedTaskAtFillForm();
     seedArtifact(taskId, "cover-letter", "SHOULD BE HIDDEN");
-    updateAgentTask(db, taskId, { skippedCoverLetter: true });
+    updatePipelineTask(db, taskId, { skippedCoverLetter: true });
     const handoff = createHandoffForTask(db, taskId);
     const bundle = claimHandoff(db, handoff.id);
     expect(bundle.coverLetterText).toBeNull();
@@ -474,7 +478,7 @@ describe("resolveFill", () => {
 
   it("'fixed' on a legacy row (applicationInfo set, fieldReports empty) merges missingFields into filledFields instead of dropping them", () => {
     const { taskId } = seedTaskAtFillForm();
-    updateAgentTask(db, taskId, {
+    updatePipelineTask(db, taskId, {
       applicationInfo: {
         status: 2,
         filledFields: ["email"],
@@ -568,7 +572,7 @@ describe("completeSubmitted", () => {
 
   it("marks the task done and the application applied (with appliedAt) at the submit gate", () => {
     const { taskId, applicationId } = seedTaskAtFillForm();
-    updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
     const before = Date.now();
     const task = completeSubmitted(db, taskId);
     expect(task.status).toBe("done");
@@ -577,12 +581,12 @@ describe("completeSubmitted", () => {
     expect(application?.status).toBe("applied");
     expect(application?.appliedAt).toBeGreaterThanOrEqual(before);
     expect(application?.appliedAt).toBeLessThanOrEqual(Date.now());
-    expect(getAgentTask(db, taskId)?.status).toBe("done");
+    expect(getPipelineTask(db, taskId)?.status).toBe("done");
   });
 
   it("appends a marked-submitted event", () => {
     const { taskId, applicationId } = seedTaskAtFillForm();
-    updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
     completeSubmitted(db, taskId);
     const events = listEvents(db, applicationId);
     expect(events.map((e) => e.kind)).toEqual(["marked-submitted"]);
@@ -615,7 +619,7 @@ describe("undoSubmitted", () => {
 
   it("restores a submit-gate completion to the submit gate", () => {
     const { taskId } = seedTaskAtFillForm();
-    updateAgentTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
     completeSubmitted(db, taskId);
 
     const task = undoSubmitted(db, taskId);
@@ -716,7 +720,7 @@ describe("startInstantFill", () => {
     expect(bundle.job).toMatchObject({ title: "AI Engineer", company: "Forward" });
     expect(bundle.fillProfile.personal.email).toBe("jordan@example.com");
 
-    const task = getAgentTask(db, bundle.taskId);
+    const task = getPipelineTask(db, bundle.taskId);
     expect(task?.fillFirst).toBe(true);
     expect(task?.status).toBe("awaiting_user");
     expect(PIPELINE_STEPS[task?.step ?? -1]?.key).toBe("fill-form");
@@ -762,7 +766,7 @@ describe("startInstantFill", () => {
 
   it("refuses a mid-pipeline application instead of fighting the workspace gates", () => {
     const { taskId } = seedTaskAtFillForm();
-    updateAgentTask(db, taskId, { step: 1, status: "running" });
+    updatePipelineTask(db, taskId, { step: 1, status: "running" });
     expect(() =>
       startInstantFill(db, { jobInfo: { ...JOB, applyLink: "https://apply.example.com/job/1" } }),
     ).toThrow(/already tracked/);

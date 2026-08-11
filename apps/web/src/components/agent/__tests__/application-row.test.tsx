@@ -2,7 +2,7 @@
 import { afterEach, describe, it, expect } from "vitest";
 import { fireEvent, render, screen, cleanup } from "@testing-library/react";
 import { ApplicationRow, fitLabelFor } from "../application-row";
-import type { Application, AgentTask, FitAnalysis } from "@offeros/core";
+import type { Application, PipelineTask, FitAnalysis } from "@offeros/core";
 
 afterEach(cleanup);
 
@@ -21,7 +21,7 @@ describe("ApplicationRow", () => {
    * you can act on; "filled 2/3, 1 needs you" is the thing being remembered.
    */
   it("renders the role, company and what the last fill did", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "awaiting_user",
@@ -60,7 +60,7 @@ describe("ApplicationRow", () => {
   });
 
   it("surfaces the action-required state", () => {
-    const task: AgentTask = {
+    const task: PipelineTask = {
       id: "t1",
       applicationId: "app-1",
       status: "awaiting_user",

@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildResumeHeader, serializeResume, type AgentTask, type Profile } from "@offeros/core";
+import { buildResumeHeader, serializeResume, type PipelineTask, type Profile } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, updateApplication } from "../../repositories/application-repo";
-import { createAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask } from "../../repositories/pipeline-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { uploadResume } from "../../services/resume-service";
 import { listEvents } from "../../repositories/application-event-repo";
@@ -77,13 +77,13 @@ const RESUME_TWEAK_OUTPUT = {
   changedLines: ["Added a metrics line."],
 };
 
-function seed(): { applicationId: string; task: AgentTask } {
+function seed(): { applicationId: string; task: PipelineTask } {
   const app = createApplication(db, {
     jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
     jdText: "We are hiring an ML Engineer to own our inference pipeline.",
   });
   saveProfile(db, profile);
-  const task = createAgentTask(db, { applicationId: app.id });
+  const task = createPipelineTask(db, { applicationId: app.id });
   return { applicationId: app.id, task };
 }
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentTask, Artifact } from "@offeros/core";
+import type { PipelineTask, Artifact } from "@offeros/core";
 import type { CoverLetterInput, CoverLetterOutput } from "@offeros/llm";
 import type { PipelineContext } from "../types";
 import { buildGroundingFacts } from "./grounding";
@@ -16,7 +16,7 @@ import { buildGroundingFacts } from "./grounding";
  * a labeled constraint block. With no default template, `templateHints` is
  * left `undefined` and the prompt is unchanged from before templates existed.
  */
-export async function run(ctx: PipelineContext, task: AgentTask): Promise<void> {
+export async function run(ctx: PipelineContext, task: PipelineTask): Promise<void> {
   const application = ctx.repos.getApplication(task.applicationId);
   if (!application) throw new Error(`application ${task.applicationId} not found`);
   const profile = ctx.repos.getProfile();

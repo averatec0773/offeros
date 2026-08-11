@@ -11,7 +11,7 @@ import {
   createApplication,
   updateApplication,
 } from "../application-repo";
-import { createAgentTask, listAgentTasks, updateAgentTask } from "../agent-task-repo";
+import { createPipelineTask, listPipelineTasks, updatePipelineTask } from "../pipeline-task-repo";
 import { getSettings, saveSettings } from "../settings-repo";
 
 let db: Db;
@@ -137,11 +137,11 @@ describe("agent task repo", () => {
     const app = createApplication(db, {
       jobInfo: { jobId: "j1", jobTitle: "T", companyName: "C" },
     });
-    const task = createAgentTask(db, { applicationId: app.id });
+    const task = createPipelineTask(db, { applicationId: app.id });
     expect(task.status).toBe("queued");
     expect(task.step).toBe(0);
 
-    const gated = updateAgentTask(db, task.id, {
+    const gated = updatePipelineTask(db, task.id, {
       status: "awaiting_user",
       step: 6,
       applicationInfo: {
@@ -151,14 +151,14 @@ describe("agent task repo", () => {
       },
     });
     expect(gated?.applicationInfo?.missingFields).toEqual(["LinkedIn Profile"]);
-    expect(listAgentTasks(db)).toHaveLength(1);
+    expect(listPipelineTasks(db)).toHaveLength(1);
   });
 
   it("defaults fieldReports to [] then round-trips through update", () => {
     const app = createApplication(db, {
       jobInfo: { jobId: "j1", jobTitle: "T", companyName: "C" },
     });
-    const task = createAgentTask(db, { applicationId: app.id });
+    const task = createPipelineTask(db, { applicationId: app.id });
     expect(task.fieldReports).toEqual([]);
 
     const report = {
@@ -172,10 +172,10 @@ describe("agent task repo", () => {
       outcome: "filled" as const,
       required: true,
     };
-    const updated = updateAgentTask(db, task.id, { fieldReports: [report] });
+    const updated = updatePipelineTask(db, task.id, { fieldReports: [report] });
     expect(updated?.fieldReports).toEqual([report]);
 
-    const reloaded = listAgentTasks(db).find((t) => t.id === task.id);
+    const reloaded = listPipelineTasks(db).find((t) => t.id === task.id);
     expect(reloaded?.fieldReports).toEqual([report]);
   });
 });

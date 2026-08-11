@@ -2,8 +2,8 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getDb } from "@/server/db/client";
 import { listApplications } from "@/server/repositories/application-repo";
-import { listAgentTasks } from "@/server/repositories/agent-task-repo";
-import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
+import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
+import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { listCampaigns } from "@/server/repositories/campaign-repo";
 import { campaignProgress, describeProgress } from "@/server/services/campaign-service";
 import { NewCampaignButton } from "@/components/agent/campaign-actions";
@@ -19,7 +19,7 @@ export default function CampaignsPage() {
   const db = getDb();
   const campaigns = listCampaigns(db);
   const applications = listApplications(db);
-  const taskByApplication = newestTaskByApplication(listAgentTasks(db));
+  const taskByApplication = newestTaskByApplication(listPipelineTasks(db));
 
   const active = campaigns.filter((campaign) => campaign.status === "active");
   const archived = campaigns.filter((campaign) => campaign.status === "archived");

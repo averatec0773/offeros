@@ -1,8 +1,8 @@
 import { computeFillStats } from "@offeros/autofill";
 import { getDb } from "@/server/db/client";
 import { listApplications } from "@/server/repositories/application-repo";
-import { listAgentTasks } from "@/server/repositories/agent-task-repo";
-import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
+import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
+import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { handle, ok } from "@/server/http/envelope";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 export async function GET() {
   return handle(async () => {
     const db = getDb();
-    const byApplication = newestTaskByApplication(listAgentTasks(db));
+    const byApplication = newestTaskByApplication(listPipelineTasks(db));
     const applications = listApplications(db).map((application) => ({
       applyLink: application.jobInfo.applyLink,
       fields: byApplication.get(application.id)?.fieldReports ?? [],

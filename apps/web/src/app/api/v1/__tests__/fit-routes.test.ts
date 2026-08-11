@@ -12,7 +12,7 @@ const fitRoute = await import("../applications/[id]/fit/route");
 const { getDb } = await import("@/server/db/client");
 const { saveProfile } = await import("@/server/repositories/profile-repo");
 const { createApplication } = await import("@/server/repositories/application-repo");
-const { createAgentTask } = await import("@/server/repositories/agent-task-repo");
+const { createPipelineTask } = await import("@/server/repositories/pipeline-task-repo");
 const { saveJdAnalysis } = await import("@/server/repositories/jd-analysis-repo");
 const { __setTestPipelineOverride } = await import("@/server/pipeline/route-context");
 
@@ -59,7 +59,7 @@ function seedApplication(): string {
     jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
     jdText: "We are hiring an ML Engineer.",
   });
-  createAgentTask(getDb(), { applicationId: app.id });
+  createPipelineTask(getDb(), { applicationId: app.id });
   saveJdAnalysis(getDb(), {
     id: `jda-${app.id}`,
     applicationId: app.id,

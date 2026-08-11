@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../application-repo";
-import { createAgentTask } from "../agent-task-repo";
+import { createPipelineTask } from "../pipeline-task-repo";
 import {
   createFillHandoff,
   getFillHandoff,
@@ -25,7 +25,7 @@ function makeTask(db: Db) {
   const app = createApplication(db, {
     jobInfo: { jobId: "j1", jobTitle: "GenAI Engineer", companyName: "Evolver" },
   });
-  return createAgentTask(db, { applicationId: app.id });
+  return createPipelineTask(db, { applicationId: app.id });
 }
 
 describe("fill-handoff repo", () => {

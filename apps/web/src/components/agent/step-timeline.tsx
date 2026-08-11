@@ -1,5 +1,5 @@
 import { Check, Minus } from "lucide-react";
-import { PIPELINE_STEPS, type AgentTask } from "@offeros/core";
+import { PIPELINE_STEPS, type PipelineTask } from "@offeros/core";
 import { ActionRequiredCard } from "./action-required-card";
 
 type AgentStep = {
@@ -10,7 +10,7 @@ type AgentStep = {
 
 const FILL_STEP_KEY = "fill-form";
 
-const STEP_STATUS_LABEL: Partial<Record<AgentTask["status"], string>> = {
+const STEP_STATUS_LABEL: Partial<Record<PipelineTask["status"], string>> = {
   queued: "Queued",
   paused: "Paused",
   failed: "Failed",
@@ -24,7 +24,7 @@ const STEP_STATUS_LABEL: Partial<Record<AgentTask["status"], string>> = {
 // a targeted in-panel run DID execute tailor-resume / generate-cover-letter,
 // which the artifact-existence flags flip back to done.
 function deriveSteps(
-  task: AgentTask,
+  task: PipelineTask,
   tailoredResume: boolean,
   tailoredCoverLetter: boolean,
 ): AgentStep[] {
@@ -84,7 +84,7 @@ export function StepTimeline({
   onFixed,
   onApplied,
 }: {
-  task: AgentTask;
+  task: PipelineTask;
   /** A resume artifact exists for this task — marks the tailor step done on fillFirst tasks. */
   tailoredResume?: boolean;
   /** A cover-letter artifact exists — marks the generate step done on fillFirst tasks. */

@@ -10,7 +10,7 @@ import { PIPELINE_STEPS } from "@offeros/core";
 import { buildFillPlan, type FieldDescriptor } from "@offeros/autofill";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
-import { createAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { createAnswer } from "../../repositories/answer-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { createHandoffForTask, claimHandoff } from "../fill-service";
@@ -31,8 +31,8 @@ function seedBundle(jdText: string) {
     jobInfo: { jobId: "j1", jobTitle: "Payments Engineer", companyName: "Acme" },
     jdText,
   });
-  const task = createAgentTask(db, { applicationId: app.id });
-  updateAgentTask(db, task.id, { step: FILL_STEP, status: "awaiting_user" });
+  const task = createPipelineTask(db, { applicationId: app.id });
+  updatePipelineTask(db, task.id, { step: FILL_STEP, status: "awaiting_user" });
   return claimHandoff(db, createHandoffForTask(db, task.id).id);
 }
 

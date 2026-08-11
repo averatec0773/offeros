@@ -23,7 +23,7 @@ vi.mock("@/components/agent/workspace-client", () => ({
 const { default: ApplicationWorkspace } = await import("../page");
 const { getDb } = await import("@/server/db/client");
 const { createApplication } = await import("@/server/repositories/application-repo");
-const { createAgentTask } = await import("@/server/repositories/agent-task-repo");
+const { createPipelineTask } = await import("@/server/repositories/pipeline-task-repo");
 const { saveJdAnalysis } = await import("@/server/repositories/jd-analysis-repo");
 const { upsertArtifact } = await import("@/server/repositories/artifact-repo");
 const { saveFit } = await import("@/server/repositories/fit-repo");
@@ -52,7 +52,7 @@ describe("ApplicationWorkspace page", () => {
       jobInfo: { jobId: "j2", jobTitle: "Other Role", companyName: "Other Co" },
     });
 
-    const task = createAgentTask(db, { applicationId: application.id });
+    const task = createPipelineTask(db, { applicationId: application.id });
     const jdAnalysis = saveJdAnalysis(db, {
       id: "jd-1",
       applicationId: application.id,

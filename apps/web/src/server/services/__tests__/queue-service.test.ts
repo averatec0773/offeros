@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { PIPELINE_STEPS } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, updateApplication } from "../../repositories/application-repo";
-import { getAgentTaskByApplicationId } from "../../repositories/agent-task-by-application";
-import { updateAgentTask } from "../../repositories/agent-task-repo";
+import { getPipelineTaskByApplicationId } from "../../repositories/pipeline-task-by-application";
+import { updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { listEvents } from "../../repositories/application-event-repo";
 import { randomUUID } from "node:crypto";
 import { answers } from "../../db/schema";
@@ -72,19 +72,22 @@ function fakeDeps(): QueueDeps {
     ctxFor,
     runner: {
       startTask: async (ctx: PipelineContext) =>
-        updateAgentTask(db, ctx.taskId, { status: "awaiting_user", step: CONFIRM_RESUME_STEP })!,
+        updatePipelineTask(db, ctx.taskId, { status: "awaiting_user", step: CONFIRM_RESUME_STEP })!,
       advance: async (ctx: PipelineContext) => {
-        const t = (await import("../../repositories/agent-task-repo")).getAgentTask(
+        const t = (await import("../../repositories/pipeline-task-repo")).getPipelineTask(
           db,
           ctx.taskId,
         )!;
         if (t.step === CONFIRM_RESUME_STEP) {
-          return updateAgentTask(db, ctx.taskId, { step: CHOICE_STEP, status: "awaiting_user" })!;
+          return updatePipelineTask(db, ctx.taskId, {
+            step: CHOICE_STEP,
+            status: "awaiting_user",
+          })!;
         }
         return t; // choice gate: no-op, like the real advance()
       },
       choose: async (ctx: PipelineContext) =>
-        updateAgentTask(db, ctx.taskId, { step: FILL_FORM_STEP, status: "awaiting_user" })!,
+        updatePipelineTask(db, ctx.taskId, { step: FILL_FORM_STEP, status: "awaiting_user" })!,
     },
   };
 }
@@ -132,7 +135,7 @@ describe("queue loop", () => {
     expect(status.done).toEqual([a, b]);
     expect(status.failed).toEqual([]);
     for (const id of [a, b]) {
-      const task = getAgentTaskByApplicationId(db, id)!;
+      const task = getPipelineTaskByApplicationId(db, id)!;
       expect(PIPELINE_STEPS[task.step]?.key).toBe("fill-form");
       const kinds = listEvents(db, id).map((e) => e.kind);
       expect(kinds).toContain("queued");
@@ -149,7 +152,7 @@ describe("queue loop", () => {
       runner: {
         ...deps.runner!,
         startTask: async (ctx: PipelineContext) => {
-          const t = (await import("../../repositories/agent-task-repo")).getAgentTask(
+          const t = (await import("../../repositories/pipeline-task-repo")).getPipelineTask(
             db,
             ctx.taskId,
           )!;

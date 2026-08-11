@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   PIPELINE_STEPS,
   type Application,
-  type AgentTask,
+  type PipelineTask,
   type ApplicationEvent,
   type Artifact,
   type JdAnalysis,
@@ -43,7 +43,7 @@ const GATE_ARTIFACT_KIND: Record<"confirm-resume" | "confirm-cover-letter", Arti
 };
 
 /** Which gate (if any) the task is currently stopped at, awaiting user input. */
-export function deriveGate(task: AgentTask): GateKind | "fill-form" | "submit" | null {
+export function deriveGate(task: PipelineTask): GateKind | "fill-form" | "submit" | null {
   if (task.status !== "awaiting_user") return null;
   const step = PIPELINE_STEPS[task.step];
   if (!step) return null;
@@ -86,7 +86,7 @@ export function effectiveResumeId(
 /** True while the pipeline is mid-run, or stalled at the fill-form gate where
  * the extension writes fieldReports/applicationInfo out-of-band and the live
  * report table needs to reflect that without a manual reload. */
-export function shouldPoll(task: AgentTask | null): boolean {
+export function shouldPoll(task: PipelineTask | null): boolean {
   if (!task) return false;
   if (task.status === "running") return true;
   return task.status === "awaiting_user" && PIPELINE_STEPS[task.step]?.key === "fill-form";
@@ -101,14 +101,14 @@ export function WorkspaceClient({
   queue,
 }: {
   application: Application;
-  initialTask: AgentTask | null;
+  initialTask: PipelineTask | null;
   initialJdAnalysis: JdAnalysis | null;
   initialArtifacts: Artifact[];
   initialFit: FitAnalysis | null;
   queue?: QueueJob[];
 }) {
   const [taskId, setTaskId] = useState<string | null>(initialTask?.id ?? null);
-  const [task, setTask] = useState<AgentTask | null>(initialTask);
+  const [task, setTask] = useState<PipelineTask | null>(initialTask);
   const [jdAnalysis, setJdAnalysis] = useState<JdAnalysis | null>(initialJdAnalysis);
   const [artifacts, setArtifacts] = useState<Artifact[]>(initialArtifacts);
   const [fit, setFit] = useState<FitAnalysis | null>(initialFit);
@@ -185,7 +185,7 @@ export function WorkspaceClient({
 
   const syncFull = useCallback(
     async (id: string) => {
-      const data = await api.agentTasks.get(id);
+      const data = await api.pipelineTasks.get(id);
       setTask(data.task);
       setJdAnalysis(data.jdAnalysis);
       setArtifacts(data.artifacts);
@@ -256,7 +256,7 @@ export function WorkspaceClient({
 
   async function ensureTaskId(): Promise<string> {
     if (taskId) return taskId;
-    const created = await api.agentTasks.create({ applicationId: application.id });
+    const created = await api.pipelineTasks.create({ applicationId: application.id });
     setTaskId(created.id);
     setTask(created);
     return created.id;
@@ -264,23 +264,23 @@ export function WorkspaceClient({
 
   async function handleStart() {
     const id = await ensureTaskId();
-    await run(id, (tid) => api.agentTasks.start(tid));
+    await run(id, (tid) => api.pipelineTasks.start(tid));
   }
 
   async function handlePause() {
     if (!taskId) return;
-    await run(taskId, (tid) => api.agentTasks.pause(tid), false);
+    await run(taskId, (tid) => api.pipelineTasks.pause(tid), false);
   }
 
   async function handleApprove() {
     if (!taskId) return;
     setTweakDiff(null);
-    await run(taskId, (tid) => api.agentTasks.advance(tid));
+    await run(taskId, (tid) => api.pipelineTasks.advance(tid));
   }
 
   async function handleChoice(choice: "skip" | "generate") {
     if (!taskId) return;
-    await run(taskId, (tid) => api.agentTasks.choice(tid, choice));
+    await run(taskId, (tid) => api.pipelineTasks.choice(tid, choice));
   }
 
   /** Open (or re-open) a fill ticket, then hand the ATS page to the extension. */
@@ -298,7 +298,7 @@ export function WorkspaceClient({
     const viaExtension = extensionPresent();
     if (!viaExtension && knownApplyLink) window.open(knownApplyLink, "_blank");
     try {
-      const handoff = await api.agentTasks.fillHandoff(taskId);
+      const handoff = await api.pipelineTasks.fillHandoff(taskId);
       setTicketCreated(true);
       const link = knownApplyLink ?? handoff.applyLink;
       if (viaExtension && link) {
@@ -324,12 +324,12 @@ export function WorkspaceClient({
 
   async function handleFillResolve(action: "fixed" | "applied-manually") {
     if (!taskId) return;
-    await run(taskId, (tid) => api.agentTasks.fillResolve(tid, action));
+    await run(taskId, (tid) => api.pipelineTasks.fillResolve(tid, action));
   }
 
   async function handleUndoApplied() {
     if (!taskId) return;
-    await run(taskId, (tid) => api.agentTasks.fillUndo(tid), false);
+    await run(taskId, (tid) => api.pipelineTasks.fillUndo(tid), false);
   }
 
   async function handleFitRecompute() {

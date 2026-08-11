@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getDb } from "@/server/db/client";
-import { getAgentTask } from "@/server/repositories/agent-task-repo";
+import { getPipelineTask } from "@/server/repositories/pipeline-task-repo";
 import { buildPipelineContext } from "@/server/pipeline/route-context";
 import { tweakArtifact } from "@/server/pipeline/tweak";
 import { handle, ok, notFound } from "@/server/http/envelope";
@@ -17,7 +17,7 @@ const tweakSchema = z.object({
 export async function POST(request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
-    if (!getAgentTask(getDb(), id)) return notFound("agent task");
+    if (!getPipelineTask(getDb(), id)) return notFound("agent task");
     const { kind, instruction } = tweakSchema.parse(await request.json());
     return ok(await tweakArtifact(buildPipelineContext(id), kind, instruction));
   });

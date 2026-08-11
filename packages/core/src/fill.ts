@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ApplicationInfo } from "./agent-task";
+import type { ApplicationInfo } from "./pipeline-task";
 
 export const FILL_HANDOFF_STATUSES = ["pending", "claimed", "completed", "cancelled"] as const;
 

@@ -86,7 +86,7 @@ export const campaigns = sqliteTable("campaigns", {
   updatedAt: integer("updated_at").notNull(),
 });
 
-export const agentTasks = sqliteTable("agent_tasks", {
+export const pipelineTasks = sqliteTable("agent_tasks", {
   id: text("id").primaryKey(),
   applicationId: text("application_id").notNull(),
   status: text("status").notNull(),
@@ -236,7 +236,7 @@ export const schema = {
   answers,
   resumes,
   applications,
-  agentTasks,
+  pipelineTasks,
   settings,
   jdAnalyses,
   fitAnalyses,

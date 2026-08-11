@@ -1,4 +1,4 @@
-import type { AgentTask, Application } from "@offeros/core";
+import type { PipelineTask, Application } from "@offeros/core";
 
 /**
  * Where a campaign stands, counted from its members.
@@ -20,7 +20,7 @@ export interface CampaignProgress {
 export function campaignProgress(
   campaignId: string,
   applications: Application[],
-  taskByApplication: ReadonlyMap<string, AgentTask>,
+  taskByApplication: ReadonlyMap<string, PipelineTask>,
 ): CampaignProgress {
   const members = applications.filter((application) => application.campaignId === campaignId);
   return {

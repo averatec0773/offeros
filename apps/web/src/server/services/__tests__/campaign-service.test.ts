@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { AgentTask, Application } from "@offeros/core";
+import type { PipelineTask, Application } from "@offeros/core";
 import { campaignProgress, describeProgress } from "../campaign-service";
 
 const app = (over: Partial<Application>): Application => ({
@@ -11,7 +11,7 @@ const app = (over: Partial<Application>): Application => ({
   ...over,
 });
 
-const actionRequiredTask = (applicationId: string): AgentTask => ({
+const actionRequiredTask = (applicationId: string): PipelineTask => ({
   id: `t-${applicationId}`,
   applicationId,
   status: "awaiting_user",

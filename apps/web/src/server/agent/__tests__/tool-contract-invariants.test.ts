@@ -10,11 +10,11 @@ import { PIPELINE_STEPS } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, getApplication } from "../../repositories/application-repo";
 import {
-  createAgentTask,
-  updateAgentTask,
-  getAgentTask,
-  listAgentTasks,
-} from "../../repositories/agent-task-repo";
+  createPipelineTask,
+  updatePipelineTask,
+  getPipelineTask,
+  listPipelineTasks,
+} from "../../repositories/pipeline-task-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
 import { listTrace } from "../../repositories/agent-trace-repo";
 import { runTool } from "../run-tool";
@@ -58,7 +58,7 @@ describe("a verify-false downgrade must not read as a no-op", () => {
       id: "mutate",
       description: "writes a durable row, then fails its own verify",
       run: async (c) => {
-        createAgentTask(c.db, { applicationId: c.applicationId });
+        createPipelineTask(c.db, { applicationId: c.applicationId });
         return { ok: true, summary: "created a task", result: { n: 1 } };
       },
       verify: async () => false,
@@ -76,7 +76,7 @@ describe("a verify-false downgrade must not read as a no-op", () => {
     expect(obs.result).toEqual({ n: 1 });
     // The row really is still there — which is exactly why the message above
     // must not say otherwise.
-    expect(listAgentTasks(db)).toHaveLength(1);
+    expect(listPipelineTasks(db)).toHaveLength(1);
   });
 });
 
@@ -85,8 +85,8 @@ describe("a tool's ledger entry must follow the task it actually touched", () =>
     const other = createApplication(db, {
       jobInfo: { jobId: "j2", jobTitle: "Other", companyName: "Beta" },
     }).id;
-    const task = createAgentTask(db, { applicationId: appId });
-    updateAgentTask(db, task.id, { step: SUBMIT, status: "awaiting_user" });
+    const task = createPipelineTask(db, { applicationId: appId });
+    updatePipelineTask(db, task.id, { step: SUBMIT, status: "awaiting_user" });
 
     // ctx.applicationId and ctx.taskId disagree; nothing in the contract binds them.
     const ctx: ToolContext = { db, applicationId: other, taskId: task.id, reason: "audit" };
@@ -96,14 +96,14 @@ describe("a tool's ledger entry must follow the task it actually touched", () =>
     // lands on `other` saying "reported success but the change is not there",
     // and listTrace(appId) is empty. An irreversible action with no ledger.
     expect(getApplication(db, appId)?.status).not.toBe("applied");
-    expect(getAgentTask(db, task.id)?.status).not.toBe("done");
+    expect(getPipelineTask(db, task.id)?.status).not.toBe("done");
     expect(listTrace(db, other)).toEqual([]);
   });
 });
 
 describe("tailor_resume's verify must be independent of run's own check", () => {
   it("does not report a verified success when the step produced nothing new", async () => {
-    const task = createAgentTask(db, { applicationId: appId });
+    const task = createPipelineTask(db, { applicationId: appId });
     const now = Date.now();
     upsertArtifact(db, {
       id: "art-1",
@@ -127,8 +127,8 @@ describe("tailor_resume's verify must be independent of run's own check", () => 
 
 describe("a wrong-state refusal is not a dependency outage", () => {
   it("classifies mark_submitted outside the submit gate as precondition/human-gate", async () => {
-    const task = createAgentTask(db, { applicationId: appId });
-    updateAgentTask(db, task.id, { step: FILL, status: "awaiting_user" });
+    const task = createPipelineTask(db, { applicationId: appId });
+    updatePipelineTask(db, task.id, { step: FILL, status: "awaiting_user" });
     const ctx: ToolContext = { db, applicationId: appId, taskId: task.id, reason: "audit" };
     const obs = await runTool(markSubmittedTool, ctx, { confirmedByUser: true });
     expect(obs.ok).toBe(false);
@@ -154,8 +154,8 @@ describe("'every tool call is traced'", () => {
 
 describe("mark_submitted's consent gate reads the user's words, not the model's flag", () => {
   const atSubmitGate = () => {
-    const task = createAgentTask(db, { applicationId: appId });
-    updateAgentTask(db, task.id, { step: SUBMIT, status: "awaiting_user" });
+    const task = createPipelineTask(db, { applicationId: appId });
+    updatePipelineTask(db, task.id, { step: SUBMIT, status: "awaiting_user" });
     return task;
   };
 

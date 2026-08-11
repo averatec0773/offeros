@@ -31,7 +31,7 @@ const failEnvelope = (errorCode: number, errorMsg: string) => ({
   result: null,
 });
 
-describe("api.agentTasks pipeline methods", () => {
+describe("api.pipelineTasks pipeline methods", () => {
   it("createFromJd posts jobInfo/jdText/source and unwraps the created task", async () => {
     const task = { id: "task-1", applicationId: "app-1" };
     const fetchMock = stubFetch(okEnvelope(task));
@@ -40,7 +40,7 @@ describe("api.agentTasks pipeline methods", () => {
       jdText: "job description text",
       source: "manual",
     };
-    const result = await api.agentTasks.createFromJd(input as never);
+    const result = await api.pipelineTasks.createFromJd(input as never);
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks");
     expect(init.method).toBe("POST");
@@ -51,7 +51,7 @@ describe("api.agentTasks pipeline methods", () => {
   it("start posts to /agent/tasks/:id/start and unwraps the task", async () => {
     const task = { id: "task-1", status: "running" };
     const fetchMock = stubFetch(okEnvelope(task));
-    const result = await api.agentTasks.start("task-1");
+    const result = await api.pipelineTasks.start("task-1");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks/task-1/start");
     expect(init.method).toBe("POST");
@@ -61,7 +61,7 @@ describe("api.agentTasks pipeline methods", () => {
   it("advance posts to /agent/tasks/:id/advance and unwraps the task", async () => {
     const task = { id: "task-1", step: 2 };
     const fetchMock = stubFetch(okEnvelope(task));
-    const result = await api.agentTasks.advance("task-1");
+    const result = await api.pipelineTasks.advance("task-1");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks/task-1/advance");
     expect(init.method).toBe("POST");
@@ -74,7 +74,7 @@ describe("api.agentTasks pipeline methods", () => {
       diff: [{ op: "eq", text: "line 1" }],
     };
     const fetchMock = stubFetch(okEnvelope(payload));
-    const result = await api.agentTasks.tweak("task-1", "resume", "make it punchier");
+    const result = await api.pipelineTasks.tweak("task-1", "resume", "make it punchier");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks/task-1/tweak");
     expect(init.method).toBe("POST");
@@ -88,7 +88,7 @@ describe("api.agentTasks pipeline methods", () => {
   it("choice posts { choice } and unwraps the task", async () => {
     const task = { id: "task-1", status: "running" };
     const fetchMock = stubFetch(okEnvelope(task));
-    const result = await api.agentTasks.choice("task-1", "generate");
+    const result = await api.pipelineTasks.choice("task-1", "generate");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks/task-1/choice");
     expect(init.method).toBe("POST");
@@ -99,7 +99,7 @@ describe("api.agentTasks pipeline methods", () => {
   it("pause posts to /agent/tasks/:id/pause and unwraps the task", async () => {
     const task = { id: "task-1", status: "paused" };
     const fetchMock = stubFetch(okEnvelope(task));
-    const result = await api.agentTasks.pause("task-1");
+    const result = await api.pipelineTasks.pause("task-1");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks/task-1/pause");
     expect(init.method).toBe("POST");
@@ -113,7 +113,7 @@ describe("api.agentTasks pipeline methods", () => {
       artifacts: [{ id: "a1" }],
     };
     const fetchMock = stubFetch(okEnvelope(payload));
-    const result = await api.agentTasks.get("task-1");
+    const result = await api.pipelineTasks.get("task-1");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks/task-1");
     expect(init.method).toBeUndefined();
@@ -122,11 +122,11 @@ describe("api.agentTasks pipeline methods", () => {
 
   it("throws ApiError carrying the error code when success is false", async () => {
     stubFetch(failEnvelope(40400, "agent task not found"), 404);
-    await expect(api.agentTasks.start("missing")).rejects.toMatchObject({
+    await expect(api.pipelineTasks.start("missing")).rejects.toMatchObject({
       name: "ApiError",
       code: 40400,
     });
     stubFetch(failEnvelope(40400, "agent task not found"), 404);
-    await expect(api.agentTasks.get("missing")).rejects.toBeInstanceOf(ApiError);
+    await expect(api.pipelineTasks.get("missing")).rejects.toBeInstanceOf(ApiError);
   });
 });

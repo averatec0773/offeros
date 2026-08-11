@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { jdAnalysisSchema, artifactSchema, agentTaskSchema } from "../index";
+import { jdAnalysisSchema, artifactSchema, pipelineTaskSchema } from "../index";
 
 describe("jdAnalysisSchema", () => {
   it("parses an analysis with gaps and a requirement", () => {
@@ -55,9 +55,9 @@ describe("artifactSchema", () => {
   });
 });
 
-describe("agentTaskSchema additions", () => {
+describe("pipelineTaskSchema additions", () => {
   it("defaults coverLetterRequirement and skippedCoverLetter", () => {
-    const t = agentTaskSchema.parse({
+    const t = pipelineTaskSchema.parse({
       id: "t",
       applicationId: "a",
       status: "queued",
@@ -70,7 +70,7 @@ describe("agentTaskSchema additions", () => {
   });
 
   it("parses without failureReason (backward compat) and round-trips it when present", () => {
-    const noReason = agentTaskSchema.parse({
+    const noReason = pipelineTaskSchema.parse({
       id: "t",
       applicationId: "a",
       status: "failed",
@@ -80,7 +80,7 @@ describe("agentTaskSchema additions", () => {
     });
     expect(noReason.failureReason).toBeUndefined();
 
-    const withReason = agentTaskSchema.parse({
+    const withReason = pipelineTaskSchema.parse({
       id: "t",
       applicationId: "a",
       status: "failed",

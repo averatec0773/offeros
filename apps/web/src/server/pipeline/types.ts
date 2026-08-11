@@ -1,4 +1,4 @@
-import type { AgentTask, PipelineStepKey } from "@offeros/core";
+import type { PipelineTask, PipelineStepKey } from "@offeros/core";
 import type { Db } from "../db/client";
 import type { PipelineRepos } from "./context";
 
@@ -17,15 +17,15 @@ export interface PipelineStep {
    * task (e.g. a `required` cover letter runs with no stop, while an `optional`
    * one presents a Skip/Generate choice). Absent/`undefined` → the step just runs.
    */
-  gate?: GateKind | ((task: AgentTask) => GateKind | undefined);
+  gate?: GateKind | ((task: PipelineTask) => GateKind | undefined);
   /** False → the runner skips this step entirely (gate included). */
-  shouldRun(ctx: PipelineContext, task: AgentTask): boolean | Promise<boolean>;
+  shouldRun(ctx: PipelineContext, task: PipelineTask): boolean | Promise<boolean>;
   /** Produces the step's artifact(s). No HTTP/SQL — use ctx.repos / ctx.runLlm. */
-  run(ctx: PipelineContext, task: AgentTask): Promise<void>;
+  run(ctx: PipelineContext, task: PipelineTask): Promise<void>;
 }
 
 /** Resolve a step's gate for a given task (static value or task-dependent fn). */
-export function resolveGate(step: PipelineStep, task: AgentTask): GateKind | undefined {
+export function resolveGate(step: PipelineStep, task: PipelineTask): GateKind | undefined {
   return typeof step.gate === "function" ? step.gate(task) : step.gate;
 }
 

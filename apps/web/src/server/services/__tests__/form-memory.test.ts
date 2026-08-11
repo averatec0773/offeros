@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PIPELINE_STEPS, type FieldReport } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
-import { createAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { formShapes } from "../../db/schema";
 import { knownShapes, listIncidents } from "../../repositories/form-memory-repo";
 import { recordFillOutcome } from "../form-memory";
@@ -54,8 +54,8 @@ function seedApp(applyLink = "https://boards.greenhouse.io/acme/jobs/1"): {
   const app = createApplication(db, {
     jobInfo: { jobId: "j", jobTitle: "Engineer", companyName: "Acme", applyLink },
   });
-  const task = createAgentTask(db, { applicationId: app.id });
-  updateAgentTask(db, task.id, { step: FILL_FORM_STEP, status: "awaiting_user" });
+  const task = createPipelineTask(db, { applicationId: app.id });
+  updatePipelineTask(db, task.id, { step: FILL_FORM_STEP, status: "awaiting_user" });
   return { applicationId: app.id, taskId: task.id };
 }
 

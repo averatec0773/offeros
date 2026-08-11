@@ -7,7 +7,7 @@ import {
   type Template,
 } from "@offeros/core";
 import type { Db } from "../db/client";
-import { getAgentTask } from "../repositories/agent-task-repo";
+import { getPipelineTask } from "../repositories/pipeline-task-repo";
 import { getApplication } from "../repositories/application-repo";
 import { getArtifact } from "../repositories/artifact-repo";
 import { getProfile } from "../repositories/profile-repo";
@@ -92,7 +92,7 @@ export async function exportArtifactPdf(
   }
   const body = version.content;
 
-  const task = getAgentTask(db, taskId);
+  const task = getPipelineTask(db, taskId);
   const job = task ? getApplication(db, task.applicationId)?.jobInfo : undefined;
   const meta: RenderInput["meta"] = {
     title: TITLES[kind],

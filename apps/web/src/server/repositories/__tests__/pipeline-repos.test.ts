@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../application-repo";
-import { createAgentTask, updateAgentTask } from "../agent-task-repo";
-import { getAgentTaskByApplicationId } from "../agent-task-by-application";
+import { createPipelineTask, updatePipelineTask } from "../pipeline-task-repo";
+import { getPipelineTaskByApplicationId } from "../pipeline-task-by-application";
 import { getJdAnalysis, saveJdAnalysis } from "../jd-analysis-repo";
 import { getArtifact, listArtifacts, upsertArtifact } from "../artifact-repo";
 import { getFit, saveFit, listFits } from "../fit-repo";
@@ -79,7 +79,7 @@ describe("jd-analysis repo", () => {
 describe("artifact repo", () => {
   it("upserts, keeps the latest version, and lists by task", () => {
     const app = makeApplication(db);
-    const task = createAgentTask(db, { applicationId: app.id });
+    const task = createPipelineTask(db, { applicationId: app.id });
     const now = Date.now();
 
     upsertArtifact(db, {
@@ -114,30 +114,30 @@ describe("artifact repo", () => {
   });
 });
 
-describe("agent-task-by-application helper", () => {
+describe("pipeline-task-by-application helper", () => {
   it("returns the task for an application id", () => {
     const app = makeApplication(db);
-    const task = createAgentTask(db, { applicationId: app.id });
-    expect(getAgentTaskByApplicationId(db, app.id)?.id).toBe(task.id);
-    expect(getAgentTaskByApplicationId(db, "nope")).toBeNull();
+    const task = createPipelineTask(db, { applicationId: app.id });
+    expect(getPipelineTaskByApplicationId(db, app.id)?.id).toBe(task.id);
+    expect(getPipelineTaskByApplicationId(db, "nope")).toBeNull();
   });
 });
 
 describe("agent_tasks cover-letter columns", () => {
   it("persist through create and update", () => {
     const app = makeApplication(db);
-    const task = createAgentTask(db, { applicationId: app.id });
+    const task = createPipelineTask(db, { applicationId: app.id });
     expect(task.coverLetterRequirement).toBe("unknown");
     expect(task.skippedCoverLetter).toBe(false);
 
-    const updated = updateAgentTask(db, task.id, {
+    const updated = updatePipelineTask(db, task.id, {
       coverLetterRequirement: "required",
       skippedCoverLetter: true,
     });
     expect(updated?.coverLetterRequirement).toBe("required");
     expect(updated?.skippedCoverLetter).toBe(true);
 
-    const reloaded = getAgentTaskByApplicationId(db, app.id);
+    const reloaded = getPipelineTaskByApplicationId(db, app.id);
     expect(reloaded?.coverLetterRequirement).toBe("required");
     expect(reloaded?.skippedCoverLetter).toBe(true);
   });

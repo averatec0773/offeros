@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { buildResumeHeader, serializeResume, type AgentTask, type Artifact } from "@offeros/core";
+import {
+  buildResumeHeader,
+  serializeResume,
+  type PipelineTask,
+  type Artifact,
+} from "@offeros/core";
 import type { ResumeTailorInput, ResumeTailorOutput } from "@offeros/llm";
 import type { PipelineContext } from "../types";
 import { resolveResumeText } from "./grounding";
@@ -10,7 +15,7 @@ import { resolveResumeText } from "./grounding";
  * Grounds the tailor on the application's selected résumé (falling back to
  * the primary, then to profile facts) via `resolveResumeText`.
  */
-export async function run(ctx: PipelineContext, task: AgentTask): Promise<void> {
+export async function run(ctx: PipelineContext, task: PipelineTask): Promise<void> {
   const application = ctx.repos.getApplication(task.applicationId);
   if (!application) throw new Error(`application ${task.applicationId} not found`);
   const profile = ctx.repos.getProfile();

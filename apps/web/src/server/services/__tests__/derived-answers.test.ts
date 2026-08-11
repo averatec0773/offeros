@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PIPELINE_STEPS } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
-import { createAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { saveProfile } from "../../repositories/profile-repo";
 import { createHandoffForTask, claimHandoff } from "../fill-service";
 
@@ -25,8 +25,8 @@ function seedBundle(jdText: string) {
     jobInfo: { jobId: "j1", jobTitle: "AI Engineer", companyName: "Acme" },
     jdText,
   });
-  const task = createAgentTask(db, { applicationId: app.id });
-  updateAgentTask(db, task.id, { step: FILL_STEP, status: "awaiting_user" });
+  const task = createPipelineTask(db, { applicationId: app.id });
+  updatePipelineTask(db, task.id, { step: FILL_STEP, status: "awaiting_user" });
   const handoff = createHandoffForTask(db, task.id);
   return claimHandoff(db, handoff.id);
 }

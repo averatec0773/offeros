@@ -1,7 +1,7 @@
 import { getDb } from "@/server/db/client";
 import { listApplications } from "@/server/repositories/application-repo";
-import { listAgentTasks } from "@/server/repositories/agent-task-repo";
-import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
+import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
+import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { listRecentTrace } from "@/server/repositories/agent-trace-repo";
 import { buildInbox } from "@/server/services/attention-service";
 import { computeFillStats } from "@offeros/autofill";
@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 export default function AgentConsolePage() {
   const db = getDb();
   const applications = listApplications(db);
-  const tasks = listAgentTasks(db);
+  const tasks = listPipelineTasks(db);
   const taskByApplication = newestTaskByApplication(tasks);
   const active = applications.filter((a) => a.status === "saved" || a.status === "applying");
   const stats = computeFillStats(

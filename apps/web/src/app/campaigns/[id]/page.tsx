@@ -3,8 +3,8 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getDb } from "@/server/db/client";
 import { listApplications } from "@/server/repositories/application-repo";
-import { listAgentTasks } from "@/server/repositories/agent-task-repo";
-import { newestTaskByApplication } from "@/server/repositories/agent-task-by-application";
+import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
+import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { listFits } from "@/server/repositories/fit-repo";
 import { getCampaign } from "@/server/repositories/campaign-repo";
 import { campaignProgress, describeProgress } from "@/server/services/campaign-service";
@@ -31,7 +31,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   if (!campaign) notFound();
 
   const applications = listApplications(db);
-  const taskByApplication = newestTaskByApplication(listAgentTasks(db));
+  const taskByApplication = newestTaskByApplication(listPipelineTasks(db));
   const fitByApplication = new Map(listFits(db).map((fit) => [fit.applicationId, fit]));
 
   const members = applications.filter((application) => application.campaignId === campaign.id);

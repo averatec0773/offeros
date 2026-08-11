@@ -15,12 +15,12 @@ import {
   updateApplication,
 } from "../repositories/application-repo";
 import {
-  createAgentTask,
-  getAgentTask,
-  listAgentTasks,
-  updateAgentTask,
-} from "../repositories/agent-task-repo";
-import { getAgentTaskByApplicationId } from "../repositories/agent-task-by-application";
+  createPipelineTask,
+  getPipelineTask,
+  listPipelineTasks,
+  updatePipelineTask,
+} from "../repositories/pipeline-task-repo";
+import { getPipelineTaskByApplicationId } from "../repositories/pipeline-task-by-application";
 import { getJdAnalysis, saveJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getArtifact, listArtifacts, upsertArtifact } from "../repositories/artifact-repo";
 import { getProfile, saveProfile } from "../repositories/profile-repo";
@@ -44,13 +44,14 @@ export function makeRepos(db: Db) {
     updateApplication: (id: string, patch: Parameters<typeof updateApplication>[2]) =>
       updateApplication(db, id, patch),
 
-    getAgentTask: (id: string) => getAgentTask(db, id),
-    listAgentTasks: () => listAgentTasks(db),
-    createAgentTask: (input: Parameters<typeof createAgentTask>[1]) => createAgentTask(db, input),
-    updateAgentTask: (id: string, patch: Parameters<typeof updateAgentTask>[2]) =>
-      updateAgentTask(db, id, patch),
-    getAgentTaskByApplicationId: (applicationId: string) =>
-      getAgentTaskByApplicationId(db, applicationId),
+    getPipelineTask: (id: string) => getPipelineTask(db, id),
+    listPipelineTasks: () => listPipelineTasks(db),
+    createPipelineTask: (input: Parameters<typeof createPipelineTask>[1]) =>
+      createPipelineTask(db, input),
+    updatePipelineTask: (id: string, patch: Parameters<typeof updatePipelineTask>[2]) =>
+      updatePipelineTask(db, id, patch),
+    getPipelineTaskByApplicationId: (applicationId: string) =>
+      getPipelineTaskByApplicationId(db, applicationId),
 
     getJdAnalysis: (applicationId: string) => getJdAnalysis(db, applicationId),
     saveJdAnalysis: (analysis: Parameters<typeof saveJdAnalysis>[1]) =>

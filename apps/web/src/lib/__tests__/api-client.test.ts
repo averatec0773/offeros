@@ -31,7 +31,7 @@ describe("api client", () => {
       errorMsg: null,
       result: { id: "x" },
     });
-    await api.agentTasks.create({ applicationId: "app-1" });
+    await api.pipelineTasks.create({ applicationId: "app-1" });
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/v1/agent/tasks");
     expect(init.method).toBe("POST");
@@ -43,11 +43,11 @@ describe("api client", () => {
       { success: false, errorCode: 40400, errorMsg: "application not found", result: null },
       404,
     );
-    await expect(api.agentTasks.get("missing")).rejects.toMatchObject({
+    await expect(api.pipelineTasks.get("missing")).rejects.toMatchObject({
       name: "ApiError",
       code: 40400,
     });
-    await expect(api.agentTasks.get("missing")).rejects.toBeInstanceOf(ApiError);
+    await expect(api.pipelineTasks.get("missing")).rejects.toBeInstanceOf(ApiError);
   });
 
   it("settings.llmKeys calls the right url", async () => {

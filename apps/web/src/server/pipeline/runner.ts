@@ -1,4 +1,4 @@
-import type { AgentTask, ArtifactKind, PipelineStepKey } from "@offeros/core";
+import type { PipelineTask, ArtifactKind, PipelineStepKey } from "@offeros/core";
 import { completeSubmitted } from "../services/fill-service";
 import { appendEvent } from "../repositories/application-event-repo";
 import { styleMemory, type StyleMemoryKind } from "../memory/style-memory";
@@ -33,7 +33,7 @@ import { resolveGate, type PipelineContext, type PipelineStep } from "./types";
  * Concurrency: this targets a single-process local server; `advance`/`choose`
  * are expected to run serially per task. There is no optimistic lock, so
  * genuinely concurrent calls for the same task are out of scope (a future
- * multi-writer phase would add a version guard to `updateAgentTask`).
+ * multi-writer phase would add a version guard to `updatePipelineTask`).
  */
 
 const TERMINAL_BOUNDARY = "fill-form";
@@ -95,19 +95,23 @@ async function maybeTriggerStyleDistill(
   }
 }
 
-async function persist(ctx: PipelineContext, patch: Partial<AgentTask>): Promise<AgentTask> {
-  const updated = await ctx.repos.updateAgentTask(ctx.taskId, patch);
+async function persist(ctx: PipelineContext, patch: Partial<PipelineTask>): Promise<PipelineTask> {
+  const updated = await ctx.repos.updatePipelineTask(ctx.taskId, patch);
   if (!updated) throw new Error(`agent task ${ctx.taskId} not found`);
   return updated;
 }
 
-async function runBody(ctx: PipelineContext, step: PipelineStep, task: AgentTask): Promise<void> {
-  await ctx.repos.updateAgentTask(ctx.taskId, { status: "running" });
+async function runBody(
+  ctx: PipelineContext,
+  step: PipelineStep,
+  task: PipelineTask,
+): Promise<void> {
+  await ctx.repos.updatePipelineTask(ctx.taskId, { status: "running" });
   await step.run(ctx, { ...task, status: "running" });
 }
 
-function load(ctx: PipelineContext): AgentTask {
-  const task = ctx.repos.getAgentTask(ctx.taskId);
+function load(ctx: PipelineContext): PipelineTask {
+  const task = ctx.repos.getPipelineTask(ctx.taskId);
   if (!task) throw new Error(`agent task ${ctx.taskId} not found`);
   return task;
 }
@@ -129,7 +133,7 @@ export function failureReasonFor(error: unknown): string {
   return "Something went wrong while generating. Check the server logs for details.";
 }
 
-async function failed(ctx: PipelineContext, error: unknown): Promise<AgentTask> {
+async function failed(ctx: PipelineContext, error: unknown): Promise<PipelineTask> {
   console.error(`[pipeline] task ${ctx.taskId} failed:`, error);
   const task = await persist(ctx, { status: "failed", failureReason: failureReasonFor(error) });
   // A missing provider key is a user-fixable configuration error, not a task
@@ -151,7 +155,7 @@ async function failed(ctx: PipelineContext, error: unknown): Promise<AgentTask> 
  * boundary, or the end. Assumes the task is not currently paused at a gate the
  * user must act on.
  */
-async function runForward(ctx: PipelineContext, start: AgentTask): Promise<AgentTask> {
+async function runForward(ctx: PipelineContext, start: PipelineTask): Promise<PipelineTask> {
   let task = start;
   let ranBody = false;
   for (;;) {
@@ -199,7 +203,7 @@ async function runForward(ctx: PipelineContext, start: AgentTask): Promise<Agent
  * At a **choice** gate this is a no-op that re-reports `awaiting_user` — the
  * caller must use `choose()` there. Also used to (re)start a queued/paused task.
  */
-export async function advance(ctx: PipelineContext): Promise<AgentTask> {
+export async function advance(ctx: PipelineContext): Promise<PipelineTask> {
   const task = load(ctx);
   if (task.status === "done" || task.status === "failed") return task;
   // Reentrancy guard: a task already `running` is mid-pipeline (e.g. a second
@@ -245,7 +249,7 @@ export async function advance(ctx: PipelineContext): Promise<AgentTask> {
 export async function choose(
   ctx: PipelineContext,
   choice: "skip" | "generate",
-): Promise<AgentTask> {
+): Promise<PipelineTask> {
   let task = load(ctx);
   if (task.status !== "awaiting_user") return task;
   const step = ctx.steps[task.step];
@@ -288,7 +292,7 @@ export async function choose(
 export async function runTargetedStep(
   ctx: PipelineContext,
   key: PipelineStepKey,
-): Promise<AgentTask> {
+): Promise<PipelineTask> {
   const task = load(ctx);
   const parkedAt = ctx.steps[task.step]?.key;
   if (
@@ -319,7 +323,7 @@ export async function runTargetedStep(
 }
 
 /** Begin (or resume) running a task. Equivalent to advancing from its position. */
-export async function startTask(ctx: PipelineContext): Promise<AgentTask> {
+export async function startTask(ctx: PipelineContext): Promise<PipelineTask> {
   const task = load(ctx);
   // "task-started" means the task is genuinely starting for the first time —
   // only a freshly created task sits at "queued". A repeat call (a second

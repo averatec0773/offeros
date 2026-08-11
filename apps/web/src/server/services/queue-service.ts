@@ -1,9 +1,9 @@
-import { PIPELINE_STEPS, type AgentTask } from "@offeros/core";
+import { PIPELINE_STEPS, type PipelineTask } from "@offeros/core";
 import type { Db } from "../db/client";
 import type { PipelineContext } from "../pipeline/types";
 import { startTask, advance, choose } from "../pipeline/runner";
-import { getAgentTaskByApplicationId } from "../repositories/agent-task-by-application";
-import { createAgentTask } from "../repositories/agent-task-repo";
+import { getPipelineTaskByApplicationId } from "../repositories/pipeline-task-by-application";
+import { createPipelineTask } from "../repositories/pipeline-task-repo";
 import { getApplication } from "../repositories/application-repo";
 import { appendEvent } from "../repositories/application-event-repo";
 import { findConflicts, type ApplicantConstraints } from "@offeros/autofill";
@@ -161,7 +161,7 @@ export function startQueue(
       skipped.push({ applicationId: id, reason: `application is ${application.status}` });
       continue;
     }
-    const task = getAgentTaskByApplicationId(db, id);
+    const task = getPipelineTaskByApplicationId(db, id);
     if (task && (task.status === "done" || task.status === "failed")) {
       skipped.push({ applicationId: id, reason: `task already ${task.status}` });
       continue;
@@ -205,7 +205,7 @@ export function startQueue(
 }
 
 /** True when the task is parked at a gate only a human may move past. */
-function atHumanGate(task: AgentTask): boolean {
+function atHumanGate(task: PipelineTask): boolean {
   return task.status === "awaiting_user" && HUMAN_GATES.has(PIPELINE_STEPS[task.step]?.key ?? "");
 }
 
@@ -214,10 +214,10 @@ export async function runItemToGate(
   db: Db,
   applicationId: string,
   deps: QueueDeps,
-): Promise<AgentTask> {
+): Promise<PipelineTask> {
   const runner = deps.runner ?? { startTask, advance, choose };
-  const existing = getAgentTaskByApplicationId(db, applicationId);
-  const task = existing ?? createAgentTask(db, { applicationId });
+  const existing = getPipelineTaskByApplicationId(db, applicationId);
+  const task = existing ?? createPipelineTask(db, { applicationId });
   // Nothing to run: the task already waits on a human. This check MUST come
   // before the first advance() — at the submit gate advance() *is* "mark as
   // submitted", so starting the queue on such a task would close it and flag
@@ -260,7 +260,7 @@ async function runLoop(db: Db, deps: QueueDeps): Promise<void> {
         { deps },
       );
       if (obs.ok) {
-        const t = getAgentTaskByApplicationId(db, applicationId);
+        const t = getPipelineTaskByApplicationId(db, applicationId);
         q.done.push(applicationId);
         appendEvent(db, {
           applicationId,

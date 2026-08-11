@@ -8,7 +8,7 @@ import {
   describeTracking,
   trackApplication,
   type Application,
-  type AgentTask,
+  type PipelineTask,
   type FitAnalysis,
 } from "@offeros/core";
 import { MatchScoreRing } from "./match-score-ring";
@@ -55,7 +55,7 @@ export function ApplicationRow({
   onToggleSelect,
 }: {
   application: Application;
-  task: AgentTask | null;
+  task: PipelineTask | null;
   fit?: FitAnalysis | null;
   /** Shown as a small tag when the row belongs to a campaign. Omit on pages
    *  already scoped to one campaign — repeating the name on every row is noise. */

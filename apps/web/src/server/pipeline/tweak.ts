@@ -31,7 +31,7 @@ export async function tweakArtifact(
   kind: TweakArtifactKind,
   instruction: string,
 ): Promise<{ version: ArtifactVersion; diff: LineDiff }> {
-  const task = ctx.repos.getAgentTask(ctx.taskId);
+  const task = ctx.repos.getPipelineTask(ctx.taskId);
   if (!task) throw new Error(`agent task ${ctx.taskId} not found`);
   const application = ctx.repos.getApplication(task.applicationId);
   if (!application) throw new Error(`application ${task.applicationId} not found`);

@@ -9,7 +9,11 @@ import {
   getApplication,
   updateApplication,
 } from "../../repositories/application-repo";
-import { createAgentTask, getAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import {
+  createPipelineTask,
+  getPipelineTask,
+  updatePipelineTask,
+} from "../../repositories/pipeline-task-repo";
 import { listEvents } from "../../repositories/application-event-repo";
 import { makePipelineContext } from "../../pipeline/context";
 import type { PipelineStep } from "../../pipeline/types";
@@ -56,12 +60,12 @@ describe("run queue vs a task parked at the submit gate", () => {
       jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
     });
     updateApplication(db, app.id, { status: "applying" });
-    const task = createAgentTask(db, { applicationId: app.id });
-    updateAgentTask(db, task.id, { status: "awaiting_user", step: SUBMIT_STEP });
+    const task = createPipelineTask(db, { applicationId: app.id });
+    updatePipelineTask(db, task.id, { status: "awaiting_user", step: SUBMIT_STEP });
 
     await runItemToGate(db, app.id, realDeps());
 
-    const after = getAgentTask(db, task.id)!;
+    const after = getPipelineTask(db, task.id)!;
     const application = getApplication(db, app.id)!;
     const kinds = listEvents(db, app.id).map((e) => e.kind);
 

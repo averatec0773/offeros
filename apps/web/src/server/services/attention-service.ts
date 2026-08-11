@@ -1,7 +1,7 @@
-import { PIPELINE_STEPS, type AgentTask, type Application } from "@offeros/core";
+import { PIPELINE_STEPS, type PipelineTask, type Application } from "@offeros/core";
 import type { Db } from "../db/client";
 import { listApplications } from "../repositories/application-repo";
-import { listAgentTasks } from "../repositories/agent-task-repo";
+import { listPipelineTasks } from "../repositories/pipeline-task-repo";
 
 /**
  * The needs-me inbox: everything across every application that is waiting on
@@ -50,11 +50,11 @@ const PRIORITY: Record<AttentionKind, number> = {
   "not-started": 4,
 };
 
-function stepKey(task: AgentTask): string {
+function stepKey(task: PipelineTask): string {
   return PIPELINE_STEPS[task.step]?.key ?? "";
 }
 
-function itemFor(application: Application, task: AgentTask | undefined): AttentionItem | null {
+function itemFor(application: Application, task: PipelineTask | undefined): AttentionItem | null {
   const base = {
     applicationId: application.id,
     jobTitle: application.jobInfo.jobTitle,
@@ -117,11 +117,11 @@ function itemFor(application: Application, task: AgentTask | undefined): Attenti
 
 /** Everything waiting on the user, most consequential first. */
 export function buildInbox(db: Db): AttentionItem[] {
-  // listAgentTasks is newest-first, so a plain Map build would leave the OLDEST
+  // listPipelineTasks is newest-first, so a plain Map build would leave the OLDEST
   // task per application winning — the console would report a superseded run,
   // nondeterministically when two share a timestamp.
-  const tasks = new Map<string, AgentTask>();
-  for (const task of listAgentTasks(db)) {
+  const tasks = new Map<string, PipelineTask>();
+  for (const task of listPipelineTasks(db)) {
     if (!tasks.has(task.applicationId)) tasks.set(task.applicationId, task);
   }
   return listApplications(db)

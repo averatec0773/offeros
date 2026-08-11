@@ -1,5 +1,5 @@
 import { appendTrace } from "../repositories/agent-trace-repo";
-import { getAgentTask } from "../repositories/agent-task-repo";
+import { getPipelineTask } from "../repositories/pipeline-task-repo";
 import type { Tool, ToolContext, ToolObservation } from "./types";
 
 /**
@@ -30,7 +30,7 @@ export async function runTool<I, R>(
   // another — the irreversible tools (mark_submitted) turn that into "closed
   // over there, no record here". Refuse rather than reconcile.
   if (ctx.taskId) {
-    const task = getAgentTask(ctx.db, ctx.taskId);
+    const task = getPipelineTask(ctx.db, ctx.taskId);
     if (task && task.applicationId !== ctx.applicationId) {
       return {
         ok: false,

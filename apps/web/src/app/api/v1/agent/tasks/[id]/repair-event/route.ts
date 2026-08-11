@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getDb } from "@/server/db/client";
-import { getAgentTask } from "@/server/repositories/agent-task-repo";
+import { getPipelineTask } from "@/server/repositories/pipeline-task-repo";
 import { appendEvent } from "@/server/repositories/application-event-repo";
 import { handle, ok, notFound } from "@/server/http/envelope";
 
@@ -29,7 +29,7 @@ export async function POST(request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
     const db = getDb();
-    const task = getAgentTask(db, id);
+    const task = getPipelineTask(db, id);
     if (!task) return notFound("agent task");
     const body = repairEventSchema.parse(await request.json());
     appendEvent(db, { applicationId: task.applicationId, kind: body.kind, payload: body.payload });

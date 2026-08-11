@@ -1,6 +1,6 @@
 import { getDb } from "@/server/db/client";
 import { getApplication } from "@/server/repositories/application-repo";
-import { getAgentTaskByApplicationId } from "@/server/repositories/agent-task-by-application";
+import { getPipelineTaskByApplicationId } from "@/server/repositories/pipeline-task-by-application";
 import { getFit } from "@/server/repositories/fit-repo";
 import { computeFit } from "@/server/services/fit-service";
 import { buildPipelineContext } from "@/server/pipeline/route-context";
@@ -16,7 +16,7 @@ export async function POST(_request: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     const db = getDb();
     if (!getApplication(db, id)) return notFound("application");
-    const task = getAgentTaskByApplicationId(db, id);
+    const task = getPipelineTaskByApplicationId(db, id);
     const runLlm = buildPipelineContext(task?.id ?? id).runLlm;
     return ok(await computeFit(db, id, { runLlm }));
   });

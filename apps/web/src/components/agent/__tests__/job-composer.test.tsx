@@ -3,7 +3,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { JobComposer } from "../job-composer";
 import { api } from "@/lib/api-client";
-import type { AgentTask } from "@offeros/core";
+import type { PipelineTask } from "@offeros/core";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -12,7 +12,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api-client", () => ({
   api: {
-    agentTasks: {
+    pipelineTasks: {
       createFromJd: vi.fn(),
     },
   },
@@ -76,7 +76,7 @@ describe("JobComposer", () => {
   });
 
   it("submits the trimmed jobInfo + jdText shape and navigates to the new application on success", async () => {
-    vi.mocked(api.agentTasks.createFromJd).mockResolvedValue({
+    vi.mocked(api.pipelineTasks.createFromJd).mockResolvedValue({
       id: "task-1",
       applicationId: "app-1",
       status: "queued",
@@ -99,8 +99,8 @@ describe("JobComposer", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/applications/app-1"));
 
-    expect(api.agentTasks.createFromJd).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(api.agentTasks.createFromJd).mock.calls[0]![0];
+    expect(api.pipelineTasks.createFromJd).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(api.pipelineTasks.createFromJd).mock.calls[0]![0];
     expect(call.jobInfo.companyName).toBe("Evolver");
     expect(call.jobInfo.jobTitle).toBe("GenAI Engineer");
     expect(call.jobInfo.applyLink).toBe("https://evolver.example/jobs/1");
@@ -110,7 +110,7 @@ describe("JobComposer", () => {
   });
 
   it("falls back to 'Untitled role' and omits applyLink when they're left blank", async () => {
-    vi.mocked(api.agentTasks.createFromJd).mockResolvedValue({
+    vi.mocked(api.pipelineTasks.createFromJd).mockResolvedValue({
       id: "task-2",
       applicationId: "app-2",
       status: "queued",
@@ -127,13 +127,13 @@ describe("JobComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start tailoring" }));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/applications/app-2"));
-    const call = vi.mocked(api.agentTasks.createFromJd).mock.calls[0]![0];
+    const call = vi.mocked(api.pipelineTasks.createFromJd).mock.calls[0]![0];
     expect(call.jobInfo.jobTitle).toBe("Untitled role");
     expect(call.jobInfo.applyLink).toBeUndefined();
   });
 
   it("shows an error and re-enables the button when the create call fails", async () => {
-    vi.mocked(api.agentTasks.createFromJd).mockRejectedValue(new Error("network down"));
+    vi.mocked(api.pipelineTasks.createFromJd).mockRejectedValue(new Error("network down"));
 
     render(<JobComposer />);
     fillForm();
@@ -149,9 +149,9 @@ describe("JobComposer", () => {
   });
 
   it("shows pending state on the button while the request is in flight", async () => {
-    let resolveCall: (value: AgentTask) => void = () => {};
-    vi.mocked(api.agentTasks.createFromJd).mockReturnValue(
-      new Promise<AgentTask>((resolve) => {
+    let resolveCall: (value: PipelineTask) => void = () => {};
+    vi.mocked(api.pipelineTasks.createFromJd).mockReturnValue(
+      new Promise<PipelineTask>((resolve) => {
         resolveCall = resolve;
       }),
     );

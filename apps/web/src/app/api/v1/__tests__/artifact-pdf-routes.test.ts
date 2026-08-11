@@ -16,7 +16,7 @@ vi.mock("@/server/services/export-service", () => ({
 
 const { getDb } = await import("@/server/db/client");
 const { createApplication } = await import("@/server/repositories/application-repo");
-const { createAgentTask } = await import("@/server/repositories/agent-task-repo");
+const { createPipelineTask } = await import("@/server/repositories/pipeline-task-repo");
 const { upsertArtifact } = await import("@/server/repositories/artifact-repo");
 const { GET } = await import("../agent/tasks/[id]/artifacts/[kind]/pdf/route");
 
@@ -40,7 +40,7 @@ function seed(company = "Evolver AI", title = "GenAI Engineer"): string {
   const app = createApplication(db, {
     jobInfo: { jobId: `j-${Math.random()}`, jobTitle: title, companyName: company },
   });
-  const task = createAgentTask(db, { applicationId: app.id });
+  const task = createPipelineTask(db, { applicationId: app.id });
   upsertArtifact(db, artifact(task.id, "cover-letter"));
   return task.id;
 }
@@ -89,7 +89,7 @@ describe("GET artifact pdf route", () => {
     const app = createApplication(db, {
       jobInfo: { jobId: `j-${Math.random()}`, jobTitle: "X", companyName: "Y" },
     });
-    const task = createAgentTask(db, { applicationId: app.id });
+    const task = createPipelineTask(db, { applicationId: app.id });
     const res = await GET(req(), ctx(task.id, "cover-letter"));
     expect(res.status).toBe(404);
     expect(exportMock).not.toHaveBeenCalled();

@@ -29,7 +29,7 @@ export function TweakInput({
     setPending(true);
     setError(null);
     try {
-      const result = await api.agentTasks.tweak(taskId, kind, instruction.trim());
+      const result = await api.pipelineTasks.tweak(taskId, kind, instruction.trim());
       onResult(result);
       setInstruction("");
     } catch (err) {

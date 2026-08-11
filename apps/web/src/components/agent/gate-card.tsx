@@ -1,7 +1,7 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import type { AgentTask } from "@offeros/core";
+import type { PipelineTask } from "@offeros/core";
 
 export type GateKind = "confirm-resume" | "confirm-cover-letter" | "choice";
 
@@ -44,7 +44,7 @@ export function GateCard({
   onSkip,
   onGenerate,
 }: {
-  task: AgentTask;
+  task: PipelineTask;
   kind: GateKind;
   rationale?: string;
   onApprove?: () => void;

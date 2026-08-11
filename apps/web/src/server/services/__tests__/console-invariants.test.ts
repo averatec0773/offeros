@@ -6,10 +6,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PIPELINE_STEPS, type AgentTask } from "@offeros/core";
+import { PIPELINE_STEPS, type PipelineTask } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
-import { createAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { appendTrace, listRecentTrace } from "../../repositories/agent-trace-repo";
 import { buildInbox } from "../attention-service";
 import { runItemToGate, __resetQueueForTests } from "../queue-service";
@@ -41,12 +41,12 @@ describe("the inbox must read the CURRENT task of an application", () => {
     const id = seed("AI Engineer");
     // `POST /api/v1/agent/tasks` creates a task per call with no dedup, so an
     // application can hold more than one. Every other reader
-    // (getAgentTaskByApplicationId) takes the newest; buildInbox takes the oldest.
-    const old = createAgentTask(db, { applicationId: id });
-    updateAgentTask(db, old.id, { status: "failed", failureReason: "provider down" });
+    // (getPipelineTaskByApplicationId) takes the newest; buildInbox takes the oldest.
+    const old = createPipelineTask(db, { applicationId: id });
+    updatePipelineTask(db, old.id, { status: "failed", failureReason: "provider down" });
     await new Promise((r) => setTimeout(r, 20)); // distinct updatedAt, no tie
-    const fresh = createAgentTask(db, { applicationId: id });
-    updateAgentTask(db, fresh.id, { step: SUBMIT, status: "awaiting_user" });
+    const fresh = createPipelineTask(db, { applicationId: id });
+    updatePipelineTask(db, fresh.id, { step: SUBMIT, status: "awaiting_user" });
 
     expect(buildInbox(db).map((i) => i.kind)).toEqual(["ready-to-submit"]);
   });
@@ -55,10 +55,10 @@ describe("the inbox must read the CURRENT task of an application", () => {
 describe("a fill gate the browser has never touched is the user's turn", () => {
   it("lists an application the queue parked at the fill gate with no report", async () => {
     const id = seed("AI Engineer");
-    const task = createAgentTask(db, { applicationId: id });
-    const park = async (): Promise<AgentTask> => {
-      updateAgentTask(db, task.id, { step: FILL, status: "awaiting_user" });
-      return { ...task, step: FILL, status: "awaiting_user" } as AgentTask;
+    const task = createPipelineTask(db, { applicationId: id });
+    const park = async (): Promise<PipelineTask> => {
+      updatePipelineTask(db, task.id, { step: FILL, status: "awaiting_user" });
+      return { ...task, step: FILL, status: "awaiting_user" } as PipelineTask;
     };
     await runItemToGate(db, id, {
       ctxFor: () => ({}) as never,
@@ -75,7 +75,7 @@ describe("a fill gate the browser has never touched is the user's turn", () => {
 describe("an application whose task was created but never started", () => {
   it("is still listed as not-started", () => {
     const id = seed("AI Engineer");
-    createAgentTask(db, { applicationId: id }); // status "queued"
+    createPipelineTask(db, { applicationId: id }); // status "queued"
     // `!task` is the only not-started trigger, so the JD-source seam (which
     // creates application + queued task in one POST) produces an application
     // that is in no bucket at all.
@@ -88,11 +88,11 @@ describe("inbox ordering claims 'most recently touched first'", () => {
     const a = seed("Older");
     await new Promise((r) => setTimeout(r, 20));
     const b = seed("Newer");
-    const ta = createAgentTask(db, { applicationId: a });
-    const tb = createAgentTask(db, { applicationId: b });
-    updateAgentTask(db, tb.id, { status: "failed", failureReason: "b broke" });
+    const ta = createPipelineTask(db, { applicationId: a });
+    const tb = createPipelineTask(db, { applicationId: b });
+    updatePipelineTask(db, tb.id, { status: "failed", failureReason: "b broke" });
     await new Promise((r) => setTimeout(r, 20));
-    updateAgentTask(db, ta.id, { status: "failed", failureReason: "a broke" });
+    updatePipelineTask(db, ta.id, { status: "failed", failureReason: "a broke" });
 
     // `at` is application.updatedAt, which nothing in the pipeline touches.
     expect(buildInbox(db).map((i) => i.jobTitle)).toEqual(["Older", "Newer"]);

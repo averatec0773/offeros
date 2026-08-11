@@ -3,14 +3,14 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckSquare, FolderPlus, X } from "lucide-react";
-import type { AgentTask, Application, Campaign, FitAnalysis } from "@offeros/core";
+import type { PipelineTask, Application, Campaign, FitAnalysis } from "@offeros/core";
 import { api } from "@/lib/api-client";
 import { ApplicationRow } from "./application-row";
 import { EmptyState } from "@/components/empty-state";
 
 export type ApplicationListRow = {
   application: Application;
-  task: AgentTask | null;
+  task: PipelineTask | null;
   fit: FitAnalysis | null;
 };
 

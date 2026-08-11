@@ -186,8 +186,8 @@ describe("/api/v1/agent/tasks/[id] pipeline actions", () => {
     const okRes = await pauseRoute.POST(post(), idCtx(taskId));
     expect(okRes.status).toBe(200);
 
-    const { updateAgentTask } = await import("@/server/repositories/agent-task-repo");
-    updateAgentTask(getDb(), taskId, { status: "done" });
+    const { updatePipelineTask } = await import("@/server/repositories/pipeline-task-repo");
+    updatePipelineTask(getDb(), taskId, { status: "done" });
     const badRes = await pauseRoute.POST(post(), idCtx(taskId));
     expect(badRes.status).toBe(400);
   });
@@ -242,8 +242,8 @@ describe("/api/v1/agent/tasks/[id] pipeline actions", () => {
       const body = await res.json();
       expect(body.errorCode).toBe(42000);
 
-      const { getAgentTask } = await import("@/server/repositories/agent-task-repo");
-      const task = getAgentTask(getDb(), taskId);
+      const { getPipelineTask } = await import("@/server/repositories/pipeline-task-repo");
+      const task = getPipelineTask(getDb(), taskId);
       expect(task?.status).toBe("failed");
     } finally {
       __setTestPipelineOverride({ runLlm: fakeRunLlm });

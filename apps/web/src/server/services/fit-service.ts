@@ -7,7 +7,7 @@ import { getApplication } from "../repositories/application-repo";
 import { getProfile } from "../repositories/profile-repo";
 import { getJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getArtifact } from "../repositories/artifact-repo";
-import { getAgentTaskByApplicationId } from "../repositories/agent-task-by-application";
+import { getPipelineTaskByApplicationId } from "../repositories/pipeline-task-by-application";
 import { getFit, saveFit } from "../repositories/fit-repo";
 import { buildProfileFacts } from "../pipeline/steps/grounding";
 
@@ -72,7 +72,7 @@ export async function computeFit(
   const profile = getProfile(db);
   const profileSummary = profile ? buildProfileFacts(profile) : "";
 
-  const task = getAgentTaskByApplicationId(db, applicationId);
+  const task = getPipelineTaskByApplicationId(db, applicationId);
   const resumeArtifact = task ? getArtifact(db, task.id, "resume") : null;
   const resumeText = currentResumeContent(resumeArtifact) ?? profileSummary;
 

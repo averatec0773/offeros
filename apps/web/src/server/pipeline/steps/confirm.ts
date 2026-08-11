@@ -1,4 +1,4 @@
-import type { AgentTask } from "@offeros/core";
+import type { PipelineTask } from "@offeros/core";
 import type { PipelineContext } from "../types";
 
 /**
@@ -7,4 +7,4 @@ import type { PipelineContext } from "../types";
  * `advance()` just moves past without running a body — this exists only to
  * satisfy the `PipelineStep.run` contract.
  */
-export async function run(_ctx: PipelineContext, _task: AgentTask): Promise<void> {}
+export async function run(_ctx: PipelineContext, _task: PipelineTask): Promise<void> {}

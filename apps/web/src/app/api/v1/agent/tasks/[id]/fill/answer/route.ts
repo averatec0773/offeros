@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { QuestionAnswerOutput } from "@offeros/llm";
 import { getDb } from "@/server/db/client";
-import { getAgentTask } from "@/server/repositories/agent-task-repo";
+import { getPipelineTask } from "@/server/repositories/pipeline-task-repo";
 import { buildPipelineContext } from "@/server/pipeline/route-context";
 import { buildQuestionContext } from "@/server/services/fill-service";
 import { handle, ok, notFound } from "@/server/http/envelope";
@@ -27,7 +27,7 @@ export async function POST(request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
     const db = getDb();
-    if (!getAgentTask(db, id)) return notFound("agent task");
+    if (!getPipelineTask(db, id)) return notFound("agent task");
     const body = answerBodySchema.parse(await request.json());
     const grounding = buildQuestionContext(db, id);
     const output = (await buildPipelineContext(id).runLlm("question-answer", {

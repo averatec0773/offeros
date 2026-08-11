@@ -2,7 +2,7 @@ import { z } from "zod";
 import { jobInfoSchema } from "@offeros/core";
 import { getDb } from "@/server/db/client";
 import { createApplication } from "@/server/repositories/application-repo";
-import { createAgentTask } from "@/server/repositories/agent-task-repo";
+import { createPipelineTask } from "@/server/repositories/pipeline-task-repo";
 import { handle, ok } from "@/server/http/envelope";
 
 export const runtime = "nodejs";
@@ -29,6 +29,6 @@ export async function POST(request: Request) {
       "applicationId" in input
         ? input.applicationId
         : createApplication(db, { jobInfo: input.jobInfo, jdText: input.jdText }).id;
-    return ok(createAgentTask(db, { applicationId }));
+    return ok(createPipelineTask(db, { applicationId }));
   });
 }

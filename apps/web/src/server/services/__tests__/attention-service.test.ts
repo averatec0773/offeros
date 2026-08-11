@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PIPELINE_STEPS } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication, updateApplication } from "../../repositories/application-repo";
-import { createAgentTask, updateAgentTask } from "../../repositories/agent-task-repo";
+import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { buildInbox } from "../attention-service";
 
 const FILL_STEP = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
@@ -36,8 +36,8 @@ describe("buildInbox", () => {
 
   it("surfaces Action-Required fields with their names", () => {
     const id = seed("AI Engineer");
-    const task = createAgentTask(db, { applicationId: id });
-    updateAgentTask(db, task.id, {
+    const task = createPipelineTask(db, { applicationId: id });
+    updatePipelineTask(db, task.id, {
       step: FILL_STEP,
       status: "awaiting_user",
       applicationInfo: {
@@ -55,8 +55,8 @@ describe("buildInbox", () => {
     // status 1 = everything filled: the extension is mid-run or done, and the
     // person has nothing to do. Listing it would train them to ignore the inbox.
     const id = seed("AI Engineer");
-    const task = createAgentTask(db, { applicationId: id });
-    updateAgentTask(db, task.id, {
+    const task = createPipelineTask(db, { applicationId: id });
+    updatePipelineTask(db, task.id, {
       step: FILL_STEP,
       status: "awaiting_user",
       applicationInfo: { status: 1, filledFields: ["Email"], missingFields: [] },
@@ -66,8 +66,8 @@ describe("buildInbox", () => {
 
   it("ignores confirm gates — review steps are the workspace's job", () => {
     const id = seed("AI Engineer");
-    const task = createAgentTask(db, { applicationId: id });
-    updateAgentTask(db, task.id, { step: CONFIRM_STEP, status: "awaiting_user" });
+    const task = createPipelineTask(db, { applicationId: id });
+    updatePipelineTask(db, task.id, { step: CONFIRM_STEP, status: "awaiting_user" });
     expect(buildInbox(db)).toEqual([]);
   });
 
@@ -78,12 +78,12 @@ describe("buildInbox", () => {
     const missing = seed("Needs answers");
     void notStarted;
 
-    const t1 = createAgentTask(db, { applicationId: submit });
-    updateAgentTask(db, t1.id, { step: SUBMIT_STEP, status: "awaiting_user" });
-    const t2 = createAgentTask(db, { applicationId: failed });
-    updateAgentTask(db, t2.id, { status: "failed", failureReason: "provider down" });
-    const t3 = createAgentTask(db, { applicationId: missing });
-    updateAgentTask(db, t3.id, {
+    const t1 = createPipelineTask(db, { applicationId: submit });
+    updatePipelineTask(db, t1.id, { step: SUBMIT_STEP, status: "awaiting_user" });
+    const t2 = createPipelineTask(db, { applicationId: failed });
+    updatePipelineTask(db, t2.id, { status: "failed", failureReason: "provider down" });
+    const t3 = createPipelineTask(db, { applicationId: missing });
+    updatePipelineTask(db, t3.id, {
       step: FILL_STEP,
       status: "awaiting_user",
       applicationInfo: { status: 2, filledFields: [], missingFields: ["Gender"] },

@@ -1,6 +1,6 @@
 export * from "./profile";
 export * from "./application";
-export * from "./agent-task";
+export * from "./pipeline-task";
 export * from "./settings";
 export * from "./jd-analysis";
 export * from "./artifact";
