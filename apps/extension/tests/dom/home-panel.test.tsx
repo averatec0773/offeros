@@ -45,7 +45,10 @@ function mount(over: { items?: InboxItem[]; ok?: boolean; webReachable?: boolean
 describe("HomePanel (the off-ATS dashboard)", () => {
   it("lists what needs the user and opens that application in the web app", async () => {
     const { openApplication } = mount({
-      items: [item(), item({ applicationId: "a2", headline: "Ready to submit", companyName: "Bo" })],
+      items: [
+        item(),
+        item({ applicationId: "a2", headline: "Ready to submit", companyName: "Bo" }),
+      ],
     });
 
     expect(await screen.findByText("2 things waiting on you.")).toBeInTheDocument();
