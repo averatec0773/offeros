@@ -9,13 +9,19 @@ import { FillQuality } from "@/components/agent/fill-quality";
 import { FormMemoryCard } from "@/components/agent/form-memory-card";
 import { formMemorySummary } from "@/server/repositories/form-memory-repo";
 import { DashboardPeek } from "@/components/agent/dashboard-peek";
-import { ConsoleClient } from "@/components/agent/console-client";
+import { ConsolePeek } from "@/components/agent/console-peek";
+import { AgentChat } from "@/components/agent/agent-chat";
 
 export const dynamic = "force-dynamic";
 
-/** The agent console: the run queue, everything waiting on the user across all
- *  applications, and what the agent has been doing. Per-application detail
- *  stays in the workspace, one click away. */
+/**
+ * The agent page IS the conversation — a full-height chat, the page itself
+ * fixed to the viewport so only the message list scrolls. Everything else that
+ * used to stack under the chat (the run queue, the "needs you" inbox, the
+ * activity trace, the fill analytics) folds into two header chips — Console and
+ * Dashboard — one click away, never in the way. Per-application detail stays in
+ * the workspace.
+ */
 export default function AgentConsolePage() {
   const db = getDb();
   const applications = listApplications(db);
@@ -28,41 +34,43 @@ export default function AgentConsolePage() {
       fields: taskByApplication.get(a.id)?.fieldReports ?? [],
     })),
   );
-
   const memory = formMemorySummary(db);
 
   return (
-    <main className="mx-auto w-full max-w-[860px] px-6 py-10">
-      {/* The chat is what this page is FOR, so the analytics fold into a chip
-          up here — one line, click for the full cards. */}
-      <header className="mb-8 flex items-center justify-between gap-4">
+    // Fixed to the viewport minus the 3.5rem (h-14) top nav, so the page never
+    // scrolls; the chat's own message list takes the slack.
+    <main className="mx-auto flex h-[calc(100dvh-3.5rem)] w-full max-w-[860px] flex-col gap-4 px-6 py-6">
+      <header className="flex shrink-0 items-center justify-between gap-4">
         <div>
           <h1 className="text-heading font-semibold">Agent</h1>
-          <span className="text-body text-muted-foreground">
+          <span className="text-caption text-muted-foreground">
             {active.length} in progress · {applications.length} tracked
           </span>
         </div>
-        <DashboardPeek
-          line={`${stats.coverage}% fill · ${memory.knownQuestions} questions · ${memory.totalIncidents} incidents`}
-        >
-          <FillQuality stats={stats} />
-          <FormMemoryCard memory={memory} fills={stats.applications} />
-        </DashboardPeek>
+        <div className="flex items-center gap-2">
+          <ConsolePeek
+            eligible={active
+              .filter((a) => taskByApplication.get(a.id)?.status !== "done")
+              .map((a) => a.id)}
+            jobs={active.map((a) => ({
+              id: a.id,
+              title: a.jobInfo.jobTitle,
+              company: a.jobInfo.companyName,
+              status: a.status,
+            }))}
+            initialInbox={buildInbox(db)}
+            initialTrace={listRecentTrace(db, 40)}
+          />
+          <DashboardPeek line={`${stats.coverage}% fill · ${memory.knownQuestions} questions`}>
+            <FillQuality stats={stats} />
+            <FormMemoryCard memory={memory} fills={stats.applications} />
+          </DashboardPeek>
+        </div>
       </header>
 
-      <ConsoleClient
-        eligible={active
-          .filter((a) => taskByApplication.get(a.id)?.status !== "done")
-          .map((a) => a.id)}
-        jobs={active.map((a) => ({
-          id: a.id,
-          title: a.jobInfo.jobTitle,
-          company: a.jobInfo.companyName,
-          status: a.status,
-        }))}
-        initialInbox={buildInbox(db)}
-        initialTrace={listRecentTrace(db, 40)}
-      />
+      <div className="min-h-0 flex-1">
+        <AgentChat fill />
+      </div>
     </main>
   );
 }

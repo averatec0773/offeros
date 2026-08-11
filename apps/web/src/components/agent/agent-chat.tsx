@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import type { AgentStep } from "@/server/agent/loop";
 
 /**
@@ -41,7 +42,19 @@ const SUGGESTIONS = {
  * Omit `applicationId` for a conversation about every application. The agent
  * then names the job it is working on per tool call, and the trace follows it.
  */
-export function AgentChat({ applicationId }: { applicationId?: string }) {
+/**
+ * `fill` makes the chat expand to its container's height (the message list
+ * takes the slack and scrolls internally, composer pinned at the bottom) — the
+ * full-page chat layout the /agent console uses. Omitted, it stays a bounded
+ * card (max-height message list) for embedding inside a scrolling workspace.
+ */
+export function AgentChat({
+  applicationId,
+  fill = false,
+}: {
+  applicationId?: string;
+  fill?: boolean;
+}) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -127,7 +140,12 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4">
+    <section
+      className={cn(
+        "flex flex-col gap-3 rounded-2xl border border-border bg-background p-4",
+        fill && "h-full min-h-0",
+      )}
+    >
       <header className="flex items-baseline justify-between">
         <h2 className="text-body font-semibold text-foreground">
           {applicationId ? "Ask about this application" : "Ask about your applications"}
@@ -153,9 +171,12 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
         </div>
       )}
 
-      {/* The list scrolls INSIDE this box; the page never moves. Bounded so
-          the composer stays reachable however long the thread grows. */}
-      <div ref={listRef} className="max-h-[420px] overflow-y-auto">
+      {/* The list scrolls INSIDE this box; the page never moves. In `fill` it
+          takes the container's slack (flex-1); otherwise it's a bounded card. */}
+      <div
+        ref={listRef}
+        className={cn("overflow-y-auto", fill ? "min-h-0 flex-1" : "max-h-[420px]")}
+      >
         <ol className="flex flex-col gap-4">
           {turns.map((turn, i) => (
             <li key={i} className="flex flex-col gap-2">
