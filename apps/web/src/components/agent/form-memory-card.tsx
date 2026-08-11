@@ -71,6 +71,29 @@ export function FormMemoryCard({ memory, fills }: { memory: FormMemorySummary; f
           ))}
         </ul>
       )}
+
+      {memory.failuresByType.length > 0 && (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="mb-1.5 text-caption font-medium text-muted-foreground">
+            Where fills break down — aim fixes here, not at new vendors
+          </p>
+          <ul className="space-y-1">
+            {memory.failuresByType.slice(0, 5).map((row) => (
+              <li
+                key={`${row.vendor}:${row.classifiedType}`}
+                className="flex items-baseline gap-2 text-caption"
+              >
+                <span className="w-12 shrink-0 text-right font-medium text-foreground">
+                  {row.failed}/{row.seen}
+                </span>
+                <span className="text-foreground/80">
+                  <span className="font-medium">{row.classifiedType}</span> on {row.vendor}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

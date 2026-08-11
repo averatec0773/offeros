@@ -146,6 +146,18 @@ export interface FormMemorySummary {
   failedQuestions: number;
   incidents: { triggerId: string; count: number }[];
   totalIncidents: number;
+  /** Where fills break down, by the kind of question and the ATS it was on —
+   *  the "aim the next fix here" list. Highest failure count first. */
+  failuresByType: FieldTypeFailure[];
+}
+
+export interface FieldTypeFailure {
+  vendor: string;
+  classifiedType: string;
+  /** Distinct questions of this (type, vendor) the engine has met. */
+  seen: number;
+  /** How many of those have failed at least once. */
+  failed: number;
 }
 
 /** Aggregate counts, computed in SQL rather than by loading the tables: this
@@ -167,12 +179,29 @@ export function formMemorySummary(db: Db): FormMemorySummary {
     .all()
     .sort((a, b) => b.count - a.count);
 
+  // Which (question type, vendor) pairs actually break — the substrate for
+  // "aim the next fix here" rather than adding another vendor blind. Only pairs
+  // with a failure are returned; ordered by failure count, then fail rate.
+  const failuresByType = db
+    .select({
+      vendor: formShapes.vendor,
+      classifiedType: formShapes.classifiedType,
+      seen: sql<number>`count(*)`,
+      failed: sql<number>`sum(case when ${formShapes.failedCount} > 0 then 1 else 0 end)`,
+    })
+    .from(formShapes)
+    .groupBy(formShapes.vendor, formShapes.classifiedType)
+    .having(sql`sum(case when ${formShapes.failedCount} > 0 then 1 else 0 end) > 0`)
+    .all()
+    .sort((a, b) => b.failed - a.failed || b.failed / b.seen - a.failed / a.seen);
+
   return {
     knownQuestions: shapes?.known ?? 0,
     recurringQuestions: shapes?.recurring ?? 0,
     failedQuestions: shapes?.failed ?? 0,
     incidents,
     totalIncidents: incidents.reduce((sum, row) => sum + row.count, 0),
+    failuresByType,
   };
 }
 

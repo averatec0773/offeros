@@ -247,3 +247,42 @@ describe("applyFillReport idempotency", () => {
     expect(listIncidents(db, applicationId)).toHaveLength(1);
   });
 });
+
+describe("formMemorySummary.failuresByType", () => {
+  it("groups failures by (classifiedType, vendor), busiest first, and hides clean pairs", async () => {
+    const { formMemorySummary } = await import("../../repositories/form-memory-repo");
+    const now = Date.now();
+    const shape = (over: Partial<typeof formShapes.$inferInsert>) => ({
+      questionKey: Math.random().toString(36).slice(2),
+      vendor: "greenhouse",
+      question: "q",
+      classifiedType: "unknown",
+      seenCount: 1,
+      failedCount: 0,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      ...over,
+    });
+    // 2 failed 'unknown' on greenhouse, 1 failed 'country' on ashby, 1 clean 'email'.
+    db.insert(formShapes)
+      .values([
+        shape({ classifiedType: "unknown", vendor: "greenhouse", failedCount: 1 }),
+        shape({ classifiedType: "unknown", vendor: "greenhouse", failedCount: 2 }),
+        shape({ classifiedType: "country", vendor: "ashby", failedCount: 1 }),
+        shape({ classifiedType: "email", vendor: "greenhouse", failedCount: 0 }),
+      ])
+      .run();
+
+    const { failuresByType } = formMemorySummary(db);
+    // Clean 'email' pair is absent; failing pairs present, busiest first.
+    expect(failuresByType).toHaveLength(2);
+    expect(failuresByType[0]).toMatchObject({
+      classifiedType: "unknown",
+      vendor: "greenhouse",
+      seen: 2,
+      failed: 2,
+    });
+    expect(failuresByType[1]).toMatchObject({ classifiedType: "country", vendor: "ashby" });
+    expect(failuresByType.some((f) => f.classifiedType === "email")).toBe(false);
+  });
+});
