@@ -17,17 +17,12 @@ import type { Tool, ToolContext, ToolObservation } from "./types";
  * the verification that reads the durable record afterwards, and the human
  * gates enforced at this layer so no caller can route around them.
  *
- * NOT YET WIRED, deliberately. Nothing in production calls this registry: the
- * run queue drives its own `queueItemTool` through `runTool`, and the routes
- * still call their services directly. This file is the surface the recovery
- * policy (roadmap step 5) will choose from, written ahead of it so the shape
- * was settled — and audited — before anything started planning against it.
- * `runTool` and the trace, which this file exists to feed, ARE live.
- *
- * Two of these (mark_submitted, tailor_resume) are exercised by
- * `__tests__/tool-contract-invariants.test.ts`; the rest are untested until a
- * caller exists. If step 5 is abandoned, delete the file rather than leaving
- * it to rot.
+ * LIVE IN PRODUCTION: `loop.ts` includes this registry in `runTurn`'s default
+ * tool set, and the agent chat route calls `runTurn` without overriding it —
+ * so every tool here is reachable from a chat message. Gates in this file are
+ * therefore real security boundaries, not future-proofing. (An earlier
+ * version of this comment claimed the registry was unwired; a code review
+ * caught that as stale — trust the imports, not this prose.)
  */
 
 const HUMAN_GATES = new Set(["fill-form", "submit"]);
@@ -156,14 +151,37 @@ export const openFillTool: Tool<void, { handoffId: string }> = {
 };
 
 /**
- * Close the application as submitted. The gate check lives HERE: this is the
- * one action a person owns, and putting the check in the tool is what stops a
- * queue, a route, or a future policy from performing it on their behalf.
+ * Does the user's own message actually claim they submitted (or instruct us to
+ * mark it so)? Checked against ctx.latestUserMessage — text the harness took
+ * from the request, which the model cannot write. Deliberately conservative:
+ * a miss costs one clarifying question ("please say you submitted it"), while
+ * a loose match would let scraped page text nudge the model through the gate.
+ */
+const SUBMISSION_CLAIMS: RegExp[] = [
+  /\bsubmitted\b/i, // "I submitted it", "just submitted"
+  /\bi(?:'ve| have)? (?:just )?applied\b/i, // "I applied" — not "should I apply"
+  /\bmark (?:it|this|that)? ?(?:as )?(?:submitted|applied)\b/i, // explicit instruction
+  /(?:提交|投递|投)(?:了|完|好了)/, // completed-action particle: "提交了" not "要提交"
+  /已(?:提交|投递|申请)/,
+];
+
+function userClaimedSubmission(message: string | undefined): boolean {
+  if (!message) return false;
+  return SUBMISSION_CLAIMS.some((re) => re.test(message));
+}
+
+/**
+ * Close the application as submitted. BOTH gates live HERE, in the tool:
+ * the pipeline must be parked at the submit step, and the user's own latest
+ * message must actually say they submitted. The model's `confirmedByUser`
+ * input is required but proves nothing (the model writes its own inputs — a
+ * review found it was the only "consent" check); the message check is the one
+ * that holds.
  */
 export const markSubmittedTool: Tool<{ confirmedByUser: boolean }, { taskId: string }> = {
   id: "mark_submitted",
   description:
-    "Record that the user submitted this application. Only ever call this with an explicit confirmation from the user — it closes the application.",
+    "Record that the user submitted this application. Only call this when the user's own message says they submitted — it closes the application.",
   parse: (input) => {
     const confirmed = (input as { confirmedByUser?: unknown } | null)?.confirmedByUser;
     if (confirmed !== true) throw new Error("confirmedByUser must be true");
@@ -176,6 +194,17 @@ export const markSubmittedTool: Tool<{ confirmedByUser: boolean }, { taskId: str
     const key = stepKeyOf(ctx.db, taskId);
     if (key !== "submit") {
       return gateRefusal(key ?? "an earlier step") as ToolObservation<{ taskId: string }>;
+    }
+    if (!userClaimedSubmission(ctx.latestUserMessage)) {
+      return {
+        ok: false,
+        summary: "needs the user's own confirmation",
+        failure: {
+          kind: "human-gate",
+          reason:
+            'the user\'s message does not say they submitted this application — ask them to confirm explicitly (e.g. "I submitted it") and do not call this again until they do',
+        },
+      };
     }
     const task = completeSubmitted(ctx.db, taskId);
     return { ok: true, summary: "marked as submitted", result: { taskId: task.id } };

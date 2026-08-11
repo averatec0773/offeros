@@ -1,3 +1,4 @@
+import { fenceUntrusted, neutralizeFenceTokens } from "@offeros/llm";
 import { runTool } from "./run-tool";
 import { READ_TOOLS, toolMenu } from "./read-tools";
 import { TOOLS as ACT_TOOLS } from "./tools";
@@ -190,7 +191,10 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       callCtx = { ...args.ctx, ...resolved };
     }
 
-    const callKey = `${tool.id}:${JSON.stringify(decision.input ?? null)}`;
+    // Canonicalized (key-sorted) so {"a":1,"b":2} and {"b":2,"a":1} are the
+    // same call — the model writes its input as a JSON string, and raw
+    // JSON.stringify would let a reordered repeat slip past the guard.
+    const callKey = `${tool.id}:${stableStringify(decision.input ?? null)}`;
     if (callsMade.has(callKey)) {
       findings.push(
         `You already called ${tool.id} with exactly this input — its result is in your findings above. Use it to answer, or try a genuinely different call.`,
@@ -226,7 +230,9 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     }
     const observation = await runTool(
       tool,
-      { ...callCtx, reason: decision.reason },
+      // latestUserMessage is the question VERBATIM — consent-gated tools
+      // (mark_submitted) check it instead of trusting model-written input.
+      { ...callCtx, reason: decision.reason, latestUserMessage: args.question },
       decision.input,
     );
     // The budget counts CHANGES, so it is spent after the fact and only when
@@ -268,6 +274,17 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     steps,
     ranOutOfSteps: true,
   };
+}
+
+/** JSON.stringify with object keys sorted at every depth, so logically equal
+ *  inputs serialize identically regardless of the order the model wrote them. */
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return v;
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
+    );
+  });
 }
 
 /** An application id the agent put in a tool's input, if it did. */
@@ -328,5 +345,11 @@ function renderObservation(
     return `${head}\n(failed: ${observation.failure?.reason ?? "no reason recorded"})`;
   }
   if (observation.result === undefined) return head;
-  return `${head}\n${JSON.stringify(observation.result).slice(0, 4000)}`;
+  // Tool results carry text scraped from third-party pages (field labels,
+  // values, JD fragments). Fenced as data — the same discipline every LLM
+  // task applies — so a label written to look like an instruction cannot
+  // steer the next decide() call. Neutralized first so the content cannot
+  // forge its own closing fence.
+  const json = JSON.stringify(observation.result).slice(0, 4000);
+  return `${head}\n${fenceUntrusted(neutralizeFenceTokens(json))}`;
 }

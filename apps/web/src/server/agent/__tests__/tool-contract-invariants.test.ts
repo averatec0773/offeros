@@ -151,3 +151,79 @@ describe("'every tool call is traced'", () => {
     expect(listTrace(db, appId)).toHaveLength(1);
   });
 });
+
+describe("mark_submitted's consent gate reads the user's words, not the model's flag", () => {
+  const atSubmitGate = () => {
+    const task = createAgentTask(db, { applicationId: appId });
+    updateAgentTask(db, task.id, { step: SUBMIT, status: "awaiting_user" });
+    return task;
+  };
+
+  it("refuses when the model asserts confirmedByUser but the user never said so", async () => {
+    const task = atSubmitGate();
+    // The review scenario: a confused/nudged model writes its own consent.
+    const ctx: ToolContext = {
+      db,
+      applicationId: appId,
+      taskId: task.id,
+      reason: "audit",
+      latestUserMessage: "how is this application going?",
+    };
+    const obs = await runTool(markSubmittedTool, ctx, { confirmedByUser: true });
+    expect(obs.ok).toBe(false);
+    expect(obs.failure?.kind).toBe("human-gate");
+    expect(getApplication(db, appId)?.status).not.toBe("applied");
+  });
+
+  it("refuses when no user message is in the context at all (e.g. a queue caller)", async () => {
+    const task = atSubmitGate();
+    const ctx: ToolContext = { db, applicationId: appId, taskId: task.id, reason: "audit" };
+    const obs = await runTool(markSubmittedTool, ctx, { confirmedByUser: true });
+    expect(obs.ok).toBe(false);
+    expect(getApplication(db, appId)?.status).not.toBe("applied");
+  });
+
+  it("proceeds when the user's own message claims submission (English)", async () => {
+    const task = atSubmitGate();
+    const ctx: ToolContext = {
+      db,
+      applicationId: appId,
+      taskId: task.id,
+      reason: "audit",
+      latestUserMessage: "I submitted it just now, please mark it",
+    };
+    const obs = await runTool(markSubmittedTool, ctx, { confirmedByUser: true });
+    expect(obs.ok).toBe(true);
+    expect(getApplication(db, appId)?.status).toBe("applied");
+  });
+
+  it("proceeds when the user's own message claims submission (Chinese)", async () => {
+    const task = atSubmitGate();
+    const ctx: ToolContext = {
+      db,
+      applicationId: appId,
+      taskId: task.id,
+      reason: "audit",
+      latestUserMessage: "这个岗位我提交了，标记一下",
+    };
+    const obs = await runTool(markSubmittedTool, ctx, { confirmedByUser: true });
+    expect(obs.ok).toBe(true);
+    expect(getApplication(db, appId)?.status).toBe("applied");
+  });
+
+  it("an intention is not a claim: '要提交' / 'should I apply' do not pass", async () => {
+    const task = atSubmitGate();
+    for (const message of ["我打算要提交这个", "should I apply to this one?"]) {
+      const ctx: ToolContext = {
+        db,
+        applicationId: appId,
+        taskId: task.id,
+        reason: "audit",
+        latestUserMessage: message,
+      };
+      const obs = await runTool(markSubmittedTool, ctx, { confirmedByUser: true });
+      expect(obs.ok).toBe(false);
+    }
+    expect(getApplication(db, appId)?.status).not.toBe("applied");
+  });
+});

@@ -57,6 +57,13 @@ export interface ToolContext {
   taskId?: string;
   /** Set by the policy so the trace records WHY a tool ran, not just that it did. */
   reason?: string;
+  /**
+   * The user's latest message, VERBATIM, set by the harness (never by the
+   * model). A tool whose gate is "the user said so" checks THIS — a
+   * model-supplied flag asserts nothing, because the model writes its own
+   * inputs.
+   */
+  latestUserMessage?: string;
 }
 
 export interface Tool<I = void, R = unknown> {
