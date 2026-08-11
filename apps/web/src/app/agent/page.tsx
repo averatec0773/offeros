@@ -1,5 +1,5 @@
 import { getDb } from "@/server/db/client";
-import { listApplications } from "@/server/repositories/application-repo";
+import { getApplication, listApplications } from "@/server/repositories/application-repo";
 import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
 import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { listRecentTrace } from "@/server/repositories/agent-trace-repo";
@@ -22,8 +22,17 @@ export const dynamic = "force-dynamic";
  * Dashboard — one click away, never in the way. Per-application detail stays in
  * the workspace.
  */
-export default function AgentConsolePage() {
+export default async function AgentConsolePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ application?: string }>;
+}) {
   const db = getDb();
+  // ?application=<id> is how "Ask" anywhere else lands here already pointed at
+  // a job. An id that no longer exists simply drops the chip rather than
+  // erroring — a stale link should still open a working chat.
+  const { application: requested } = await searchParams;
+  const focused = requested ? getApplication(db, requested) : null;
   const applications = listApplications(db);
   const tasks = listPipelineTasks(db);
   const taskByApplication = newestTaskByApplication(tasks);
@@ -69,7 +78,18 @@ export default function AgentConsolePage() {
       </header>
 
       <div className="min-h-0 flex-1">
-        <AgentChat fill />
+        <AgentChat
+          fill
+          {...(focused
+            ? {
+                contextJob: {
+                  id: focused.id,
+                  company: focused.jobInfo.companyName,
+                  title: focused.jobInfo.jobTitle,
+                },
+              }
+            : {})}
+        />
       </div>
     </main>
   );

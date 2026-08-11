@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, it, expect } from "vitest";
-import { fireEvent, render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { ApplicationRow, fitLabelFor } from "../application-row";
 import type { Application, PipelineTask, FitAnalysis } from "@offeros/core";
 
@@ -79,29 +79,24 @@ describe("ApplicationRow", () => {
   });
 
   /**
-   * Spotting something odd in the list and asking about it should not mean
-   * leaving the list. The conversation is the same one the workspace runs,
-   * scoped to this application — the row only decides whether it is showing.
+   * Asking hands off to the agent page carrying this job, rather than opening a
+   * second chat inside the row. One conversation lives in one place; the chip
+   * there shows which job came along and can be taken off.
    */
-  it("opens a conversation about this application, in place", async () => {
+  it("sends Ask to the agent page carrying this application", () => {
     render(<ApplicationRow application={application} task={null} />);
-    const ask = screen.getByRole("button", { name: /Ask about GenAI Engineer/i });
-
-    expect(screen.queryByLabelText("Ask about this application")).toBeNull();
-    fireEvent.click(ask);
-    expect(await screen.findByLabelText("Ask about this application")).toBeTruthy();
-    expect(ask.getAttribute("aria-expanded")).toBe("true");
-
-    fireEvent.click(ask);
+    const ask = screen.getByRole("link", { name: /Ask about GenAI Engineer/i });
+    expect(ask.getAttribute("href")).toBe("/agent?application=app-1");
+    // No chat mounted in the row any more.
     expect(screen.queryByLabelText("Ask about this application")).toBeNull();
   });
 
-  it("keeps the Ask control out of the link", () => {
-    // A button nested in a link is neither keyboard-navigable nor clickable
-    // the way either one promises.
+  it("keeps the Ask control out of the row link", () => {
+    // Nesting it inside the row's own link would make it neither
+    // keyboard-navigable nor clickable the way either one promises.
     render(<ApplicationRow application={application} task={null} />);
-    const ask = screen.getByRole("button", { name: /Ask about/i });
-    expect(ask.closest("a")).toBeNull();
+    const ask = screen.getByRole("link", { name: /Ask about/i });
+    expect(ask.closest('a[href="/applications/app-1"]')).toBeNull();
   });
 
   it("renders without a task", () => {

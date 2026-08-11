@@ -100,6 +100,16 @@ export async function POST(request: Request) {
         ctx: { db, ...focus(applicationId)! },
         question: question.trim(),
         subject: `${application.jobInfo.jobTitle} at ${application.jobInfo.companyName}`,
+        // The harness states which job this is, with the fields this app
+        // recorded itself. The user chose it in the UI (the context chip);
+        // the model cannot invent it, and it saves a list_applications call
+        // just to find the id it is already looking at.
+        currentApplication: {
+          id: application.id,
+          company: application.jobInfo.companyName,
+          title: application.jobInfo.jobTitle,
+          status: application.status,
+        },
       });
       return ok(result);
     }

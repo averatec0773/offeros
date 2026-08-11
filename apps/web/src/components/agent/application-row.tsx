@@ -1,9 +1,5 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, MessageSquare } from "lucide-react";
-import { AgentChat } from "./agent-chat";
 import {
   describeTracking,
   trackApplication,
@@ -54,7 +50,6 @@ export function ApplicationRow({
   task: PipelineTask | null;
   fit?: FitAnalysis | null;
 }) {
-  const [asking, setAsking] = useState(false);
   const actionRequired = task?.applicationInfo?.status === 2;
   const { jobInfo } = application;
   // What actually happened to this application, rather than which pipeline
@@ -120,20 +115,17 @@ export function ApplicationRow({
           {jobInfo.displayScore !== undefined ? (
             <MatchScoreRing score={jobInfo.displayScore} />
           ) : null}
-          {/* Asking about a job you just spotted in the list should not require
-            leaving the list. Same conversation as the workspace, scoped here. */}
-          <button
-            type="button"
-            onClick={() => setAsking((open) => !open)}
-            aria-expanded={asking}
+          {/* Ask goes to the agent page carrying this job, rather than opening
+            a second chat inline. One conversation, one place — the chip there
+            shows which job came along, and can be taken off. */}
+          <Link
+            href={`/agent?application=${application.id}`}
             aria-label={`Ask about ${jobInfo.jobTitle} at ${jobInfo.companyName}`}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-caption font-semibold transition-colors ${
-              asking ? "bg-primary text-primary-foreground" : "text-text-secondary hover:bg-muted"
-            }`}
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-caption font-semibold text-text-secondary transition-colors hover:bg-muted"
           >
             <MessageSquare aria-hidden className="size-3.5" />
             Ask
-          </button>
+          </Link>
           <Link
             href={`/applications/${application.id}`}
             aria-label={`Open ${jobInfo.jobTitle}`}
@@ -143,12 +135,6 @@ export function ApplicationRow({
           </Link>
         </div>
       </div>
-
-      {asking && (
-        <div className="border-t border-border p-3">
-          <AgentChat applicationId={application.id} />
-        </div>
-      )}
     </div>
   );
 }

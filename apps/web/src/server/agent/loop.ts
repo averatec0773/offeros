@@ -69,6 +69,25 @@ export interface RunTurnArgs {
    */
   subject?: string;
   /**
+   * The application the user is explicitly discussing right now, injected by
+   * the HARNESS — never by the model.
+   *
+   * Same discipline as `ctx.latestUserMessage`: the user picked this job in the
+   * UI (the chip above the composer), so the server looks it up and states it.
+   * A model-supplied "we are talking about X" would assert nothing, because the
+   * model writes its own inputs.
+   *
+   * Only fields this app recorded itself go in — id, company, title, status.
+   * No scraped text (no jdText), so there is nothing here to fence; the agent
+   * reads the untrusted parts through tools, which fence their own results.
+   */
+  currentApplication?: {
+    id: string;
+    company: string;
+    title: string;
+    status: string;
+  };
+  /**
    * The recent conversation, oldest first — what makes "the second one" and
    * "do that too" resolvable. Reference only: facts still come from tools
    * every turn, never from what an earlier answer claimed. Kept as a plain
@@ -160,7 +179,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     let decision: Decision;
     try {
       decision = await chooseNext({
-        context: buildContext(tools, findings, args.subject, args.history),
+        context: buildContext(tools, findings, args.subject, args.history, args.currentApplication),
         question: args.question,
         runLlm: args.runLlm,
       });
@@ -326,6 +345,7 @@ function buildContext(
   findings: string[],
   subject?: string,
   history?: { role: "user" | "assistant"; content: string }[],
+  currentApplication?: RunTurnArgs["currentApplication"],
 ): string {
   const scope = subject
     ? `You are looking at one application: ${subject}. Every tool you call is already scoped to it, so "this one" means this application — never ask the user which job they mean.`
@@ -339,12 +359,18 @@ function buildContext(
           .map((m) => `${m.role === "user" ? "User" : "You"}: ${m.content}`)
           .join("\n")}`
       : "";
+  // Stated, not inferred: the user opened this conversation from a specific
+  // job, so the agent starts knowing which id to pass to read_application,
+  // read_fill_report and the rest instead of listing everything to find it.
+  const current = currentApplication
+    ? `The user is currently discussing this application (they selected it in the app, so this is fact, not something they typed):\n- id: ${currentApplication.id}\n- company: ${currentApplication.company}\n- title: ${currentApplication.title}\n- status: ${currentApplication.status}\nUse this id with the tools when the question is about "this" job. It is a starting point, not a fence: if they ask about something else, follow the question.`
+    : "";
   const menu = `Tools you can use:\n${toolMenu(tools)}`;
   const found =
     findings.length === 0
       ? "You have not looked at anything yet."
       : `What you have found so far:\n${findings.join("\n\n")}`;
-  return [scope, past, menu, found].filter(Boolean).join("\n\n");
+  return [scope, current, past, menu, found].filter(Boolean).join("\n\n");
 }
 
 /**

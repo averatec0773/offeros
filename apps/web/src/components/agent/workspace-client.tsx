@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { MessageSquare } from "lucide-react";
 import {
   PIPELINE_STEPS,
   type Application,
@@ -12,7 +14,6 @@ import {
   type ResumeSummary,
 } from "@offeros/core";
 import type { LineDiff } from "@/lib/diff";
-import { AgentChat } from "./agent-chat";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
 import { extensionPresent, openFillTabViaExtension } from "@/lib/extension-bridge";
 import { subscribeToAgentEvents } from "@/lib/agent-events";
@@ -596,10 +597,16 @@ export function WorkspaceClient({
             />
           )}
 
-          {/* Below the artifacts and the timeline, because it answers questions
-              ABOUT them — the record comes first, the conversation about it
-              second. */}
-          <AgentChat applicationId={application.id} />
+          {/* One conversation, in one place. Asking here used to mount a second
+              chat inside the page; it now hands off to the agent page carrying
+              this job, where the context chip shows what came along. */}
+          <Link
+            href={`/agent?application=${application.id}`}
+            className="flex items-center justify-center gap-1.5 rounded-2xl border border-border bg-card px-4 py-3 text-body font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <MessageSquare aria-hidden className="size-4" />
+            Ask agent about this application
+          </Link>
 
           <TimelineCard applicationId={application.id} events={events} />
         </div>

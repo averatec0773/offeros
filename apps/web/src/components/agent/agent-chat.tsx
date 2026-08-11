@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import type { AgentStep } from "@/server/agent/loop";
@@ -50,15 +51,29 @@ const SUGGESTIONS = {
  */
 export function AgentChat({
   applicationId,
+  contextJob,
   fill = false,
 }: {
   applicationId?: string;
+  /**
+   * The job this conversation arrived pointed at ("Ask" on a row or on the
+   * detail page). Shown as a removable chip above the composer, so the user can
+   * SEE that the agent knows which job they mean rather than having to trust
+   * that it does — and can take it off when the question is about something
+   * else. Removing it drops back to the conversation about everything.
+   */
+  contextJob?: { id: string; company: string; title: string };
   fill?: boolean;
 }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // The chip is the scope. While it is on, every send carries its id (and the
+  // thread is that job's thread); dropped, sends carry nothing.
+  const [contextOn, setContextOn] = useState(true);
+  useEffect(() => setContextOn(true), [contextJob?.id]);
+  const scope = contextJob && contextOn ? contextJob.id : applicationId;
 
   /** Scroll the MESSAGE LIST, never the page. The old scrollIntoView walked
    *  the whole viewport down to the chat after every answer — on a page with
@@ -79,7 +94,7 @@ export function AgentChat({
     let live = true;
     void (async () => {
       try {
-        const thread = await api.agent.chatHistory(applicationId);
+        const thread = await api.agent.chatHistory(scope);
         if (!live || thread.length === 0) return;
         const loaded: Turn[] = [];
         for (const message of thread) {
@@ -104,7 +119,7 @@ export function AgentChat({
     return () => {
       live = false;
     };
-  }, [applicationId]);
+  }, [scope]);
 
   async function ask(question: string) {
     const trimmed = question.trim();
@@ -115,7 +130,7 @@ export function AgentChat({
     // Scroll after the question renders, so the user sees it land.
     scrollList();
     try {
-      const result = await api.agent.chat(trimmed, applicationId);
+      const result = await api.agent.chat(trimmed, scope);
       setTurns((t) =>
         replaceLast(t, {
           question: trimmed,
@@ -148,7 +163,7 @@ export function AgentChat({
     >
       <header className="flex items-baseline justify-between">
         <h2 className="text-body font-semibold text-foreground">
-          {applicationId ? "Ask about this application" : "Ask about your applications"}
+          {scope ? "Ask about this application" : "Ask about your applications"}
         </h2>
         <span className="text-caption text-muted-foreground">
           two changes per turn · never submits
@@ -157,7 +172,7 @@ export function AgentChat({
 
       {turns.length === 0 && (
         <div className="flex flex-wrap gap-2">
-          {(applicationId ? SUGGESTIONS.one : SUGGESTIONS.all).map((s) => (
+          {(scope ? SUGGESTIONS.one : SUGGESTIONS.all).map((s) => (
             <button
               key={s}
               type="button"
@@ -184,7 +199,7 @@ export function AgentChat({
                 {turn.question}
               </p>
               {turn.steps && turn.steps.length > 0 && (
-                <StepList steps={turn.steps} fallbackApplicationId={applicationId} />
+                <StepList steps={turn.steps} fallbackApplicationId={scope} />
               )}
               {turn.answer && (
                 <p className="whitespace-pre-wrap text-body-sm text-foreground">{turn.answer}</p>
@@ -201,6 +216,24 @@ export function AgentChat({
         </ol>
       </div>
 
+      {contextJob && contextOn && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary/10 py-1 pl-3 pr-1.5 text-caption text-foreground">
+            <span className="truncate">
+              Context: {contextJob.company} · {contextJob.title}
+            </span>
+            <button
+              type="button"
+              onClick={() => setContextOn(false)}
+              aria-label={`Remove ${contextJob.title} from the conversation context`}
+              className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X aria-hidden className="size-3.5" />
+            </button>
+          </span>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -211,8 +244,8 @@ export function AgentChat({
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={applicationId ? "Ask about this application…" : "Ask about your search…"}
-          aria-label={applicationId ? "Ask about this application" : "Ask about your applications"}
+          placeholder={scope ? "Ask about this application…" : "Ask about your search…"}
+          aria-label={scope ? "Ask about this application" : "Ask about your applications"}
           disabled={busy}
           className="flex-1 rounded-full border border-border bg-bg-base px-4 py-2 text-body-sm outline-none focus:border-primary disabled:opacity-60"
         />
