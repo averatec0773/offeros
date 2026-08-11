@@ -380,6 +380,18 @@ function renderObservation(
   // task applies — so a label written to look like an instruction cannot
   // steer the next decide() call. Neutralized first so the content cannot
   // forge its own closing fence.
-  const json = JSON.stringify(observation.result).slice(0, 4000);
+  const json = JSON.stringify(observation.result).slice(0, OBSERVATION_CHAR_CAP);
   return `${head}\n${fenceUntrusted(neutralizeFenceTokens(json))}`;
 }
+
+/**
+ * How many characters of one tool result reach the model.
+ *
+ * Most reads are row-budgeted and land well under this. The exceptions are the
+ * document reads — read_resume, read_artifact (DOC_BUDGET 6000), and the JD in
+ * read_application — which legitimately need room for a whole résumé or letter.
+ * The cap must sit above those, or the text is silently double-truncated below
+ * what the tool advertised (a real bug: at 4000 a 6000-char résumé lost its
+ * tail). Still bounded so one runaway result cannot eat the reasoning window.
+ */
+const OBSERVATION_CHAR_CAP = 8000;

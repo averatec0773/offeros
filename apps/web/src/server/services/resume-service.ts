@@ -13,6 +13,7 @@ import {
   type ResumeRow,
 } from "../repositories/resume-repo";
 import { writeResumeFile } from "./resume-storage";
+import { extractResumeTextFromFile } from "./resume-extract";
 
 /**
  * A caller-facing precondition failure (bad mime type, oversize upload).
@@ -59,6 +60,24 @@ export function getResumeFile(db: Db, id: string): StoredResumeFile | null {
 
 export function listResumes(db: Db): ResumeSummary[] {
   return listResumeRows(db).map(toSummary);
+}
+
+/**
+ * The résumé's text, extracting it from the stored PDF on first read if it was
+ * never captured (e.g. an import that skipped the browser extraction). The
+ * extracted text is backfilled so the next read is instant. Returns "" when
+ * there is no résumé, no stored file, or the PDF yields no text — all ordinary
+ * states the caller reports honestly, never an error.
+ */
+export async function getResumeText(db: Db, id: string): Promise<string> {
+  const row = getResumeRow(db, id);
+  if (!row) return "";
+  const stored = row.text?.trim() ?? "";
+  if (stored) return stored;
+  if (!row.filePath) return "";
+  const text = (await extractResumeTextFromFile(row.filePath)).trim();
+  if (text) updateResumeRow(db, id, { text });
+  return text;
 }
 
 export interface UploadResumeInput {

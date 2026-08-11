@@ -7,7 +7,7 @@ import { listTrace } from "../repositories/agent-trace-repo";
 import { listAnswers } from "../repositories/answer-repo";
 import { getFit } from "../repositories/fit-repo";
 import { getProfile } from "../repositories/profile-repo";
-import { listResumes } from "../services/resume-service";
+import { listResumes, getResumeText } from "../services/resume-service";
 import { getArtifact } from "../repositories/artifact-repo";
 import { resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { formMemorySummary, listIncidents } from "../repositories/form-memory-repo";
@@ -477,7 +477,9 @@ export const readResumeTool: Tool<
         result: { hasText: false },
       };
     }
-    const text = resume.text?.trim() ?? "";
+    // Extract-on-read: a résumé whose text was never captured (import that
+    // skipped browser extraction) gets it from the stored PDF now, and backfills.
+    const text = (await getResumeText(ctx.db, resume.id)).trim();
     if (!text) {
       return {
         ok: true,
