@@ -15,7 +15,7 @@ import {
   getPipelineTask,
   listPipelineTasks,
 } from "../../repositories/pipeline-task-repo";
-import { upsertArtifact } from "../../repositories/artifact-repo";
+import { upsertArtifact, getArtifact } from "../../repositories/artifact-repo";
 import { listTrace } from "../../repositories/agent-trace-repo";
 import { runTool } from "../run-tool";
 import type { Tool, ToolContext } from "../types";
@@ -29,7 +29,12 @@ vi.mock("../../pipeline/runner", () => ({
 }));
 vi.mock("../../pipeline/route-context", () => ({ buildPipelineContext: () => ({}) }));
 
-const { markSubmittedTool, tailorResumeTool } = await import("../tools");
+const tweakArtifact = vi.fn(async () => undefined);
+vi.mock("../../pipeline/tweak", () => ({
+  tweakArtifact: (...a: unknown[]) => tweakArtifact(...(a as [])),
+}));
+
+const { markSubmittedTool, tailorResumeTool, refineArtifactTool } = await import("../tools");
 
 const FILL = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
 const SUBMIT = PIPELINE_STEPS.findIndex((s) => s.key === "submit");
@@ -225,5 +230,62 @@ describe("mark_submitted's consent gate reads the user's words, not the model's 
       expect(obs.ok).toBe(false);
     }
     expect(getApplication(db, appId)?.status).not.toBe("applied");
+  });
+});
+
+describe("refine_artifact wraps the tweak seam and verifies a new version landed", () => {
+  function seedResumeArtifact(taskId: string) {
+    const now = Date.now();
+    upsertArtifact(db, {
+      id: "art-r",
+      taskId,
+      kind: "resume",
+      versions: [{ id: "v1", content: "original résumé", rationale: "", createdAt: now }],
+      currentVersionId: "v1",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  it("refuses when there is no artifact to revise, as a precondition (not a crash)", async () => {
+    const task = createPipelineTask(db, { applicationId: appId });
+    const ctx: ToolContext = { db, applicationId: appId, taskId: task.id, reason: "audit" };
+    const obs = await runTool(refineArtifactTool, ctx, {
+      kind: "resume",
+      instruction: "make it shorter",
+    });
+    expect(obs.ok).toBe(false);
+    expect(obs.failure?.kind).toBe("precondition");
+    expect(tweakArtifact).not.toHaveBeenCalled();
+  });
+
+  it("reports the new version and verifies it against the durable artifact", async () => {
+    const task = createPipelineTask(db, { applicationId: appId });
+    seedResumeArtifact(task.id);
+    // The real tweak appends a version; mock that effect on the test DB.
+    tweakArtifact.mockImplementationOnce(async () => {
+      const art = getArtifact(db, task.id, "resume")!;
+      const now = Date.now();
+      upsertArtifact(db, {
+        ...art,
+        versions: [
+          ...art.versions,
+          { id: "v2", content: "shorter résumé", rationale: "", createdAt: now },
+        ],
+        currentVersionId: "v2",
+        updatedAt: now,
+      });
+      return undefined;
+    });
+    const ctx: ToolContext = { db, applicationId: appId, taskId: task.id, reason: "audit" };
+    const obs = await runTool(refineArtifactTool, ctx, {
+      kind: "resume",
+      instruction: "make it shorter",
+    });
+    expect(obs.ok).toBe(true);
+    expect(obs.summary).toContain("v2");
+    expect(tweakArtifact).toHaveBeenCalledOnce();
+    // Durable check: the artifact really has 2 versions now.
+    expect(getArtifact(db, task.id, "resume")!.versions).toHaveLength(2);
   });
 });

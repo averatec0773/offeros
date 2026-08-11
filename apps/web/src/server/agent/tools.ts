@@ -7,6 +7,7 @@ import { runTargetedStep } from "../pipeline/runner";
 import { buildPipelineContext } from "../pipeline/route-context";
 import { computeFit } from "../services/fit-service";
 import { createHandoffForTask, completeSubmitted } from "../services/fill-service";
+import { tweakArtifact } from "../pipeline/tweak";
 import type { Tool, ToolContext, ToolObservation } from "./types";
 
 /**
@@ -117,6 +118,78 @@ export const coverLetterTool: Tool<void, ArtifactRun> = {
     "Generate a cover letter grounded in this job's description and the user's résumé. Use when the job asks for one.",
   run: async (ctx) => runArtifactStep(ctx, "generate-cover-letter", "cover-letter", "cover letter"),
   verify: verifyArtifactAdvanced("cover-letter"),
+};
+
+/** Revise the tailored résumé or cover letter from a plain-language
+ *  instruction ("make it shorter", "lead with the ML work"). Wraps the same
+ *  tweak the workspace uses; the new version is read back with read_artifact. */
+export const refineArtifactTool: Tool<
+  { kind: "resume" | "cover-letter"; instruction: string },
+  ArtifactRun & { kind: string }
+> = {
+  id: "refine_artifact",
+  description:
+    'Revise the already-generated tailored résumé or cover letter from a plain-language instruction ("make it shorter", "emphasise the distributed-systems work", "warmer tone"). Input {"kind":"resume"|"cover-letter","instruction":"..."}. Produces a NEW version; call read_artifact afterwards to show the result. Use for "change/rewrite/improve the résumé/letter" — not for a first draft (use tailor_resume / generate_cover_letter for that).',
+  parse: (input) => {
+    const kind = (input as { kind?: unknown } | null)?.kind;
+    const instruction = (input as { instruction?: unknown } | null)?.instruction;
+    if (kind !== "resume" && kind !== "cover-letter") {
+      throw new Error('kind must be "resume" or "cover-letter"');
+    }
+    if (typeof instruction !== "string" || instruction.trim() === "") {
+      throw new Error("instruction is required");
+    }
+    return { kind, instruction: instruction.trim() };
+  },
+  run: async (ctx, input) => {
+    const taskId = requireTaskId(ctx);
+    const noun = input.kind === "resume" ? "tailored résumé" : "cover letter";
+    const before = getArtifact(ctx.db, taskId, input.kind);
+    if (!before) {
+      return {
+        ok: false,
+        summary: `there is no ${noun} to revise yet`,
+        failure: {
+          kind: "precondition",
+          reason: `no ${input.kind} artifact — generate one first with ${input.kind === "resume" ? "tailor_resume" : "generate_cover_letter"}`,
+        },
+      };
+    }
+    const versionsBefore = before.versions.length;
+    await tweakArtifact(buildPipelineContext(taskId), input.kind, input.instruction);
+    const after = getArtifact(ctx.db, taskId, input.kind);
+    const versionsAfter = after?.versions.length ?? 0;
+    if (!after || versionsAfter <= versionsBefore) {
+      return {
+        ok: false,
+        summary: `the ${noun} was not revised`,
+        result: {
+          kind: input.kind,
+          versionsBefore,
+          versionsAfter,
+          currentVersionId: after?.currentVersionId ?? null,
+        },
+        failure: { kind: "unverified", reason: "no new version was added" },
+      };
+    }
+    return {
+      ok: true,
+      summary: `${noun} revised → v${versionsAfter}`,
+      result: {
+        kind: input.kind,
+        versionsBefore,
+        versionsAfter,
+        currentVersionId: after.currentVersionId,
+      },
+    };
+  },
+  // The durable check: a NEW version exists beyond what was there before.
+  verify: async (ctx, input, result) => {
+    const run = result as (ArtifactRun & { kind: string }) | undefined;
+    if (!run) return false;
+    const artifact = getArtifact(ctx.db, requireTaskId(ctx), input.kind);
+    return !!artifact && artifact.versions.length > run.versionsBefore;
+  },
 };
 
 /** Score this application against the job (advisory, never a gate). */
@@ -251,6 +324,7 @@ export const TOOLS = {
   [checkGateTool.id]: checkGateTool,
   [tailorResumeTool.id]: tailorResumeTool,
   [coverLetterTool.id]: coverLetterTool,
+  [refineArtifactTool.id]: refineArtifactTool,
   [computeFitTool.id]: computeFitTool,
   [openFillTool.id]: openFillTool,
   [markSubmittedTool.id]: markSubmittedTool,
