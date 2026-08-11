@@ -90,7 +90,7 @@ describe("runTurn", () => {
     expect(lastContext).toContain("read the report");
   });
 
-  it("survives a tool that does not exist, and says so in the step list", async () => {
+  it("survives a tool that does not exist, telling the model without a user-facing step", async () => {
     // A model naming a tool it invented must not take the turn down.
     const chooseNext = script(
       { kind: "use-tool", tool: "send_email", reason: "emailing them" },
@@ -104,22 +104,35 @@ describe("runTurn", () => {
       tools: {},
     });
 
-    expect(out.steps[0]).toMatchObject({ tool: "send_email", ok: false, summary: "no such tool" });
+    // A nonexistent tool is a mistake, not a user-facing step: it leaves a
+    // finding for the model to correct against, but nothing for the user to see.
+    expect(out.steps).toEqual([]);
     expect(out.answer).toBe("I cannot do that.");
-    // And the mistake was fed back, so the agent can correct itself.
     expect(chooseNext.mock.calls.at(-1)![0].context).toContain("There is no such tool");
   });
 
   it("stops at the step budget instead of looping, and says it stopped", async () => {
-    const tools = { a: tool("a", "looked again") };
-    // A decision function that never chooses to answer.
-    const chooseNext = script({ kind: "use-tool", tool: "a", reason: "one more" });
+    // Distinct inputs each turn, so every call is a REAL step (not a duplicate)
+    // — this exercises the step budget itself, not the mistake cap.
+    const look: Tool<{ q: string }, unknown> = {
+      id: "look",
+      description: "look",
+      parse: (i) => i as { q: string },
+      run: async (_c, i) => ({ ok: true, summary: `looked again at ${i.q}` }),
+      verify: async () => null,
+    };
+    const chooseNext = script(
+      { kind: "use-tool", tool: "look", reason: "1", input: { q: "one" } },
+      { kind: "use-tool", tool: "look", reason: "2", input: { q: "two" } },
+      { kind: "use-tool", tool: "look", reason: "3", input: { q: "three" } },
+      { kind: "use-tool", tool: "look", reason: "4", input: { q: "four" } },
+    );
     const out = await runTurn({
       ctx,
       question: "go forever",
       runLlm: noLlm,
       chooseNext,
-      tools,
+      tools: { look: look as never },
       maxSteps: 3,
     });
 
@@ -194,8 +207,9 @@ describe("acting tools", () => {
 
     expect(out.steps[0]).toMatchObject({ tool: "a", ok: true, acted: true });
     expect(out.steps[1]).toMatchObject({ tool: "b", ok: true, acted: true });
-    expect(out.steps[2]).toMatchObject({ tool: "c", ok: false, acted: false });
-    expect(out.steps[2]!.summary).toContain("action budget spent");
+    // The refused 3rd action is a finding, not a user-facing step.
+    expect(out.steps).toHaveLength(2);
+    expect(out.answer).toBe("I did two things.");
     // The refusal is fed back so the agent can tell the user what is next.
     expect(chooseNext.mock.calls.at(-1)![0].context).toContain("already changed something");
   });
@@ -321,7 +335,9 @@ describe("campaign scope", () => {
       tools: { read_fill_report: spyingTool(seen) },
     });
     expect(seen).toEqual([]);
-    expect(out.steps[0]).toMatchObject({ ok: false, summary: "no such application" });
+    // A bad application id is a finding, not a user-facing step.
+    expect(out.steps).toEqual([]);
+    expect(chooseNext.mock.calls.at(-1)![0].context).toContain('no application with id "app-9"');
   });
 
   it("tells the agent when it names an id that does not exist", async () => {
@@ -342,7 +358,8 @@ describe("campaign scope", () => {
       tools: { read_fill_report: spyingTool([]) },
       focus: () => null,
     });
-    expect(out.steps[0]!.ok).toBe(false);
+    // The bad id is a finding, not a user-facing step; the model gets told.
+    expect(out.steps).toEqual([]);
     expect(chooseNext.mock.calls.at(-1)![0].context).toContain("no application with id");
   });
 });
@@ -397,9 +414,10 @@ describe("duplicate-call guard", () => {
       tools,
       actingToolIds: new Set(),
     });
+    // Only the real read is a step; the refused duplicate is a finding, not
+    // noise in the user-facing trail.
+    expect(out.steps).toHaveLength(1);
     expect(out.steps[0]).toMatchObject({ tool: "look", ok: true });
-    expect(out.steps[1]).toMatchObject({ tool: "look", ok: false });
-    expect(out.steps[1]!.summary).toContain("duplicate call");
     expect(chooseNext.mock.calls.at(-1)![0].context).toContain("already called look");
   });
 
@@ -454,9 +472,11 @@ describe("duplicate-call guard canonicalizes input key order", () => {
       tools: { write: byInput as never },
       actingToolIds: new Set(),
     });
+    // The reordered repeat is caught: only the first (real) call is a step,
+    // and the guard's finding reaches the model.
+    expect(out.steps).toHaveLength(1);
     expect(out.steps[0]).toMatchObject({ ok: true });
-    expect(out.steps[1]).toMatchObject({ ok: false });
-    expect(out.steps[1]!.summary).toContain("duplicate call");
+    expect(chooseNext.mock.calls.at(-1)![0].context).toContain("already called write");
   });
 });
 
@@ -573,5 +593,30 @@ describe("look-before-answer nudge", () => {
     // Nudged once, but the retry answer is allowed through (no forced tool call).
     expect(out.answer).toBe("hello there!");
     expect(out.steps).toEqual([]);
+  });
+});
+
+describe("recoverable mistakes are capped separately from the step budget", () => {
+  it("a model that keeps repeating an identical call stops without exhausting real steps", async () => {
+    // Same call every turn → 1 real step, then duplicates. The duplicates must
+    // not each burn a step (the old bug); they hit the mistake cap and the loop
+    // ends, having still gathered the one real result.
+    const chooseNext = script({ kind: "use-tool", tool: "look", reason: "again" });
+    const out = await runTurn({
+      ctx,
+      question: "what is it",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { look: tool("look", "the answer") },
+      actingToolIds: new Set(),
+      maxSteps: 6,
+    });
+    // Only ONE real step (the rest were refused duplicates, not steps).
+    expect(out.steps).toHaveLength(1);
+    expect(out.steps[0]).toMatchObject({ tool: "look", ok: true });
+    expect(out.ranOutOfSteps).toBe(true);
+    // It never spun the full 6-step budget on nothing: chooseNext was called a
+    // small, bounded number of times (1 real + a few mistakes), not 6+.
+    expect(chooseNext.mock.calls.length).toBeLessThanOrEqual(4);
   });
 });

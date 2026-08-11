@@ -145,8 +145,18 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   // gets a direct reply on the second pass rather than being forced into a
   // pointless tool call.
   let nudgedToLook = false;
+  // Non-progress branches (a tool that does not exist, a duplicate call, the
+  // action budget, the look-first nudge) do NOT reach a real tool run. They
+  // must not burn the step budget — a confused model could spend all six on
+  // nothing and hit the out-of-steps path having gathered nothing — so they
+  // count against a small separate `mistakes` cap instead, and they are NOT
+  // pushed to the user-facing `steps[]` (they carry a finding for the model,
+  // never anything the user needs to see). `step` counts only real tool runs.
+  let step = 0;
+  let mistakes = 0;
+  const MAX_MISTAKES = 3;
 
-  for (let step = 0; step < maxSteps; step++) {
+  while (step < maxSteps && mistakes < MAX_MISTAKES) {
     let decision: Decision;
     try {
       decision = await chooseNext({
@@ -174,6 +184,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       // straight through on the retry.
       if (!nudgedToLook && steps.length === 0 && findings.length === 0) {
         nudgedToLook = true;
+        mistakes++;
         findings.push(
           "You are about to answer without having looked at anything. If this question is about the user's applications, profile, or fills, call a tool and read the real record first — do not answer their data from memory or from earlier messages. If it is small talk, answer directly.",
         );
@@ -185,15 +196,10 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     const tool = tools[decision.tool];
     if (!tool) {
       // A named tool that does not exist is a mistake the agent can recover
-      // from, so it is a finding rather than an error — but it costs a step,
-      // which keeps a model that keeps inventing tools from looping forever.
+      // from: a finding tells it so, and it counts against the mistake cap so a
+      // model that keeps inventing tools cannot loop forever.
+      mistakes++;
       findings.push(`You asked for a tool called "${decision.tool}". There is no such tool.`);
-      steps.push({
-        tool: decision.tool,
-        reason: decision.reason,
-        ok: false,
-        summary: "no such tool",
-      });
       continue;
     }
 
@@ -206,16 +212,10 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     if (named && named !== args.ctx.applicationId) {
       const resolved = args.focus?.(named);
       if (!resolved) {
+        mistakes++;
         findings.push(
           `There is no application with id "${named}". Use list_applications to get real ids.`,
         );
-        steps.push({
-          tool: tool.id,
-          reason: decision.reason,
-          ok: false,
-          summary: "no such application",
-          acted: false,
-        });
         continue;
       }
       callCtx = { ...args.ctx, ...resolved };
@@ -226,38 +226,26 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     // JSON.stringify would let a reordered repeat slip past the guard.
     const callKey = `${tool.id}:${stableStringify(decision.input ?? null)}`;
     if (callsMade.has(callKey)) {
+      mistakes++;
       findings.push(
         `You already called ${tool.id} with exactly this input — its result is in your findings above. Use it to answer, or try a genuinely different call.`,
       );
-      steps.push({
-        tool: tool.id,
-        reason: decision.reason,
-        ok: false,
-        summary: "duplicate call — result already above",
-        acted: false,
-        applicationId: callCtx.applicationId,
-      });
       continue;
     }
     callsMade.add(callKey);
 
     const acting = actingIds.has(tool.id);
     if (acting && actionsTaken >= maxActions) {
-      // Refuse, and say so as a finding rather than an error: the agent can
-      // still answer, and telling the user what it wanted to do next is more
-      // useful than a loop that quietly stops short.
+      // Refuse as a finding, not an error: the agent can still answer, and
+      // telling the user what it wanted to do next beats a loop that stops
+      // short. Counts against the mistake cap, not the step budget.
+      mistakes++;
       findings.push(
         `You have already changed something this turn (${maxActions} change${maxActions === 1 ? "" : "s"} max), so ${tool.id} was not run. Tell the user what you would do next and let them ask for it.`,
       );
-      steps.push({
-        tool: tool.id,
-        reason: decision.reason,
-        ok: false,
-        summary: "action budget spent — not run",
-        acted: false,
-      });
       continue;
     }
+    step++; // a real tool run — the only thing that spends the step budget
     const observation = await runTool(
       tool,
       // latestUserMessage is the question VERBATIM — consent-gated tools
