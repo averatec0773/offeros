@@ -61,15 +61,25 @@ export async function POST(request: Request) {
       scope: string,
       turn: Omit<Parameters<typeof runTurn>[0], "history" | "runLlm">,
     ) => {
-      // Assistant turns are TRUNCATED into the window on purpose. Reproduced
-      // live: after several similar questions, the model imitated the shape
-      // of its own earlier answers over the current answer rules — better
-      // data and better instructions lost to precedent. A 200-char snippet
-      // keeps the referents ("the second one", "that job") that history
-      // exists for, without carrying enough prose to imitate.
+      // BOTH sides are TRUNCATED into the window on purpose, for two different
+      // reasons.
+      //
+      // Assistant turns: reproduced live — after several similar questions the
+      // model imitated the shape of its own earlier answers over the current
+      // answer rules, losing better data and better instructions to precedent.
+      // A 200-char snippet keeps the referents ("the second one", "that job")
+      // that history exists for, without carrying enough prose to imitate.
+      //
+      // User turns: a pasted job description is a legitimate question, and at
+      // several KB it would ride along in EVERY later turn of the thread —
+      // ten of those is the whole context window spent on text the tools can
+      // re-read from the database anyway. 500 chars is well past what a
+      // referent needs ("that Stripe one", "the second job I asked about").
+      // The CURRENT question is never truncated; it is passed in full below
+      // and only enters the window on the turn after it.
       const history = listRecentMessages(db, scope, 10).map((m) => ({
         role: m.role,
-        content: m.role === "assistant" ? m.content.slice(0, 200) : m.content,
+        content: m.content.slice(0, m.role === "assistant" ? 200 : 500),
       }));
       appendChatMessage(db, { scope, role: "user", content: question.trim() });
       const result = await runTurn({ ...turn, history, runLlm: makeAgentLlm(db) });
