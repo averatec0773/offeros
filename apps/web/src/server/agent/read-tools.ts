@@ -121,33 +121,54 @@ export const listApplicationsTool: Tool<
 };
 
 /**
- * The last fill, grouped by why it did not finish.
+ * The last fill: what went IN, and what did not and why.
  *
- * The tool deliberately does NOT hand over the rows. Eighteen failed fields is
- * a wall; four causes is a to-do list, and turning one into the other is a
+ * The unfilled half is deliberately NOT rows. Eighteen failed fields is a
+ * wall; four causes is a to-do list, and turning one into the other is a
  * lookup over reason strings our own engine wrote — deterministic, testable,
  * free. Leaving that to the model would be paying for judgement on a question
  * that has an exact answer, and getting a different grouping each time.
  *
- * What is left for the model is the part that needs judgement: which of these
- * causes matters to this person now, and how to put it.
+ * The FILLED half IS rows — label, value, source — because a real question
+ * ("show me what was filled in") was unanswerable without them: the diagnosis
+ * alone let the agent say "15 of 17" and nothing more. Capped like every
+ * other read; the totals say when rows were left out.
  */
-export const readFillReportTool: Tool<void, FillDiagnosis> = {
+export const readFillReportTool: Tool<
+  void,
+  FillDiagnosis & { filledFields: { label: string; value?: string; source: string }[] }
+> = {
   id: "read_fill_report",
   description:
-    "Diagnose the last fill for this application: how many fields filled, and the reasons the rest did not, grouped by cause with the field names under each. Use this for any question about why a form did not complete.",
+    "Read the last fill for this application: the fields that WERE filled (label, value, where the value came from), and the reasons the rest did not fill, grouped by cause. Use this both for 'what was filled in' and for 'why did it not complete'.",
   run: async (ctx) => {
     const task = ctx.taskId ? getAgentTask(ctx.db, ctx.taskId) : undefined;
     const reports = task?.fieldReports ?? [];
     const diagnosis = diagnoseFill(reports);
+    const filledFields = reports
+      .filter((r) => r.outcome === "filled")
+      .slice(0, ROW_BUDGET)
+      .map((r) => ({
+        label: r.label || r.fieldId,
+        ...(r.value ? { value: r.value.slice(0, 60) } : {}),
+        source: r.source,
+      }));
     if (reports.length === 0) {
-      return { ok: true, summary: "no fill has run for this application yet", result: diagnosis };
+      return {
+        ok: true,
+        summary: "no fill has run for this application yet",
+        result: { ...diagnosis, filledFields },
+      };
     }
     const causeCount = diagnosis.causes.length;
+    const shown =
+      filledFields.length < diagnosis.filled
+        ? ` (${filledFields.length} of them listed; the rest are standard fields)`
+        : "";
     return {
       ok: true,
-      summary: `${diagnosis.filled} of ${diagnosis.total} fields filled; ${causeCount === 0 ? "nothing outstanding" : `${causeCount} reason${causeCount === 1 ? "" : "s"} it did not finish`}`,
-      result: diagnosis,
+      summary: `${diagnosis.filled} of ${diagnosis.total} fields filled${shown}; ${causeCount === 0 ? "nothing outstanding" : `${causeCount} reason${causeCount === 1 ? "" : "s"} it did not finish`}`,
+      result: { ...diagnosis, filledFields },
     };
   },
   verify: async () => null,

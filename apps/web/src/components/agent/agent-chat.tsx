@@ -218,8 +218,9 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
 const ARTIFACT_STEPS = new Set(["tailor_resume", "generate_cover_letter"]);
 
 /** Collapse the tool trail once it is longer than this — one glance says
- *  "the agent worked", the disclosure says exactly what it did. */
-const COLLAPSE_FROM = 3;
+ *  "the agent worked", the disclosure says exactly what it did. A single
+ *  step stays inline; two or more fold. */
+const COLLAPSE_FROM = 2;
 
 function StepList({
   steps,
