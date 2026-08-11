@@ -267,29 +267,36 @@ function StepList({
         const workspaceId = step.applicationId ?? fallbackApplicationId;
         const linkToWorkspace = step.ok && ARTIFACT_STEPS.has(step.tool) && workspaceId;
         return (
-          <li key={i} className="flex items-baseline gap-2 text-caption">
-            <span aria-hidden className={step.ok ? "text-success" : "text-warning"}>
+          // Two clean lines per step: WHO on the first, WHAT on the second.
+          // The old single-line flow wrapped summaries mid-phrase and floated
+          // the reason into a ragged right column; the reason now lives in a
+          // hover title — transparency kept, noise gone.
+          <li key={i} className="flex gap-2 text-caption" title={step.reason || undefined}>
+            <span aria-hidden className={`mt-px ${step.ok ? "text-success" : "text-warning"}`}>
               {step.ok ? "✓" : "!"}
             </span>
-            {/* A step that changed something is not the same as a step that
-                looked at something, and the difference should not need reading
-                the tool name to spot. */}
-            {step.acted && (
-              <span className="rounded-full bg-primary/10 px-1.5 text-micro font-semibold text-primary">
-                did
-              </span>
-            )}
-            <span className="font-medium text-text-secondary">{step.tool}</span>
-            <span className="text-muted-foreground">— {step.summary}</span>
-            {linkToWorkspace && (
-              <a
-                href={`/applications/${workspaceId}`}
-                className="shrink-0 font-semibold text-primary hover:underline"
-              >
-                view in workspace →
-              </a>
-            )}
-            {step.reason && <span className="text-muted-foreground/70">({step.reason})</span>}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-medium text-text-secondary">{step.tool}</span>
+                {/* A step that changed something is not the same as a step
+                    that looked at something, and the difference should not
+                    need reading the tool name to spot. */}
+                {step.acted && (
+                  <span className="rounded-full bg-primary/10 px-1.5 text-micro font-semibold text-primary">
+                    did
+                  </span>
+                )}
+                {linkToWorkspace && (
+                  <a
+                    href={`/applications/${workspaceId}`}
+                    className="font-semibold text-primary hover:underline"
+                  >
+                    view in workspace →
+                  </a>
+                )}
+              </div>
+              <p className="text-muted-foreground">{step.summary}</p>
+            </div>
           </li>
         );
       })}
