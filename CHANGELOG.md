@@ -88,8 +88,9 @@ is involved in any of it; every figure is a count.
   `Origin` against an allowlist on every mutating request.
 - The database and its directory are created owner-only; résumés live beside it
   on disk, not in a cloud.
-- Page text scraped from a posting is fenced before it reaches a model, so a
-  posting cannot inject instructions into a prompt.
+- Text the app did not author — page text scraped from a posting, and the text
+  extracted from an uploaded résumé — is fenced before it reaches a model, so a
+  posting or a document cannot inject instructions into a prompt.
 - Nothing is submitted on your behalf. The submit step waits for you.
 
 ### Notable fixes
