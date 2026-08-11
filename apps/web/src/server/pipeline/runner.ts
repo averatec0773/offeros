@@ -95,6 +95,30 @@ async function maybeTriggerStyleDistill(
   }
 }
 
+/**
+ * Record that the user accepted an artifact.
+ *
+ * Two effects, and the second is the one worth protecting: a timeline event,
+ * and the style-memory distillation that turns "they approved it after asking
+ * for three changes" into standing preferences. That learning path used to
+ * exist only inside `advance()`, reachable only by walking the step machine —
+ * so any other way of accepting a document would silently have dropped it.
+ * Extracted here so every caller gets both, and neither can drift from the
+ * other by being copied.
+ */
+export function approveArtifact(
+  ctx: PipelineContext,
+  applicationId: string,
+  kind: ArtifactKind,
+): void {
+  appendEvent(ctx.db, {
+    applicationId,
+    kind: "artifact-approved",
+    payload: { kind },
+  });
+  void maybeTriggerStyleDistill(ctx, applicationId, kind);
+}
+
 async function persist(ctx: PipelineContext, patch: Partial<PipelineTask>): Promise<PipelineTask> {
   const updated = await ctx.repos.updatePipelineTask(ctx.taskId, patch);
   if (!updated) throw new Error(`agent task ${ctx.taskId} not found`);
@@ -227,14 +251,7 @@ export async function advance(ctx: PipelineContext): Promise<PipelineTask> {
     // advance) — the confirm-resume/confirm-cover-letter step key it's
     // parked at names the artifact kind being approved.
     const approvedKind = CONFIRM_ARTIFACT_KIND[step.key];
-    if (approvedKind) {
-      appendEvent(ctx.db, {
-        applicationId: task.applicationId,
-        kind: "artifact-approved",
-        payload: { kind: approvedKind },
-      });
-      void maybeTriggerStyleDistill(ctx, task.applicationId, approvedKind);
-    }
+    if (approvedKind) approveArtifact(ctx, task.applicationId, approvedKind);
     return runForward(ctx, await persist(ctx, { step: task.step + 1 }));
   }
 

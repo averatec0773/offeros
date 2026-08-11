@@ -22,6 +22,8 @@ import type { AgentStep } from "@/server/agent/loop";
 import type { FillStats } from "@offeros/autofill";
 import type { TraceEntry } from "@/server/agent/types";
 import type { AttentionItem } from "@/server/services/attention-service";
+import type { ReconResult } from "@/server/services/recon-service";
+import type { RequirementsSummary } from "@/server/services/requirements-service";
 import type { LineDiff } from "./diff";
 
 export class ApiError extends Error {
@@ -93,6 +95,18 @@ export const api = {
     ) => request<Application>(`/applications/${id}`, json("PATCH", patch)),
     events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
     trace: (id: string) => request<TraceEntry[]>(`/applications/${id}/trace`),
+    /** Check whether the posting is still up, and learn what its form asks. */
+    recon: (id: string) => request<ReconResult>(`/applications/${id}/recon`, json("POST", {})),
+    /** What the form asks and how much of it we can already answer. */
+    requirements: (id: string) => request<RequirementsSummary>(`/applications/${id}/requirements`),
+    /** The generation task for this application, created on demand. The page
+     *  does not show tasks; this is only how it reaches the same targeted
+     *  generation endpoints the browser panel uses. */
+    ensureTask: (id: string) =>
+      request<{ taskId: string; task: PipelineTask; artifacts: Artifact[] }>(
+        `/applications/${id}/task`,
+        json("POST", {}),
+      ),
   },
   pipelineTasks: {
     create: (input: { applicationId: string }) =>
@@ -119,6 +133,17 @@ export const api = {
       request<PipelineTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
     fillUndo: (id: string) =>
       request<PipelineTask>(`/agent/tasks/${id}/fill/undo`, json("POST", {})),
+    /** Generate (or re-generate) the tailored résumé — the same targeted
+     *  endpoint the browser panel uses. */
+    tailor: (id: string) => request<PipelineTask>(`/agent/tasks/${id}/tailor`, json("POST", {})),
+    coverLetter: (id: string) =>
+      request<PipelineTask>(`/agent/tasks/${id}/cover-letter`, json("POST", {})),
+    /** Accept a generated document: timeline event + style-memory learning. */
+    approveArtifact: (id: string, kind: "resume" | "cover-letter") =>
+      request<{ approved: boolean; kind: string }>(
+        `/agent/tasks/${id}/artifacts/${kind}/approve`,
+        json("POST", {}),
+      ),
   },
   agent: {
     inbox: () => request<{ inbox: AttentionItem[]; trace: TraceEntry[] }>(`/agent/inbox`),

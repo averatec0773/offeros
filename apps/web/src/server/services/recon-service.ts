@@ -43,6 +43,8 @@ export interface ReconResult {
   requiredFound?: number;
   /** True when this run filled in a job description that was missing. */
   jdBackfilled?: boolean;
+  /** Question keys this run learned, linking form_shapes rows to this job. */
+  questionKeys?: string[];
   at: number;
 }
 
@@ -231,6 +233,11 @@ function applyProbe(
     vendor: platform.vendor,
     questionsFound: questions.length,
     requiredFound: questions.filter((q) => q.required).length,
+    // The keys, not the questions: the text lives once in form_shapes, and
+    // this is the per-application link back to it. Without it a prescan would
+    // be a global pile of questions with no way to say which form they
+    // belonged to.
+    questionKeys: questions.map((q) => q.questionKey),
     ...(jdBackfilled ? { jdBackfilled: true } : {}),
     at,
   };
@@ -273,6 +280,7 @@ function finish(db: Db, applicationId: string, result: ReconResult): ReconResult
       detail: result.detail,
       ...(result.vendor ? { vendor: result.vendor } : {}),
       ...(result.questionsFound !== undefined ? { questionsFound: result.questionsFound } : {}),
+      ...(result.questionKeys?.length ? { questionKeys: result.questionKeys } : {}),
       ...(result.jdBackfilled ? { jdBackfilled: true } : {}),
     },
   });

@@ -153,6 +153,41 @@ export function startInstantFill(
   return claimHandoff(db, handoff.id);
 }
 
+/**
+ * The task id to generate materials against, creating or parking one as needed.
+ *
+ * The application page does not show tasks and the user does not know they
+ * exist — but the generation steps and the extension both need one, parked at
+ * the fill boundary, because that is the state `runTargetedStep` will run out
+ * of band. Same auto-create the instant lane does, extended to re-park a task
+ * left somewhere else by the pipeline UI that used to drive it.
+ *
+ * Deliberately does NOT touch a `running` task: something is mid-generation,
+ * and parking it under itself would strand it. Callers surface that as "still
+ * working" rather than starting a second run.
+ *
+ * Parking is safe for the extension: its pending list is built from open
+ * handoffs, not from task state, so moving a task's step never resurrects an
+ * application in the panel.
+ */
+export function ensureGenerationTask(db: Db, applicationId: string): string {
+  const existing = getPipelineTaskByApplicationId(db, applicationId);
+  if (!existing) return createFillFirstTask(db, applicationId);
+  if (existing.status === "running") {
+    throw new ServiceError("something is already generating for this application");
+  }
+  const parkedAt = PIPELINE_STEPS[existing.step]?.key;
+  const parked =
+    existing.status === "awaiting_user" && (parkedAt === "fill-form" || parkedAt === "submit");
+  if (!parked) {
+    updatePipelineTask(db, existing.id, {
+      status: "awaiting_user",
+      step: stepIndex("fill-form"),
+    });
+  }
+  return existing.id;
+}
+
 /** A task born at the fill gate: `fillFirst` marks the skipped generation
  *  steps so the timeline renders them as skipped, never as done. */
 function createFillFirstTask(db: Db, applicationId: string): string {
