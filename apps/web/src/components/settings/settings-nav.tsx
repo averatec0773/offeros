@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/settings/style", label: "Style" },
   { href: "/settings/prompts", label: "Prompts" },
   { href: "/settings/templates", label: "Templates" },
+  { href: "/settings/data", label: "Data" },
 ];
 
 /** Sub-nav shared by the settings pages. Active link is derived from the current path. */

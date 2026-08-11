@@ -243,3 +243,14 @@ export function getDb(): Db {
   }
   return globalForDb.__offerosDb;
 }
+
+/**
+ * The raw better-sqlite3 handle for the app's real database, opening it if
+ * needed. Almost nothing should reach for this — the repositories are the way
+ * in — but the backup export needs SQLite-level operations (`VACUUM INTO`)
+ * that drizzle does not surface.
+ */
+export function getSqlite(): Database.Database {
+  getDb(); // ensures the singleton (both handles) is open and schema-current
+  return globalForDb.__offerosSqlite!;
+}

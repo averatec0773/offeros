@@ -61,6 +61,18 @@ a real fill leaves problems behind, the extension photographs those fields and
 stores the screenshots locally beside the database, so a later review can
 compare what the engine reported against what the page actually showed.
 
+**An agent you can ask about your search.** A conversational agent, on `/agent`
+and inside each application, answers questions about your applications in plain
+language — "which of these are stuck, and why?", "what got filled in here?" — by
+reading the real records (fill reports, decision traces, your saved answers, form
+memory) and showing the steps that produced each answer, not just the answer. It
+works in a loop of small verified tool calls: it can also make gated changes
+(save an answer, update an application's status, tailor a résumé), at most two
+per turn, each verifying itself by re-reading what it wrote. It cannot mark an
+application submitted unless your own message says you submitted it — that check
+reads your words, not a model-set flag, and no text scraped from a web page can
+talk past it.
+
 **A record of what the forms actually asked.** Each completed fill stores the
 questions it met, identified by their content rather than by any page-specific
 id, so the same question on two different postings is recognised as one
@@ -103,7 +115,13 @@ is involved in any of it; every figure is a count.
 - No released build. Run it from source.
 - The local app is started as a development server. That is fine for
   development and is not yet a supportable way to run it day to day.
-- The agent's tool registry exists and is tested, but nothing calls it yet; the
-  pipeline still drives its own steps.
+- The deterministic pipeline drives its own generation steps; the conversational
+  agent sits above it (triage, diagnosis, small gated changes) rather than
+  running the pipeline itself. This is by design, not a gap — but the two share
+  a "task" concept, and only the agent's tools carry the verify-and-trace
+  contract.
 - The auto-submit preference is recorded and deliberately not implemented. The
   submit gate always stops for you.
+- Your data lives in one local SQLite file. You can export a portable backup
+  from Settings → Data; restoring it onto a new machine is a documented manual
+  step, not yet a one-click import.
