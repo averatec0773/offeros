@@ -30,8 +30,7 @@ committing WXT's manifest `key` (via `VITE_CHROME_EXT_KEY` in
 The Host check is what keeps the API localhost-only regardless of the above.
 Requests that fail any check are rejected with a 403 before reaching any route
 handler. A request with **no** `Origin` (curl, scripts, non-browser local
-clients) is allowed on mutating methods by design — this is a single-user local
-app, and local code execution is already outside the trust boundary.
+clients) is allowed on mutating methods by design — see Accepted risks below.
 
 Running an OfferOS instance reachable from outside localhost (reverse proxy,
 port forwarding, `0.0.0.0` binding) is outside the supported deployment model
@@ -70,6 +69,20 @@ localhost-only, single-user trust model, including:
 Some behaviors are deliberate trade-offs of a local-first, single-user tool
 and are not treated as vulnerabilities on their own:
 
+- **Requests with no `Origin` header are allowed on mutating methods.** The
+  `Origin` allowlist defends against a web page in your browser making requests
+  to the local server; a browser always sends `Origin` on such a request. curl,
+  a shell script, or any other non-browser local client sends none, and is let
+  through deliberately. Rejecting them would buy nothing: code already running
+  on your machine is outside the trust boundary, and could send an `Origin`
+  header of its choosing anyway. The loopback `Host` check still applies.
+- **Any process running as you can change your data.** There is no
+  authentication between you and the local API, and none between a local
+  process and `~/.offeros`. Anything running under your user account can read
+  and modify your applications, answers, résumés and settings — through the API
+  or straight through the SQLite file. That is the single-user, local-first
+  model, not a gap in it: the boundary this app defends is your machine, and
+  inside it there is nothing further to separate.
 - **API keys are stored in plaintext** in your local `~/.offeros` directory
   (the directory is `0700`, the database file `0600`, applied best-effort —
   these Unix permission bits only take effect on filesystems that support
