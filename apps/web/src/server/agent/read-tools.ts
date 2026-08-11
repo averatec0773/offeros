@@ -330,12 +330,14 @@ export const readProfileTool: Tool<
   {
     personal: Record<string, string>;
     skills: string[];
+    experience: { title: string; company: string; dates: string; bullets: string[] }[];
+    education: { degree: string; field: string; school: string; dates: string }[];
     resumes: { name: string; primary: boolean; hasText: boolean }[];
   }
 > = {
   id: "read_profile",
   description:
-    "Read the user's profile summary: personal contact fields, skills, and which résumés exist (and whether each has extracted text). Use before answering questions about the profile or proposing profile changes.",
+    "Read the user's structured background: personal contact fields, skills, work experience (title/company/dates/bullets), education, and which résumés exist. This is the source for 'analyse my background/experience' — and the fallback when read_resume has no extracted text, since the profile holds the same history in structured form.",
   run: async (ctx) => {
     const profile = getProfile(ctx.db);
     if (!profile) {
@@ -350,6 +352,18 @@ export const readProfileTool: Tool<
         ([k, v]) => typeof v === "string" && v && k !== "links",
       ),
     ) as Record<string, string>;
+    const experience = profile.experience.slice(0, ROW_BUDGET).map((e) => ({
+      title: e.title,
+      company: e.company,
+      dates: `${e.start}–${e.end}`,
+      bullets: e.bullets.slice(0, 6),
+    }));
+    const education = profile.education.slice(0, ROW_BUDGET).map((e) => ({
+      degree: e.degree,
+      field: e.field,
+      school: e.school,
+      dates: `${e.start}–${e.end}`,
+    }));
     const resumes = listResumes(ctx.db).map((r) => ({
       name: r.name,
       primary: r.isPrimary,
@@ -357,8 +371,14 @@ export const readProfileTool: Tool<
     }));
     return {
       ok: true,
-      summary: `profile: ${Object.keys(personal).length} personal fields, ${profile.skills.length} skills, ${resumes.length} résumé(s)`,
-      result: { personal, skills: profile.skills.slice(0, ROW_BUDGET * 2), resumes },
+      summary: `profile: ${Object.keys(personal).length} personal fields, ${profile.skills.length} skills, ${experience.length} job(s), ${education.length} school(s), ${resumes.length} résumé(s)`,
+      result: {
+        personal,
+        skills: profile.skills.slice(0, ROW_BUDGET * 2),
+        experience,
+        education,
+        resumes,
+      },
     };
   },
   verify: async () => null,
@@ -442,7 +462,7 @@ const DOC_BUDGET = 6000;
  *  dead "I can't read it" the old hasText boolean produced. */
 export const readResumeTool: Tool<
   void,
-  { name?: string; text?: string; truncated?: boolean; hasText: boolean }
+  { name?: string; text?: string; truncated?: boolean; hasText: boolean; note?: string }
 > = {
   id: "read_resume",
   description:
@@ -461,8 +481,12 @@ export const readResumeTool: Tool<
     if (!text) {
       return {
         ok: true,
-        summary: `résumé "${resume.name}" has no extracted text`,
-        result: { name: resume.name, hasText: false },
+        summary: `résumé "${resume.name}" has no extracted text — analyse from read_profile instead`,
+        result: {
+          name: resume.name,
+          hasText: false,
+          note: "This résumé's PDF text was never extracted, so there is no résumé text to read. Do NOT tell the user you cannot analyse their résumé — call read_profile and analyse their structured work history, education, and skills, which hold the same background.",
+        },
       };
     }
     return {

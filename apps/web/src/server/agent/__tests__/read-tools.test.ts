@@ -211,3 +211,43 @@ describe("read_artifact hands back the generated résumé/letter the user never 
     expect(obs.summary).toContain("no cover letter has been generated");
   });
 });
+
+import { saveProfile } from "../../repositories/profile-repo";
+import { readProfileTool } from "../read-tools";
+
+describe("read_profile now returns the structured background, not just skills", () => {
+  it("surfaces experience and education so 'analyse my background' works without PDF text", async () => {
+    saveProfile(db, {
+      personal: { name: "Jordan Rivera", email: "j@example.com", phone: "555", links: {} },
+      skills: ["Python", "SQL"],
+      education: [
+        {
+          id: "e1",
+          school: "State U",
+          degree: "BS",
+          field: "CS",
+          start: "2019",
+          end: "2023",
+        },
+      ],
+      experience: [
+        {
+          id: "x1",
+          company: "Acme",
+          title: "ML Engineer",
+          start: "2023",
+          end: "present",
+          bullets: ["Built the ranking pipeline", "Cut latency 40%"],
+        },
+      ],
+    });
+    const obs = await readProfileTool.run({ db, applicationId: appId }, undefined);
+    const r = obs.result as {
+      experience: { title: string; company: string; bullets: string[] }[];
+      education: { degree: string; school: string }[];
+    };
+    expect(r.experience[0]).toMatchObject({ title: "ML Engineer", company: "Acme" });
+    expect(r.experience[0]!.bullets).toContain("Cut latency 40%");
+    expect(r.education[0]).toMatchObject({ degree: "BS", school: "State U" });
+  });
+});
