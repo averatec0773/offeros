@@ -136,7 +136,11 @@ export const listApplicationsTool: Tool<
  */
 export const readFillReportTool: Tool<
   void,
-  FillDiagnosis & { filledFields: { label: string; value?: string; source: string }[] }
+  FillDiagnosis & {
+    /** total − skipped: the honest denominator for "how complete is this fill". */
+    fillable: number;
+    filledFields: { label: string; value?: string; source: string }[];
+  }
 > = {
   id: "read_fill_report",
   description:
@@ -157,7 +161,7 @@ export const readFillReportTool: Tool<
       return {
         ok: true,
         summary: "no fill has run for this application yet",
-        result: { ...diagnosis, filledFields },
+        result: { ...diagnosis, fillable: 0, filledFields },
       };
     }
     const causeCount = diagnosis.causes.length;
@@ -165,10 +169,18 @@ export const readFillReportTool: Tool<
       filledFields.length < diagnosis.filled
         ? ` (${filledFields.length} of them listed; the rest are standard fields)`
         : "";
+    // Report against FILLABLE fields, not the raw total. `total` counts every
+    // scanned control including the ones the engine deliberately skipped
+    // (already filled by the page, or not a real question), so "23 of 73"
+    // read as a near-failure when it was "23 of 41 fillable" — a 2026-08-10
+    // audit finding, reproduced live. The full breakdown stays in `result`.
+    const fillable = diagnosis.total - diagnosis.skipped;
+    const skippedNote =
+      diagnosis.skipped > 0 ? `; ${diagnosis.skipped} standard fields skipped` : "";
     return {
       ok: true,
-      summary: `${diagnosis.filled} of ${diagnosis.total} fields filled${shown}; ${causeCount === 0 ? "nothing outstanding" : `${causeCount} reason${causeCount === 1 ? "" : "s"} it did not finish`}`,
-      result: { ...diagnosis, filledFields },
+      summary: `${diagnosis.filled} of ${fillable} fillable fields filled${shown}${skippedNote}; ${causeCount === 0 ? "nothing outstanding" : `${causeCount} reason${causeCount === 1 ? "" : "s"} it did not finish`}`,
+      result: { ...diagnosis, fillable, filledFields },
     };
   },
   verify: async () => null,

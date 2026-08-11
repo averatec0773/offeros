@@ -21,6 +21,12 @@ import type { Db } from "../db/client";
  *  reason, or a few sentences — and a large ceiling only buys rambling. */
 const MAX_TOKENS = 1200;
 
+/** Low, not zero. The agent routes tools and reports facts, where the same
+ *  question on the same data should reach the same answer — the provider's
+ *  ~1.0 default made that vary run to run (2026-08-10 reliability audit). A
+ *  little above zero keeps it from locking onto one bad phrasing. */
+const TEMPERATURE = 0.1;
+
 export function makeAgentLlm(db: Db) {
   return async (args: {
     system: string;
@@ -42,6 +48,7 @@ export function makeAgentLlm(db: Db) {
         ? { model: resolveModel(provider, settings.llm.model ?? "") }
         : {}),
       maxTokens: MAX_TOKENS,
+      temperature: TEMPERATURE,
     });
   };
 }

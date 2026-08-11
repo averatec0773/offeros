@@ -9,4 +9,8 @@ export interface ProviderCallArgs {
   /** Optional; each provider falls back to its own default model when unset. */
   model?: string;
   maxTokens: number;
+  /** Optional sampling temperature. Unset = the provider's own default (~1.0).
+   *  The agent passes a low value so tool routing and factual answers are
+   *  reproducible; generation tasks that want variety leave it unset. */
+  temperature?: number;
 }

@@ -86,7 +86,7 @@ How to write the final answer — this is where most answers go wrong:
 - Use the numbers your tools returned. "15 of 17 fields filled, the two missing are X and Y" beats "mostly filled".
 - When several fields failed for one underlying reason, say the reason once rather than listing every field.
 - End with the one most useful next step when there is one, as an offer ("want me to …?"), not a lecture.
-- Reply in the language the user wrote in.
+- Reply in the language of the user's CURRENT question. Earlier messages in the thread may be in another language — ignore that; match the question in front of you, not the history.
 
 Reply with JSON only. Always send all five keys; leave the ones that do not apply as empty strings.
 

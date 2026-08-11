@@ -22,6 +22,7 @@ export async function callOpenAI(
     max_tokens: args.maxTokens,
     messages,
   };
+  if (typeof args.temperature === "number") body.temperature = args.temperature;
   // Strict structured output: our task schemas are strict-compliant
   // (additionalProperties:false + every property required), so strict mode
   // guarantees the response matches the schema exactly — the same conformance

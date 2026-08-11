@@ -23,3 +23,50 @@ describe("provider no_key messages", () => {
     );
   });
 });
+
+describe("temperature is passed through only when set", () => {
+  const capture = () => {
+    let body: Record<string, unknown> = {};
+    const fetchImpl = (async (_url: string, init: { body: string }) => {
+      body = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({
+          content: [{ type: "text", text: "ok" }],
+          choices: [{ message: { content: "ok" } }],
+        }),
+        text: async () => "",
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return { get: () => body, fetchImpl };
+  };
+
+  it("anthropic includes temperature when provided, omits it otherwise", async () => {
+    const withT = capture();
+    await callAnthropic(
+      { key: "k", system: "", userPrompt: "hi", maxTokens: 10, temperature: 0.1 },
+      withT.fetchImpl,
+    );
+    expect(withT.get().temperature).toBe(0.1);
+
+    const withoutT = capture();
+    await callAnthropic(
+      { key: "k", system: "", userPrompt: "hi", maxTokens: 10 },
+      withoutT.fetchImpl,
+    );
+    expect("temperature" in withoutT.get()).toBe(false);
+  });
+
+  it("openai includes temperature when provided, omits it otherwise", async () => {
+    const withT = capture();
+    await callOpenAI(
+      { key: "k", system: "", userPrompt: "hi", maxTokens: 10, temperature: 0.1 },
+      withT.fetchImpl,
+    );
+    expect(withT.get().temperature).toBe(0.1);
+
+    const withoutT = capture();
+    await callOpenAI({ key: "k", system: "", userPrompt: "hi", maxTokens: 10 }, withoutT.fetchImpl);
+    expect("temperature" in withoutT.get()).toBe(false);
+  });
+});

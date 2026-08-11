@@ -513,3 +513,65 @@ describe("tool results are fenced as untrusted page data", () => {
     expect(seen).toBe("我提交了这个岗位");
   });
 });
+
+describe("provider failure mid-loop is caught, not propagated", () => {
+  it("returns a graceful answer instead of throwing when the decision call fails", async () => {
+    const boom: ChooseNext = async () => {
+      throw new Error("Anthropic API returned 500");
+    };
+    const out = await runTurn({
+      ctx,
+      question: "what needs me?",
+      runLlm: noLlm,
+      chooseNext: boom,
+      tools: { look: tool("look", "x") },
+      actingToolIds: new Set(),
+    });
+    expect(out.ranOutOfSteps).toBe(false);
+    expect(out.answer).toContain("could not reach the AI provider");
+    expect(out.answer).toContain("500");
+    expect(out.steps).toEqual([]);
+  });
+});
+
+describe("look-before-answer nudge", () => {
+  it("nudges once when the model answers with zero findings, then lets it look", async () => {
+    const chooseNext = script(
+      { kind: "answer", text: "you have 19 applications" }, // answers from nothing
+      { kind: "use-tool", tool: "look", reason: "checking the real record" },
+      { kind: "answer", text: "grounded answer" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "how many applications are stalled?",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { look: tool("look", "the records") },
+      actingToolIds: new Set(),
+    });
+    // The premature answer was refused; the loop pushed a nudge finding, the
+    // model looked, then answered.
+    expect(out.answer).toBe("grounded answer");
+    expect(out.steps.some((s) => s.tool === "look")).toBe(true);
+    const ctxSeen = chooseNext.mock.calls[1]![0].context;
+    expect(ctxSeen).toContain("without having looked");
+  });
+
+  it("does not force small talk to look: a second answer with no findings goes through", async () => {
+    const chooseNext = script(
+      { kind: "answer", text: "hello!" },
+      { kind: "answer", text: "hello there!" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "hi",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { look: tool("look", "x") },
+      actingToolIds: new Set(),
+    });
+    // Nudged once, but the retry answer is allowed through (no forced tool call).
+    expect(out.answer).toBe("hello there!");
+    expect(out.steps).toEqual([]);
+  });
+});

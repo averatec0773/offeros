@@ -96,3 +96,4 @@ scripts/check-usage.sh
 .githooks/
 
 .next-verify/
+.next-sandbox/

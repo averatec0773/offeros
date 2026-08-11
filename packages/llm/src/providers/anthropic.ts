@@ -19,6 +19,7 @@ export async function callAnthropic(
     max_tokens: args.maxTokens,
     messages: [{ role: "user", content: args.userPrompt }],
   };
+  if (typeof args.temperature === "number") body.temperature = args.temperature;
   if (args.system.trim() !== "") body.system = args.system;
   if (args.schema) body.output_config = { format: { type: "json_schema", schema: args.schema } };
 

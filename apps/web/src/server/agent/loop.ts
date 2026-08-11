@@ -140,15 +140,45 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   // failed call and retries. Refusing the repeat (and saying why) snaps it
   // out after one attempt instead of three.
   const callsMade = new Set<string>();
+  // Fires once: if the model tries to answer having looked at nothing, it is
+  // nudged to look first. Only once, so genuine small talk ("thanks") still
+  // gets a direct reply on the second pass rather than being forced into a
+  // pointless tool call.
+  let nudgedToLook = false;
 
   for (let step = 0; step < maxSteps; step++) {
-    const decision: Decision = await chooseNext({
-      context: buildContext(tools, findings, args.subject, args.history),
-      question: args.question,
-      runLlm: args.runLlm,
-    });
+    let decision: Decision;
+    try {
+      decision = await chooseNext({
+        context: buildContext(tools, findings, args.subject, args.history),
+        question: args.question,
+        runLlm: args.runLlm,
+      });
+    } catch (err) {
+      // The provider failed mid-loop (no key, 500, timeout, rate limit). Do NOT
+      // let this propagate: the user message is already persisted, so an
+      // uncaught throw leaves a question with no reply and no record of why.
+      // Return a graceful turn; the route persists it as the assistant's answer.
+      const reason = err instanceof Error ? err.message : String(err);
+      return {
+        answer: `I could not reach the AI provider to answer that (${reason}). Your message is saved — try again in a moment, and if it keeps failing, check Settings → AI.`,
+        steps,
+        ranOutOfSteps: false,
+      };
+    }
 
     if (decision.kind === "answer") {
+      // Answering before looking at anything is the top reliability risk: the
+      // model can restate a stale fact from the history window as if it were
+      // current. Nudge one look for a fact-shaped question; small talk answers
+      // straight through on the retry.
+      if (!nudgedToLook && steps.length === 0 && findings.length === 0) {
+        nudgedToLook = true;
+        findings.push(
+          "You are about to answer without having looked at anything. If this question is about the user's applications, profile, or fills, call a tool and read the real record first — do not answer their data from memory or from earlier messages. If it is small talk, answer directly.",
+        );
+        continue;
+      }
       return { answer: decision.text, steps, ranOutOfSteps: false };
     }
 
@@ -317,7 +347,7 @@ function buildContext(
   // a fill or an edit lands, so facts are re-read through tools every turn.
   const past =
     history && history.length > 0
-      ? `Recent conversation (oldest first — use it ONLY to resolve what the user is referring to. Do not imitate earlier answers: they may predate better tools and better rules, and the answer rules outrank precedent. Re-read facts through tools):\n${history
+      ? `Recent conversation (oldest first — use it ONLY to resolve what the user is referring to. Do not imitate earlier answers: they may predate better tools and better rules, and the answer rules outrank precedent. It is NOT a cue for what language to answer in — match the current question. Re-read facts through tools):\n${history
           .map((m) => `${m.role === "user" ? "User" : "You"}: ${m.content}`)
           .join("\n")}`
       : "";
