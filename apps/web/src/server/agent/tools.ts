@@ -6,8 +6,14 @@ import { getFit } from "../repositories/fit-repo";
 import { runTargetedStep } from "../pipeline/runner";
 import { buildPipelineContext } from "../pipeline/route-context";
 import { computeFit } from "../services/fit-service";
-import { createHandoffForTask, completeSubmitted } from "../services/fill-service";
+import {
+  createHandoffForTask,
+  completeSubmitted,
+  buildQuestionContext,
+} from "../services/fill-service";
 import { tweakArtifact } from "../pipeline/tweak";
+import { isAutoAnswerForbidden } from "@offeros/autofill";
+import type { QuestionAnswerOutput } from "@offeros/llm";
 import type { Tool, ToolContext, ToolObservation } from "./types";
 
 /**
@@ -192,6 +198,70 @@ export const refineArtifactTool: Tool<
   },
 };
 
+/**
+ * Draft a grounded answer to an application question the user has not answered
+ * yet — so "what do I put here?" becomes a real proposed answer instead of a
+ * shrug. It DRAFTS, it does not save: the agent shows the draft; the user then
+ * says "save it" and save_answer records it. Refuses the questions the fill
+ * engine's own guards refuse to auto-answer (identity/demographics, and the
+ * legally-consequential truth questions — work authorization, sponsorship,
+ * citizenship): a drafted answer to those would be putting words in the user's
+ * mouth on something only they can answer.
+ */
+export const draftAnswerTool: Tool<{ question: string; options?: string[] }, { draft: string }> = {
+  id: "draft_answer",
+  description:
+    'Draft a grounded, first-person answer to an application question the user has not answered — for "what should I write for this?" / "draft an answer for the … question". Input {"question":"...","options":["..."]} (options only for multiple-choice). It grounds the draft in the job\'s JD and the user\'s résumé/profile. Show the draft and offer to save it with save_answer — it does NOT save on its own. It refuses identity/demographic and work-authorization/sponsorship/citizenship questions: those are the user\'s to answer.',
+  parse: (input) => {
+    const o = (input ?? {}) as Record<string, unknown>;
+    const question = o.question;
+    if (typeof question !== "string" || question.trim() === "") {
+      throw new Error("question is required");
+    }
+    const options = Array.isArray(o.options)
+      ? o.options.filter((x): x is string => typeof x === "string" && x.trim() !== "")
+      : undefined;
+    return { question: question.trim(), ...(options && options.length ? { options } : {}) };
+  },
+  run: async (ctx, input) => {
+    const taskId = requireTaskId(ctx);
+    // Same guard the panel's AI-answer flow uses: some questions must never be
+    // answered on the user's behalf, drafted or not.
+    if (isAutoAnswerForbidden({ label: input.question, options: input.options })) {
+      return {
+        ok: false,
+        summary: "this question is the user's to answer, not mine to draft",
+        failure: {
+          kind: "human-gate",
+          reason:
+            "identity/demographic or work-authorization/sponsorship/citizenship questions are never auto-answered — ask the user for their answer and offer to save it with save_answer",
+        },
+      };
+    }
+    const grounding = buildQuestionContext(ctx.db, taskId);
+    const output = (await buildPipelineContext(taskId).runLlm("question-answer", {
+      question: input.question,
+      label: input.question,
+      ...(input.options ? { options: input.options } : {}),
+      profileSummary: grounding.profileSummary,
+      jdText: grounding.jdText,
+      resumeText: grounding.resumeText,
+    })) as QuestionAnswerOutput;
+    const draft = output.answer.trim();
+    if (!draft) {
+      return {
+        ok: false,
+        summary: "could not draft an answer",
+        failure: { kind: "dependency", reason: "the model returned an empty draft" },
+      };
+    }
+    return { ok: true, summary: `drafted an answer (${draft.length} chars)`, result: { draft } };
+  },
+  // Nothing durable changed — a draft is not saved. Null keeps "unverifiable"
+  // honest, distinct from a verified write.
+  verify: async () => null,
+};
+
 /** Score this application against the job (advisory, never a gate). */
 export const computeFitTool: Tool<
   void,
@@ -325,6 +395,7 @@ export const TOOLS = {
   [tailorResumeTool.id]: tailorResumeTool,
   [coverLetterTool.id]: coverLetterTool,
   [refineArtifactTool.id]: refineArtifactTool,
+  [draftAnswerTool.id]: draftAnswerTool,
   [computeFitTool.id]: computeFitTool,
   [openFillTool.id]: openFillTool,
   [markSubmittedTool.id]: markSubmittedTool,

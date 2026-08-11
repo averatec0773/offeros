@@ -17,6 +17,7 @@ import {
 } from "../../repositories/pipeline-task-repo";
 import { upsertArtifact, getArtifact } from "../../repositories/artifact-repo";
 import { listTrace } from "../../repositories/agent-trace-repo";
+import { listAnswers } from "../../repositories/answer-repo";
 import { runTool } from "../run-tool";
 import type { Tool, ToolContext } from "../types";
 
@@ -27,14 +28,18 @@ vi.mock("../../pipeline/runner", () => ({
   advance: vi.fn(),
   choose: vi.fn(),
 }));
-vi.mock("../../pipeline/route-context", () => ({ buildPipelineContext: () => ({}) }));
+const runLlm = vi.fn(async () => ({ answer: "drafted answer text" }));
+vi.mock("../../pipeline/route-context", () => ({
+  buildPipelineContext: () => ({ runLlm: (...a: unknown[]) => runLlm(...(a as [])) }),
+}));
 
 const tweakArtifact = vi.fn(async () => undefined);
 vi.mock("../../pipeline/tweak", () => ({
   tweakArtifact: (...a: unknown[]) => tweakArtifact(...(a as [])),
 }));
 
-const { markSubmittedTool, tailorResumeTool, refineArtifactTool } = await import("../tools");
+const { markSubmittedTool, tailorResumeTool, refineArtifactTool, draftAnswerTool } =
+  await import("../tools");
 
 const FILL = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
 const SUBMIT = PIPELINE_STEPS.findIndex((s) => s.key === "submit");
@@ -287,5 +292,36 @@ describe("refine_artifact wraps the tweak seam and verifies a new version landed
     expect(tweakArtifact).toHaveBeenCalledOnce();
     // Durable check: the artifact really has 2 versions now.
     expect(getArtifact(db, task.id, "resume")!.versions).toHaveLength(2);
+  });
+});
+
+describe("draft_answer grounds a proposed answer but refuses the user's-only questions", () => {
+  it("refuses a work-authorization question as a human gate — no model call", async () => {
+    const task = createPipelineTask(db, { applicationId: appId });
+    runLlm.mockClear();
+    const ctx: ToolContext = { db, applicationId: appId, taskId: task.id, reason: "audit" };
+    const obs = await runTool(draftAnswerTool, ctx, {
+      question: "Are you legally authorized to work in the United States?",
+    });
+    expect(obs.ok).toBe(false);
+    expect(obs.failure?.kind).toBe("human-gate");
+    expect(runLlm).not.toHaveBeenCalled();
+  });
+
+  it("drafts a grounded answer for an ordinary question, and does not save it", async () => {
+    const task = createPipelineTask(db, { applicationId: appId });
+    runLlm.mockResolvedValueOnce({ answer: "I'm drawn to your work on supply-chain AI." });
+    const ctx: ToolContext = { db, applicationId: appId, taskId: task.id, reason: "audit" };
+    const obs = await runTool(draftAnswerTool, ctx, {
+      question: "Why do you want to work here?",
+    });
+    expect(obs.ok).toBe(true);
+    expect((obs.result as { draft: string }).draft).toContain("supply-chain AI");
+    expect(runLlm).toHaveBeenCalledWith(
+      "question-answer",
+      expect.objectContaining({ label: "Why do you want to work here?" }),
+    );
+    // Drafting must NOT write to the answer bank — that is save_answer's job.
+    expect(listAnswers(db)).toHaveLength(0);
   });
 });
