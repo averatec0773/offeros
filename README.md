@@ -4,13 +4,16 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
 
-Local-first, open-source AI job-application copilot. `apps/web` (Next.js) is
-**the product**: it owns your data in a local SQLite database and is where you
-build your profile, track applications, talk to the agent, and run the AI
-workspace. `apps/extension` (a Chrome **Side Panel**) is the **fill arm**: on a
-supported ATS page it fills the form from your profile, tailors your résumé and
-writes a cover letter in place, and reports every field back. **Submitting is
-yours** — OfferOS stops at the submit button and waits for you.
+Local-first, open-source **AI job-application agent**. Most AI job tools stop
+being intelligent the moment you hit Apply; OfferOS is built around an agent
+whose work _starts_ there — it knows where every application stands, reads the
+per-field record of every form fill, answers _"which of these are stuck, and
+why?"_ with the evidence attached, and makes small, gated changes when you ask.
+Around the agent: `apps/web` (Next.js) owns your data in a local SQLite
+database and runs all the AI; `apps/extension` (a Chrome **Side Panel**) is the
+agent's **execution arm** — it fills real ATS forms from your profile and
+reports every field back. **Submitting is yours** — OfferOS stops at the submit
+button and waits for you.
 
 ## How it works
 
@@ -30,6 +33,29 @@ yours** — OfferOS stops at the submit button and waits for you.
 
 The AI runs in the web app, server-side, with your key. The extension is a thin
 client — no local database, no LLM calls of its own.
+
+## The agent
+
+Talk to it on `/agent` (about all your applications) or inside any single one.
+It works in a loop of small verified steps: **look first** — fill reports,
+decision traces, your saved answers, form memory — then answer. Every answer
+arrives with the steps that produced it, shown rather than hidden, so you can
+see exactly which records it read before trusting what it says.
+
+It can also **do** things: save an answer to your bank, update an application,
+tailor a résumé, generate a cover letter. Three rules keep that safe:
+
+- **At most two changes per turn** — it looks freely, but acting is rationed.
+- **Every write verifies itself** by re-reading what it wrote, and lands in the
+  same trace you see in chat — the transcript and the audit log are one thing.
+- **Gates live inside the tools, not in the prompt.** The tool that marks an
+  application submitted refuses unless _you_ said you submitted it — no
+  phrasing, and no text scraped from a web page, can talk it past that.
+
+What makes its answers specific rather than generic: the extension reports
+every field of every fill (what went in, from which source, what failed and
+why), failures are grouped by cause in code — not by a model guessing — and
+form memory carries what each question shape did across applications.
 
 ## Architecture
 
@@ -109,10 +135,6 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
 - **Agent workspace** — per-application grounded pipeline: tailoring → JD
   analysis with a gaps report → conditional cover letter, with conversational
   gates and real diffs on every tweak.
-- **Agent chat** (`/agent` and per application) — ask about your applications
-  in plain language. Every answer arrives with the steps that produced it (which
-  records it read, what it changed); at most two changes per turn; it can never
-  mark anything submitted unless you said so.
 - **Answer guards** — voluntary self-identification and legally-consequential
   questions (work authorization, sponsorship) are never answered automatically;
   policy acknowledgments are filled but surfaced with their wording afterwards.
