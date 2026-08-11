@@ -57,19 +57,7 @@ export default async function AgentConsolePage({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <ConsolePeek
-            eligible={active
-              .filter((a) => taskByApplication.get(a.id)?.status !== "done")
-              .map((a) => a.id)}
-            jobs={active.map((a) => ({
-              id: a.id,
-              title: a.jobInfo.jobTitle,
-              company: a.jobInfo.companyName,
-              status: a.status,
-            }))}
-            initialInbox={buildInbox(db)}
-            initialTrace={listRecentTrace(db, 40)}
-          />
+          <ConsolePeek initialInbox={buildInbox(db)} initialTrace={listRecentTrace(db, 40)} />
           <DashboardPeek line={`${stats.coverage}% fill · ${memory.knownQuestions} questions`}>
             <FillQuality stats={stats} />
             <FormMemoryCard memory={memory} fills={stats.applications} />

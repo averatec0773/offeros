@@ -41,6 +41,29 @@ identity and demographics, questions with a factual right answer you alone know
 acknowledgements. Policy questions the app did fill are listed afterwards for
 you to check.
 
+**An application is a record, not a workflow.** Each job gets one page:
+everything that has happened to it (what a fill put in and what it could not,
+what went wrong, screenshots of the fields that needed attention, the whole
+timeline), and everything you have to send (a tailored résumé and a cover
+letter — generate, revise, accept). Its state is yours to set: saved, applying,
+applied, interview, offer, rejected, archived. There are no steps to approve
+and nothing to start; the generation still runs, it just no longer asks
+permission at each turn.
+
+**Job reconnaissance.** One click asks the posting two questions: are you still
+up, and what will your form ask? On Greenhouse the answer comes from the
+platform's own job-board API — every question, its type, and whether it is
+required — so the page can tell you "10 required questions, 8 already answered"
+and name the two it cannot. Entirely deterministic: status codes and the
+platform's own words, no model anywhere in it. When a site cannot be read it
+says "could not tell" rather than guessing, because a wrong "closed" costs you
+a job you could still have applied to.
+
+**Add a job by pasting its link.** On a supported board the title, company and
+description come from the board. Anywhere else you get a minimal record with an
+editable title, because a guessed company name is worse than a blank one. The
+same posting twice opens the one you already have.
+
 **Bring your own model.** Anthropic or OpenAI, with your key. Keys are stored
 locally and never sent to the browser. System prompts are editable per task.
 
@@ -116,13 +139,14 @@ is involved in any of it; every figure is a count.
 - No released build. Run it from source.
 - The local app is started as a development server. That is fine for
   development and is not yet a supportable way to run it day to day.
-- The deterministic pipeline drives its own generation steps; the conversational
-  agent sits above it (triage, diagnosis, small gated changes) rather than
-  running the pipeline itself. This is by design, not a gap — but the two share
-  a "task" concept, and only the agent's tools carry the verify-and-trace
-  contract.
-- The auto-submit preference is recorded and deliberately not implemented. The
-  submit gate always stops for you.
+- Generation runs as deterministic, grounded steps; the conversational agent
+  sits above them (triage, diagnosis, small gated changes) rather than driving
+  them. This is by design, not a gap — but only the agent's tools carry the
+  verify-and-trace contract.
+- Reconnaissance reads Greenhouse postings in full. Other boards get the
+  is-it-still-up half only; their question lists wait for a real fill.
+- The auto-submit preference is recorded and deliberately not implemented.
+  Submitting is always yours.
 - Your data lives in one local SQLite file. You can export a portable backup
   from Settings → Data; restoring it onto a new machine is a documented manual
   step, not yet a one-click import.

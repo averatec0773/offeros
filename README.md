@@ -17,14 +17,17 @@ button and waits for you.
 
 ## How it works
 
-1. Build your profile once in the web app (upload a résumé to auto-fill it) and
-   add jobs you want to apply to.
-2. The pipeline tailors your résumé, drafts a cover letter, and analyzes fit —
-   all grounded in your own facts, server-side, with your own LLM key.
-3. To apply, either lane works: the workspace hands the extension a **fill
-   task**, or on any supported apply page **"Fill this page with my profile"**
-   creates the application and fills in one click. The panel reports each
-   field's status live as it lands.
+1. Build your profile once in the web app (upload a résumé to auto-fill it),
+   then add jobs by **pasting the link**. On a supported job board OfferOS
+   reads the title, company and description itself, and checks what the form
+   will ask.
+2. Each application gets a page of its own: what it asks and how much of it you
+   can already answer, plus a tailored résumé and cover letter on demand —
+   grounded in your own facts, server-side, with your own LLM key.
+3. To apply, either lane works: the application page hands the extension a
+   **fill task**, or on any supported apply page **"Fill this page with my
+   profile"** creates the application and fills in one click. The panel reports
+   each field's status live as it lands.
 4. Still in the panel: check the fit score, tailor and attach the résumé and
    cover letter (inline PDF previews), let the AI draft answers to open
    questions, then **review the page, submit it yourself**, and mark it applied.
@@ -62,7 +65,7 @@ form memory carries what each question shape did across applications.
 ```mermaid
 flowchart TB
   subgraph browser["Browser"]
-    ui["Web app UI<br/>pipeline · profile · agent workspace"]
+    ui["Web app UI<br/>applications · profile · agent"]
     panel["Chrome Side Panel<br/>thin client: no store, no AI"]
     engine["Content-script fill engine<br/>scan · fill · capture"]
     ats["ATS apply page<br/>Greenhouse, Lever, Ashby, iCIMS, Workday"]
@@ -71,7 +74,7 @@ flowchart TB
   subgraph host["Your machine — localhost only"]
     guard["Local-only request guard<br/>loopback Host + Origin allowlist"]
     api["Next.js server<br/>page routes + /api/v1"]
-    pipeline["Agent pipeline<br/>tailor-resume · confirm-resume · analyze-site<br/>generate-cover-letter · confirm-cover-letter · fill-form · submit<br/>(instant fill parks a task straight at the fill gate)"]
+    pipeline["Generation engine<br/>tailor-resume · analyze-site · generate-cover-letter<br/>(run on demand; the fill lane parks a task at the fill gate)"]
     store[("SQLite ~/.offeros<br/>profile · applications · artifacts · saved key")]
     fence["Prompt boundary<br/>scraped text fenced as data, not instructions"]
   end
@@ -127,14 +130,19 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
 
 ## What's inside
 
-- **Application pipeline** — hub of your applications with status tabs,
-  autosaved job description, notes, and a fit badge per role.
+- **Application list** — every job you are tracking, what state it is in, and a
+  fit badge per role.
 - **Profile & onboarding** — résumé upload → auto-populated profile (education,
   experience, skills, answer bank, EEO presets); multiple résumés, one per
   application.
-- **Agent workspace** — per-application grounded pipeline: tailoring → JD
-  analysis with a gaps report → conditional cover letter, with conversational
-  gates and real diffs on every tweak.
+- **Application record** — one page per job: what has happened to it (fills,
+  revisions, checks, evidence), what its form asks and which questions you
+  cannot yet answer, and the résumé and cover letter to send — generate,
+  revise with real diffs, accept.
+- **Job reconnaissance** — one click asks whether the posting is still up and,
+  on a supported board, what its form will ask. Deterministic: status codes and
+  the platform's own API, no model, and "could not tell" when that is the
+  truth.
 - **Answer guards** — voluntary self-identification and legally-consequential
   questions (work authorization, sponsorship) are never answered automatically;
   policy acknowledgments are filled but surfaced with their wording afterwards.
@@ -159,9 +167,8 @@ refuse to auto-answer work-authorization questions match on question text, and
 a blank label matches nothing. Heuristics remain as the fallback for pages that
 expose nothing. — `packages/autofill/src/field-meta.ts`
 
-**The agent explains; the pipeline executes.** An application is ~2 minutes of
-wall clock with you watching, so that path stays deterministic — no reasoning
-loop inside it. The agent sits above: triaging, diagnosing, answering questions,
+**The agent explains; the engine executes.** Generating a document is a
+deterministic, grounded step with no reasoning loop inside it. The agent sits above: triaging, diagnosing, answering questions,
 making small gated changes. Failure grouping is done in code, not in a prompt
 (which rows share a cause has an exact answer); every tool call is verified and
 written to a trace, so the steps you see in chat and the ledger a developer

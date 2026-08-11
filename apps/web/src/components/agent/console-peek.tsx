@@ -7,8 +7,6 @@ import { api } from "@/lib/api-client";
 import { subscribeToAgentEvents } from "@/lib/agent-events";
 import type { AttentionItem, AttentionKind } from "@/server/services/attention-service";
 import type { TraceEntry } from "@/server/agent/types";
-import { QueueBar } from "./queue-bar";
-import type { QueueJob } from "./agent-status-bar";
 
 /**
  * The run queue, the "what needs me" inbox, and the agent's activity — folded
@@ -37,13 +35,9 @@ function timeAgo(at: number, now: number): string {
 }
 
 export function ConsolePeek({
-  eligible,
-  jobs,
   initialInbox,
   initialTrace,
 }: {
-  eligible: string[];
-  jobs: QueueJob[];
   initialInbox: AttentionItem[];
   initialTrace: TraceEntry[];
 }) {
@@ -125,8 +119,6 @@ export function ConsolePeek({
                 <X aria-hidden className="size-4" />
               </button>
             </div>
-
-            <QueueBar eligible={eligible} jobs={jobs} />
 
             <section className="space-y-3">
               <div className="flex items-baseline justify-between">

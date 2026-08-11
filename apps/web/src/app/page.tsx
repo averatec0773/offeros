@@ -8,7 +8,6 @@ import { getProfile } from "@/server/repositories/profile-repo";
 import { listFits } from "@/server/repositories/fit-repo";
 import { AddJobDialog } from "@/components/agent/add-job-dialog";
 import { ApplicationList } from "@/components/agent/application-list";
-import { QueueBar } from "@/components/agent/queue-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -49,27 +48,13 @@ export default function HomePage() {
         </div>
       </header>
 
-      {applications.length > 0 && (
-        <QueueBar
-          eligible={active
-            .filter((a) => taskByApplication.get(a.id)?.status !== "done")
-            .map((a) => a.id)}
-          jobs={active.map((a) => ({
-            id: a.id,
-            title: a.jobInfo.jobTitle,
-            company: a.jobInfo.companyName,
-            status: a.status,
-          }))}
-        />
-      )}
-
       {applications.length === 0 ? (
         <div className="space-y-4">
           <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
             <p className="text-title font-semibold">No applications yet</p>
             <p className="mx-auto mt-1 max-w-[460px] text-body text-muted-foreground">
-              Add a job to get started — each one opens its own agent workspace with a tailored
-              résumé, JD analysis, and form-fill handoff.
+              Paste a link and OfferOS tracks it — what the form asks, what you still owe it, and
+              the résumé and letter to send.
             </p>
             <Link
               href="/applications/new"
