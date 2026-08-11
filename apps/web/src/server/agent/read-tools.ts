@@ -1,10 +1,12 @@
-import { PIPELINE_STEPS } from "@offeros/core";
+import { PIPELINE_STEPS, type Application, type Campaign, type PipelineTask } from "@offeros/core";
 import { diagnoseFill, type FillDiagnosis } from "@offeros/autofill";
 import { listApplications, getApplication } from "../repositories/application-repo";
 import { listPipelineTasks, getPipelineTask } from "../repositories/pipeline-task-repo";
 import { newestTaskByApplication } from "../repositories/pipeline-task-by-application";
 import { listTrace } from "../repositories/agent-trace-repo";
 import { listEvents } from "../repositories/application-event-repo";
+import { listCampaigns, getCampaign } from "../repositories/campaign-repo";
+import { campaignProgress, describeProgress } from "../services/campaign-service";
 import { listAnswers } from "../repositories/answer-repo";
 import { getFit } from "../repositories/fit-repo";
 import { getProfile } from "../repositories/profile-repo";
@@ -47,6 +49,47 @@ export interface ApplicationLine {
   taskStatus?: string;
 }
 
+/** One application as the model sees it, with wherever its newest task sits. */
+function toApplicationLine(
+  application: Application,
+  byApp: ReadonlyMap<string, PipelineTask>,
+): ApplicationLine {
+  const task = byApp.get(application.id);
+  return {
+    id: application.id,
+    company: application.jobInfo.companyName,
+    title: application.jobInfo.jobTitle,
+    status: application.status,
+    ...(task ? { step: PIPELINE_STEPS[task.step]?.key, taskStatus: task.status } : {}),
+  };
+}
+
+/**
+ * The split a summary answer is made of: application status, refined by where
+ * the task is parked when the application is still moving. Deterministic
+ * arithmetic, computed here rather than left to the model — see
+ * list_applications' comment for why.
+ */
+function splitByStatus(lines: ApplicationLine[]): Record<string, number> {
+  const byStatus: Record<string, number> = {};
+  for (const line of lines) {
+    const key =
+      line.status === "saved" || line.status === "applying"
+        ? `${line.status}${line.step ? ` at ${line.step}` : ""}`
+        : line.status;
+    byStatus[key] = (byStatus[key] ?? 0) + 1;
+  }
+  return byStatus;
+}
+
+/** "3 applied, 2 saved at fill-form" — the split as one line. */
+function describeSplit(byStatus: Record<string, number>): string {
+  return Object.entries(byStatus)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${n} ${k}`)
+    .join(", ");
+}
+
 /**
  * Everything in flight — as COUNTS first, rows second.
  *
@@ -79,30 +122,9 @@ export const listApplicationsTool: Tool<
         a.jobInfo.companyName.toLowerCase().includes(needle) ||
         a.jobInfo.jobTitle.toLowerCase().includes(needle),
     );
-    const lines = apps.map((a): ApplicationLine => {
-      const task = byApp.get(a.id);
-      return {
-        id: a.id,
-        company: a.jobInfo.companyName,
-        title: a.jobInfo.jobTitle,
-        status: a.status,
-        ...(task ? { step: PIPELINE_STEPS[task.step]?.key, taskStatus: task.status } : {}),
-      };
-    });
-    // The split the summary answer is made of: application status, refined by
-    // where the task is parked when the application is still moving.
-    const byStatus: Record<string, number> = {};
-    for (const line of lines) {
-      const key =
-        line.status === "saved" || line.status === "applying"
-          ? `${line.status}${line.step ? ` at ${line.step}` : ""}`
-          : line.status;
-      byStatus[key] = (byStatus[key] ?? 0) + 1;
-    }
-    const split = Object.entries(byStatus)
-      .sort((a, b) => b[1] - a[1])
-      .map(([k, n]) => `${n} ${k}`)
-      .join(", ");
+    const lines = apps.map((a) => toApplicationLine(a, byApp));
+    const byStatus = splitByStatus(lines);
+    const split = describeSplit(byStatus);
     return {
       ok: true,
       summary:
@@ -118,6 +140,96 @@ export const listApplicationsTool: Tool<
         // keeps one runaway list from eating the reasoning window.
         applications: lines.slice(0, ROW_BUDGET),
       },
+    };
+  },
+  verify: async () => null,
+};
+
+export interface CampaignLine {
+  id: string;
+  name: string;
+  /** The campaign's own state ("active", "archived"), not its members'. */
+  status: string;
+  members: number;
+  submitted: number;
+  needsYou: number;
+  inProgress: number;
+  /** The same one-line progress the campaigns page shows. */
+  progress: string;
+}
+
+/**
+ * Batches, and how far each one has got.
+ *
+ * Campaigns were entirely invisible to the agent: the user groups a wave of
+ * applications, runs it, and then "how is my August batch going?" could only
+ * be answered by listing every application and hoping the names lined up.
+ *
+ * The arithmetic is `campaignProgress` — the SAME function the campaigns page
+ * counts with, not a second implementation that can drift from it. With no
+ * input this lists every campaign; with a campaignId it opens one, returning
+ * its member applications and their split by status.
+ */
+export const readCampaignTool: Tool<
+  { campaignId?: string } | void,
+  | { campaigns: CampaignLine[]; total: number }
+  | { campaign: CampaignLine; byStatus: Record<string, number>; applications: ApplicationLine[] }
+> = {
+  id: "read_campaign",
+  description:
+    'Read the user\'s campaigns — named batches of applications. With no input, lists every campaign with how far each has got (members, submitted, waiting on the user). Pass {"campaignId":"<id>"} to open one: its member applications and their split by status. Use for "how is my batch going", "what is in this campaign", or any question about a group of applications rather than one job.',
+  parse: (input) => {
+    const id = (input as Record<string, unknown> | null)?.campaignId;
+    return typeof id === "string" && id.trim() !== "" ? { campaignId: id.trim() } : undefined;
+  },
+  run: async (ctx, input) => {
+    const applications = listApplications(ctx.db);
+    const byApp = newestTaskByApplication(listPipelineTasks(ctx.db));
+    const lineFor = (campaign: Campaign): CampaignLine => {
+      const progress = campaignProgress(campaign.id, applications, byApp);
+      return {
+        id: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        ...progress,
+        progress: describeProgress(progress),
+      };
+    };
+
+    if (input?.campaignId) {
+      const campaign = getCampaign(ctx.db, input.campaignId);
+      if (!campaign) {
+        return {
+          ok: false,
+          summary: `no campaign ${input.campaignId}`,
+          failure: { kind: "precondition", reason: "unknown campaign id" },
+        };
+      }
+      const members = applications.filter((a) => a.campaignId === campaign.id);
+      const lines = members.map((a) => toApplicationLine(a, byApp));
+      const byStatus = splitByStatus(lines);
+      const split = describeSplit(byStatus);
+      return {
+        ok: true,
+        summary: `"${campaign.name}": ${lineFor(campaign).progress}${split ? ` — ${split}` : ""}`,
+        result: {
+          campaign: lineFor(campaign),
+          byStatus,
+          applications: lines.slice(0, ROW_BUDGET),
+        },
+      };
+    }
+
+    const campaigns = listCampaigns(ctx.db).map(lineFor);
+    return {
+      ok: true,
+      summary: campaigns.length
+        ? `${campaigns.length} campaign(s): ${campaigns
+            .slice(0, ROW_BUDGET)
+            .map((c) => `"${c.name}" (${c.progress})`)
+            .join("; ")}`
+        : "no campaigns yet",
+      result: { total: campaigns.length, campaigns: campaigns.slice(0, ROW_BUDGET) },
     };
   },
   verify: async () => null,
@@ -618,6 +730,7 @@ export const readArtifactTool: Tool<
 /** Every read the agent may perform, by id. */
 export const READ_TOOLS = {
   [listApplicationsTool.id]: listApplicationsTool,
+  [readCampaignTool.id]: readCampaignTool,
   [readApplicationTool.id]: readApplicationTool,
   [readFillReportTool.id]: readFillReportTool,
   [readTraceTool.id]: readTraceTool,

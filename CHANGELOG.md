@@ -47,8 +47,9 @@ locally and never sent to the browser. System prompts are editable per task.
 **Campaigns.** Group applications into named batches — select jobs on the
 list, move them into a campaign, and run the whole batch through the same
 queue and the same gates as anything else. Each campaign shows how far the
-batch is: submitted, in progress, waiting on you. Deleting a campaign only
-removes the grouping; the applications stay.
+batch is: submitted, in progress, waiting on you — and the agent can read that
+same count, so "how is my August batch going?" is a question you can just ask.
+Deleting a campaign only removes the grouping; the applications stay.
 
 **A verification lab for the fill engine.** Captured forms can be replayed
 offline through the exact same engine that fills live pages. Three synthetic
