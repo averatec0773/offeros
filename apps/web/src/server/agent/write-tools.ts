@@ -33,32 +33,61 @@ const asString = (v: unknown, name: string): string => {
 export interface SaveAnswerInput {
   question: string;
   answer: string;
+  /** Short keyword phrases the fill engine matches on (e.g. ["relocate"]). */
+  patterns: string[];
 }
+
+/** Optional array of short, non-empty match phrases. Absent/empty is fine. */
+const asPatterns = (v: unknown): string[] => {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((p): p is string => typeof p === "string" && p.trim() !== "")
+    .map((p) => p.trim());
+};
 
 /**
  * Upsert into the answer bank, with the same rule the panel's Accept flow
  * follows: when an EXISTING entry already matches the question, only its
  * answer is updated — never its patterns, because a curated multi-pattern
- * entry clobbered by an object spread was a real bug once. A new question
- * becomes a new entry whose single pattern is the question itself.
+ * entry clobbered by an object spread was a real bug once.
+ *
+ * A new question is stored with its match patterns FIRST: the fill engine
+ * matches a stored pattern against the live field's question by whole-phrase
+ * (or every-content-word) containment, so a whole SENTENCE rarely matches a
+ * terse form label ("Relocation?"). Short keywords ("relocate") do. The agent
+ * passes those; the full question is kept alongside for exact-wording matches
+ * and for display.
  */
 export const saveAnswerTool: Tool<SaveAnswerInput, { id: string; updated: boolean }> = {
   id: "save_answer",
   description:
-    'Save the user\'s answer to an application question into the answer bank, so every future form that asks it gets it automatically. Input: {"question":"...","answer":"..."}. Updates the existing entry when the question is already known.',
+    'Save the user\'s answer to an application question so every future form that asks it fills automatically. Input: {"question":"the full question","answer":"...","patterns":["short","keywords"]}. `patterns` are the distinctive keywords the fill engine matches on — pass 1-3 short ones (e.g. ["relocate","relocation"] for a relocation question), because a full sentence will not match a terse form label. Updates the existing entry when the question is already known. NOTE: this records the answer for the fill engine — the actual typing into the live ATS page is done by the browser panel on the next fill, not here.',
   parse: (input) => {
     const o = (input ?? {}) as Record<string, unknown>;
-    return { question: asString(o.question, "question"), answer: asString(o.answer, "answer") };
+    return {
+      question: asString(o.question, "question"),
+      answer: asString(o.answer, "answer"),
+      patterns: asPatterns(o.patterns),
+    };
   },
   run: async (ctx, input) => {
     const normalized = normalizeQuestion(input.question);
     const existing = listAnswers(ctx.db).find((entry) =>
       entry.questionPatterns.some((p) => normalizeQuestion(p) === normalized),
     );
+    // Short keywords first (they carry the match), the full question last (for
+    // exact-wording priority + display), de-duplicated by normalized form.
+    const seen = new Set<string>();
+    const questionPatterns = [...input.patterns, input.question].filter((p) => {
+      const n = normalizeQuestion(p);
+      if (n === "" || seen.has(n)) return false;
+      seen.add(n);
+      return true;
+    });
     const saved = existing
       ? updateAnswer(ctx.db, existing.id, { answer: input.answer })
       : createAnswer(ctx.db, {
-          questionPatterns: [input.question],
+          questionPatterns,
           answer: input.answer,
           type: "text",
           category: "custom",

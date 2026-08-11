@@ -7,6 +7,7 @@ import { createDb, type Db } from "../../db/client";
 import { createApplication, getApplication } from "../../repositories/application-repo";
 import { saveProfile, getProfile } from "../../repositories/profile-repo";
 import { listAnswers } from "../../repositories/answer-repo";
+import { matchAnswer } from "@offeros/autofill";
 import { runTool } from "../run-tool";
 import { listTrace } from "../../repositories/agent-trace-repo";
 import {
@@ -72,6 +73,23 @@ describe("save_answer / delete_answer", () => {
     const out = await runTool(deleteAnswerTool, ctx(), { question: "never asked" });
     expect(out.ok).toBe(false);
     expect(out.failure?.kind).toBe("precondition");
+  });
+
+  it("short keyword patterns let the saved answer match a terse form label", async () => {
+    // The screenshot case: the user answers a long relocation question. Saving
+    // the whole sentence would not match the short label the live form shows.
+    await runTool(saveAnswerTool, ctx(), {
+      question:
+        "If you are not located in the Bay Area, CA, are you open and willing to relocate to that area on your first day of employment?",
+      answer: "Yes",
+      patterns: ["relocate", "relocation"],
+    });
+    const bank = listAnswers(db);
+    // The keyword pattern is stored (first, for matching) alongside the question.
+    expect(bank[0]!.questionPatterns).toContain("relocate");
+    // It now matches a terse form label the full sentence never would.
+    expect(matchAnswer("Relocation?", bank)?.answer).toBe("Yes");
+    expect(matchAnswer("Open to relocate to the Bay Area?", bank)?.answer).toBe("Yes");
   });
 });
 
