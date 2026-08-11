@@ -174,6 +174,31 @@ export function getPending(fetchImpl: typeof fetch = fetch): Promise<ApiResult<F
   return call<FillTicket[]>("/agent/fill/pending", undefined, fetchImpl);
 }
 
+/**
+ * One item waiting on the user. Mirrors apps/web's `AttentionItem`
+ * (attention-service.ts) structurally — it lives in the web app's server
+ * layer, not in `@offeros/core`, so it cannot be imported the way the types
+ * above are. `kind` stays a plain string: the panel renders the headline the
+ * server already wrote, so a new kind must not break this client.
+ */
+export type InboxItem = {
+  applicationId: string;
+  jobTitle: string;
+  companyName: string;
+  kind: string;
+  headline: string;
+  detail?: string;
+  at: number;
+};
+
+/** Everything waiting on the user, across every application, in priority
+ *  order — the same list the web app's console shows. */
+export function getInbox(fetchImpl: typeof fetch = fetch): Promise<ApiResult<InboxItem[]>> {
+  return call<{ inbox: InboxItem[] }>("/agent/inbox", undefined, fetchImpl).then((res) =>
+    res.ok ? { ok: true as const, value: res.value.inbox ?? [] } : res,
+  );
+}
+
 export function claim(
   handoffId: string,
   fetchImpl: typeof fetch = fetch,

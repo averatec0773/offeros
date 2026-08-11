@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FillPanel } from "../../src/sidepanel/fill-panel";
+import { HomePanel } from "../../src/sidepanel/home-panel";
 import { useActiveTab } from "../../src/sidepanel/use-active-tab";
 import { Button } from "../../src/components/ui/button";
 import { matchAts } from "../../src/lib/autofill/recipes";
@@ -22,6 +23,7 @@ import {
   generateAnswer,
   generateCoverLetter,
   getFit,
+  getInbox,
   getPending,
   instantFill,
   listAnswers,
@@ -39,15 +41,6 @@ import { requestStartWebApp } from "../../src/lib/web-launcher";
 import { getFillBinding } from "../../src/lib/fill-binding";
 import { subscribeAgentEvents } from "../../src/lib/agent-events";
 import { ExternalLink, PlugZap } from "lucide-react";
-
-// Supported ATS shown to orient the user on an unsupported page. Data, not UI copy.
-const PLATFORMS = [
-  { name: "Greenhouse", host: "boards.greenhouse.io" },
-  { name: "Lever", host: "jobs.lever.co" },
-  { name: "Ashby", host: "jobs.ashbyhq.com" },
-  { name: "iCIMS", host: "careers-*.icims.com" },
-  { name: "Workday", host: "*.myworkdayjobs.com" },
-] as const;
 
 // The web-app fill API, bound to the real fetch. Tests inject fakes into FillPanel directly.
 const api = {
@@ -72,6 +65,10 @@ const api = {
   createAnswer,
   updateAnswer,
 };
+
+// The reads the off-ATS dashboard needs, kept separate so HomePanel's surface
+// stays the one call it actually makes.
+const homeApi = { getInbox: () => getInbox() };
 
 export default function App() {
   const activeTab = useActiveTab();
@@ -279,23 +276,12 @@ export default function App() {
             navigateTab={navigateTab}
           />
         ) : (
-          <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
-            <p className="text-body font-semibold text-text-primary">Open a job application page</p>
-            <p className="mt-1 text-caption leading-relaxed text-text-secondary">
-              OfferOS fills applications on these platforms:
-            </p>
-            <ul className="mt-3 space-y-1.5">
-              {PLATFORMS.map((p) => (
-                <li
-                  key={p.name}
-                  className="flex items-center justify-between rounded-xl bg-bg-base px-3 py-2 text-caption"
-                >
-                  <span className="font-medium text-text-primary">{p.name}</span>
-                  <span className="text-text-tertiary">{p.host}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <HomePanel
+            api={homeApi}
+            webReachable={webReachable}
+            openWebApp={openWebApp}
+            openApplication={openApplication}
+          />
         )}
       </div>
 

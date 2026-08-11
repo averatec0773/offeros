@@ -57,12 +57,16 @@ describe("Side panel App", () => {
     expect(screen.getByText("You submit — OfferOS never does.")).toBeInTheDocument();
   });
 
-  it("unsupported tab shows the empty state listing supported platforms", async () => {
+  it("unsupported tab shows the dashboard — a way into the web app, and where filling works", async () => {
     (
       browser.tabs.query as unknown as { mockResolvedValue: (v: unknown) => void }
     ).mockResolvedValue([{ id: 7, url: "https://example.com/careers" }]);
     render(<App />);
-    expect(await screen.findByText("Open a job application page")).toBeInTheDocument();
+    // The panel opens anywhere now, so this state is a dashboard rather than
+    // the old "you're on the wrong page" apology.
+    expect(await screen.findByText("Needs you")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open OfferOS" })).toBeInTheDocument();
+    // Orientation is kept, demoted below the dashboard.
     for (const name of ["Greenhouse", "Lever", "Ashby", "Workday"]) {
       expect(screen.getByText(name)).toBeInTheDocument();
     }

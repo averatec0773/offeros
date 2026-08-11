@@ -103,6 +103,11 @@ is involved in any of it; every figure is a count.
   never seen the new schema, and fail with `no such table`. The schema is now
   re-applied whenever the connection is older than the build, identified by a
   fingerprint derived from the schema itself.
+- **A toolbar button that did nothing.** The extension's side panel was enabled
+  only on supported application forms, so clicking the icon anywhere else was a
+  silent no-op with nothing to explain it. The panel now opens on any page: on
+  an application form it drives the fill, and everywhere else it shows what is
+  waiting on you and opens the web app.
 - **Wrong-tenant claims.** The extension could claim a fill ticket belonging to
   a different posting when two tabs looked alike; tickets are now bound to a
   tab explicitly.

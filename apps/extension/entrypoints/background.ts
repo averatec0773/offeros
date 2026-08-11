@@ -19,41 +19,27 @@ export default defineBackground(() => {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   }
 
-  // Per-tab sidePanel enablement does NOT survive a browser restart, and
-  // without a startup-time event the worker stays dormant until a tab switch
-  // or navigation — first click of the day would hit a disabled panel and do
-  // nothing. Registering onStartup guarantees this whole body (behavior +
-  // enable sweep + orphan reinjection) runs when Chrome launches.
+  // Without a startup-time event the worker stays dormant until a tab switch
+  // or navigation. Registering onStartup guarantees this whole body (panel
+  // enablement + orphan reinjection) runs when Chrome launches.
   chrome.runtime.onStartup?.addListener(() => {});
 
-  // The panel only lives on supported ATS tabs. Chrome quirk: with a global
-  // default_path, a user-opened panel is "global" and per-tab enabled:false
-  // does NOT close it — the documented recipe is to disable the panel
-  // globally first, then enable it per-tab, which makes every opened panel
-  // inherently tab-bound (closes on unrelated tabs, returns on apply pages).
+  // The panel opens on ANY page.
+  //
+  // It used to be enabled per-tab on supported ATS hosts and disabled
+  // everywhere else, which made the toolbar icon a silent no-op off an apply
+  // page — nothing opened, nothing explained why, and "the extension is
+  // broken" is the only fair reading of a button that does nothing. Which page
+  // you are on is a question the PANEL answers (fill mode on an apply page,
+  // dashboard anywhere else), not one the button should refuse.
+  //
+  // Enabling globally also drops the old tab-binding trick (disable globally,
+  // enable per-tab, so an opened panel closed itself on unrelated tabs). The
+  // panel now follows the active tab instead of closing with it, which is what
+  // `useActiveTab` has always done anyway.
   if (chrome.sidePanel?.setOptions) {
-    void chrome.sidePanel.setOptions({ enabled: false }).catch(() => {});
+    void chrome.sidePanel.setOptions({ path: "sidepanel.html", enabled: true }).catch(() => {});
   }
-  const updatePanelForTab = (tabId: number, url: string | undefined) => {
-    if (!chrome.sidePanel?.setOptions) return;
-    const enabled = !!url && matchAts(url) !== null;
-    void chrome.sidePanel.setOptions({ tabId, path: "sidepanel.html", enabled }).catch(() => {});
-  };
-  chrome.tabs.onActivated.addListener(({ tabId }) => {
-    chrome.tabs.get(tabId, (tab) => {
-      if (!chrome.runtime.lastError) updatePanelForTab(tabId, tab?.url);
-    });
-  });
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.url !== undefined || changeInfo.status === "complete") {
-      updatePanelForTab(tabId, tab.url);
-    }
-  });
-  // Initial sweep so existing tabs are correct right after install/reload
-  // (the dev auto-reload restarts this worker on every build).
-  chrome.tabs.query({}, (tabs) => {
-    for (const tab of tabs) if (tab.id !== undefined) updatePanelForTab(tab.id, tab.url);
-  });
 
   // Orphan recovery: reloading the extension invalidates every injected
   // content script, and Chrome never reinjects into already-open tabs — the
@@ -83,13 +69,13 @@ export default defineBackground(() => {
   };
   void reinjectOrphanedTabs();
 
-  // Self-healing click: with openPanelOnActionClick, onClicked only fires
-  // when the panel could NOT open — i.e. the tab's enablement got lost (fresh
-  // session, missed event). Re-enable and open inside the user gesture on
-  // apply pages; on unsupported pages a silent click is the designed behavior.
+  // Self-healing click: with openPanelOnActionClick, onClicked only fires when
+  // the panel could NOT open — enablement lost to a fresh session or a missed
+  // event. Re-enable and open inside the user gesture, on whatever page this
+  // is: a click that does nothing is never the right answer.
   chrome.action?.onClicked?.addListener((tab) => {
-    if (tab.id === undefined || !tab.url || matchAts(tab.url) === null) return;
     const tabId = tab.id;
+    if (tabId === undefined) return;
     void chrome.sidePanel
       .setOptions({ tabId, path: "sidepanel.html", enabled: true })
       .then(() => chrome.sidePanel.open({ tabId }))
