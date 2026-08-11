@@ -1576,7 +1576,9 @@ describe("FillPanel", () => {
         await userEvent.click(fillBtn);
       });
 
-      expect(api.fetchResumeFile).toHaveBeenCalledWith("res-9");
+      // The fetch is two awaits deep behind the click (claim, then decide
+      // which file to attach), so asserting straight after it races the chain.
+      await waitFor(() => expect(api.fetchResumeFile).toHaveBeenCalledWith("res-9"));
       expect(api.fetchArtifactPdf).not.toHaveBeenCalled();
     });
 
