@@ -1,14 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDb, type Db } from "../../db/client";
-import { saveSettings } from "../../repositories/settings-repo";
-import { getApplication, listApplications } from "../../repositories/application-repo";
-import { getPipelineTaskByApplicationId } from "../../repositories/pipeline-task-by-application";
-import { makeAgentLlm } from "../agent-llm";
-import { runTurn } from "../loop";
-import { EVAL_FIXTURES } from "./fixtures";
 
 /**
  * Behavioral eval harness — the thing that turns "the owner hits the chat and
@@ -25,21 +18,45 @@ import { EVAL_FIXTURES } from "./fixtures";
  *
  * K runs per fixture (OFFEROS_EVAL_K, default 1) surface consistency: a
  * scenario is reported by its pass rate, not a single lucky/unlucky roll.
+ *
+ * OFFEROS_DB_PATH is pointed at a throwaway file BEFORE anything is imported,
+ * and the harness then uses the app's real `getDb()` singleton. That is load-
+ * bearing, not tidiness: the generating tools (tailor_resume, refine_artifact,
+ * draft_answer, compute_fit) reach the provider through
+ * `buildPipelineContext`, which calls `getDb()` — so a harness holding its own
+ * private handle would have those tools read and WRITE the owner's real
+ * database at `~/.offeros/offeros.db`. Between runs the tables are emptied
+ * rather than the file deleted, so the singleton's open handle stays valid.
  */
+
+const dir = mkdtempSync(join(tmpdir(), "offeros-eval-"));
+process.env.OFFEROS_DB_PATH = join(dir, "eval.db");
+
+const { getDb, getSqlite } = await import("../../db/client");
+const { saveSettings } = await import("../../repositories/settings-repo");
+const { getApplication, listApplications } = await import("../../repositories/application-repo");
+const { getPipelineTaskByApplicationId } =
+  await import("../../repositories/pipeline-task-by-application");
+const { makeAgentLlm } = await import("../agent-llm");
+const { runTurn } = await import("../loop");
+const { EVAL_FIXTURES } = await import("./fixtures");
 
 const RUN = process.env.OFFEROS_EVAL === "1";
 const PROVIDER = (process.env.OFFEROS_EVAL_PROVIDER ?? "anthropic") as "anthropic" | "openai";
 const KEY = PROVIDER === "openai" ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
 const K = Math.max(1, Number(process.env.OFFEROS_EVAL_K ?? "1"));
 
-let db: Db;
-let dir: string;
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "offeros-eval-"));
-  db = createDb(join(dir, "t.db"));
+/** Empty every table, so one run's writes never colour the next. */
+function resetDb(): void {
+  const sqlite = getSqlite();
+  const tables = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    .all() as Array<{ name: string }>;
+  for (const t of tables) sqlite.exec(`DELETE FROM "${t.name}"`);
   // Provider + key live only in this throwaway DB's settings for the run.
-  saveSettings(db, {
+  saveSettings(getDb(), {
     agent: {
       enableCustomizeResume: true,
       enableCustomizeCoverLetter: true,
@@ -54,8 +71,7 @@ beforeEach(() => {
       apiKeys: KEY ? { [PROVIDER]: KEY } : {},
     },
   });
-});
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+}
 
 describe.skipIf(!RUN)(`agent behavioral eval (provider: ${PROVIDER}, K=${K})`, () => {
   if (RUN && !KEY) {
@@ -75,23 +91,8 @@ describe.skipIf(!RUN)(`agent behavioral eval (provider: ${PROVIDER}, K=${K})`, (
         const allFails: string[] = [];
         for (let run = 0; run < K; run++) {
           // Fresh seed per run so writes from one run never leak into the next.
-          rmSync(join(dir, "t.db"), { force: true });
-          db = createDb(join(dir, "t.db"));
-          saveSettings(db, {
-            agent: {
-              enableCustomizeResume: true,
-              enableCustomizeCoverLetter: true,
-              useOriginalResume: false,
-              autoConfirm: false,
-              autoSubmit: false,
-            },
-            llm: {
-              provider: PROVIDER,
-              promptOverrides: {},
-              modelOverrides: {},
-              apiKeys: KEY ? { [PROVIDER]: KEY } : {},
-            },
-          });
+          resetDb();
+          const db = getDb();
           const applicationId = fx.seed(db);
           const focus = (id: string) => {
             if (!getApplication(db, id)) return null;
