@@ -78,6 +78,7 @@ export async function POST(request: Request) {
         role: "assistant",
         content: result.answer,
         steps: result.steps,
+        ranOutOfSteps: result.ranOutOfSteps,
       });
       return result;
     };

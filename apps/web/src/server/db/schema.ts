@@ -72,6 +72,10 @@ export const chatMessages = sqliteTable("chat_messages", {
   /** Assistant messages only: the tool steps that produced the answer, so a
    *  reloaded thread can still show what was read/done. */
   steps: text("steps", { mode: "json" }).$type<unknown[]>(),
+  /** Assistant messages only: 1 if the loop hit its step budget before it
+   *  chose to answer. Persisted so a reload keeps the "stopped early" notice
+   *  and out-of-steps rate stays measurable. */
+  ranOutOfSteps: integer("ran_out_of_steps", { mode: "boolean" }),
   at: integer("at").notNull(),
 });
 

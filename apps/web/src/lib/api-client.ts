@@ -136,7 +136,14 @@ export const api = {
     /** The persisted thread for a scope (this application, or global). */
     chatHistory: (applicationId?: string) =>
       request<
-        { id: string; role: "user" | "assistant"; content: string; steps?: unknown[]; at: number }[]
+        {
+          id: string;
+          role: "user" | "assistant";
+          content: string;
+          steps?: unknown[];
+          ranOutOfSteps?: boolean;
+          at: number;
+        }[]
       >(`/agent/chat/history${applicationId ? `?applicationId=${applicationId}` : ""}`),
   },
   campaigns: {

@@ -19,12 +19,20 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   steps?: unknown[];
+  /** Assistant messages: true if the loop ran out of steps before answering. */
+  ranOutOfSteps?: boolean;
   at: number;
 }
 
 export function appendChatMessage(
   db: Db,
-  input: { scope: string; role: "user" | "assistant"; content: string; steps?: unknown[] },
+  input: {
+    scope: string;
+    role: "user" | "assistant";
+    content: string;
+    steps?: unknown[];
+    ranOutOfSteps?: boolean;
+  },
 ): ChatMessage {
   const row: ChatMessage = {
     id: randomUUID(),
@@ -32,10 +40,11 @@ export function appendChatMessage(
     role: input.role,
     content: input.content,
     ...(input.steps ? { steps: input.steps } : {}),
+    ...(input.ranOutOfSteps ? { ranOutOfSteps: true } : {}),
     at: Date.now(),
   };
   db.insert(chatMessages)
-    .values({ ...row, steps: row.steps ?? null })
+    .values({ ...row, steps: row.steps ?? null, ranOutOfSteps: row.ranOutOfSteps ?? null })
     .run();
   return row;
 }
@@ -59,6 +68,7 @@ export function listRecentMessages(db: Db, scope: string, limit = 10): ChatMessa
     role: row.role as "user" | "assistant",
     content: row.content,
     ...(row.steps ? { steps: row.steps } : {}),
+    ...(row.ranOutOfSteps ? { ranOutOfSteps: true } : {}),
     at: row.at,
   }));
 }
@@ -77,6 +87,7 @@ export function listThread(db: Db, scope: string): ChatMessage[] {
       role: row.role as "user" | "assistant",
       content: row.content,
       ...(row.steps ? { steps: row.steps } : {}),
+      ...(row.ranOutOfSteps ? { ranOutOfSteps: true } : {}),
       at: row.at,
     }));
 }

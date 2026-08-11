@@ -77,6 +77,8 @@ export function AgentChat({ applicationId }: { applicationId?: string }) {
               ...loaded[loaded.length - 1]!,
               answer: message.content,
               steps: (message.steps as AgentStep[] | undefined) ?? [],
+              // Persisted, so the "stopped at the limit" notice survives reload.
+              incomplete: message.ranOutOfSteps ?? false,
             };
           }
         }

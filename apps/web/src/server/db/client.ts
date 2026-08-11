@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS style_memories (
   updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY, scope TEXT NOT NULL, role TEXT NOT NULL,
-  content TEXT NOT NULL, steps TEXT, at INTEGER NOT NULL);
+  content TEXT NOT NULL, steps TEXT, ran_out_of_steps INTEGER, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT, status TEXT NOT NULL,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
@@ -110,6 +110,10 @@ const ADDED_COLUMNS: ReadonlyArray<readonly [table: string, column: string, ddl:
   ["applications", "resume_id", "resume_id TEXT"],
   ["applications", "attach_resume", "attach_resume TEXT"],
   ["applications", "campaign_id", "campaign_id TEXT"],
+  // Assistant messages: did the loop hit its step budget before answering?
+  // Persisted so a reloaded thread still shows the "stopped at the limit"
+  // notice, and so out-of-steps rate is measurable after the fact.
+  ["chat_messages", "ran_out_of_steps", "ran_out_of_steps INTEGER"],
 ];
 
 /** SQLite errors on `ALTER TABLE ADD COLUMN` if the column already exists, so
