@@ -1,9 +1,17 @@
-import { eq, desc } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { unlinkSync } from "node:fs";
 import { resumeSchema, type ResumeSummary } from "@offeros/core";
 import { defaultStorageDir, type Db } from "../db/client";
-import { resumes } from "../db/schema";
+import {
+  clearPrimaryFlag,
+  deleteResumeRow,
+  getResumeRow,
+  insertResumeRow,
+  listResumeRows,
+  newestResumeRow,
+  updateResumeRow,
+  type ResumeRow,
+} from "../repositories/resume-repo";
 import { writeResumeFile } from "./resume-storage";
 
 /**
@@ -20,9 +28,7 @@ export class ServiceError extends Error {
 
 const MAX_RESUME_BYTES = 10 * 1024 * 1024;
 
-type Row = typeof resumes.$inferSelect;
-
-function toSummary(row: Row): ResumeSummary {
+function toSummary(row: ResumeRow): ResumeSummary {
   return resumeSchema.parse({
     id: row.id,
     name: row.name,
@@ -42,23 +48,17 @@ export interface StoredResumeFile {
   name: string;
 }
 
-/** Row lookup for streaming a résumé's stored bytes. Null when `id` is
- *  unknown or the row has no stored file (`filePath` null — an imported slot
- *  that never carried a blob, or a legacy row). */
+/** Lookup for streaming a résumé's stored bytes. Null when `id` is unknown or
+ *  the row has no stored file (`filePath` null — an imported slot that never
+ *  carried a blob, or a legacy row). */
 export function getResumeFile(db: Db, id: string): StoredResumeFile | null {
-  const row = db.select().from(resumes).where(eq(resumes.id, id)).get();
+  const row = getResumeRow(db, id);
   if (!row || !row.filePath) return null;
   return { filePath: row.filePath, mimeType: row.mimeType, name: row.name };
 }
 
-/** Clears `isPrimary` on every resume row — the single-primary invariant is
- *  enforced by unconditionally clearing before setting the new one. */
-function clearPrimaryFlag(db: Db): void {
-  db.update(resumes).set({ isPrimary: false }).run();
-}
-
 export function listResumes(db: Db): ResumeSummary[] {
-  return db.select().from(resumes).all().map(toSummary);
+  return listResumeRows(db).map(toSummary);
 }
 
 export interface UploadResumeInput {
@@ -94,7 +94,7 @@ export function uploadResume(
 
   if (input.isPrimary) clearPrimaryFlag(db);
 
-  const row: Row = {
+  const row: ResumeRow = {
     id,
     name: input.name,
     mimeType: input.mimeType,
@@ -105,7 +105,7 @@ export function uploadResume(
     filePath,
     createdAt: now,
   };
-  db.insert(resumes).values(row).run();
+  insertResumeRow(db, row);
   return toSummary(row);
 }
 
@@ -121,7 +121,7 @@ export function updateResume(
   id: string,
   patch: { name?: string; note?: string; isPrimary?: boolean },
 ): ResumeSummary | null {
-  const existing = db.select().from(resumes).where(eq(resumes.id, id)).get();
+  const existing = getResumeRow(db, id);
   if (!existing) return null;
   if (patch.isPrimary === true) clearPrimaryFlag(db);
   const next = {
@@ -129,7 +129,7 @@ export function updateResume(
     note: patch.note !== undefined ? patch.note : existing.note,
     isPrimary: patch.isPrimary ?? existing.isPrimary,
   };
-  db.update(resumes).set(next).where(eq(resumes.id, id)).run();
+  updateResumeRow(db, id, next);
   return toSummary({ ...existing, ...next });
 }
 
@@ -137,9 +137,9 @@ export function updateResume(
  *  If the deleted resume was primary, auto-promotes the most recently uploaded
  *  remaining resume by setting isPrimary: true. No-op if none remain. */
 export function deleteResume(db: Db, id: string): boolean {
-  const existing = db.select().from(resumes).where(eq(resumes.id, id)).get();
+  const existing = getResumeRow(db, id);
   if (!existing) return false;
-  db.delete(resumes).where(eq(resumes.id, id)).run();
+  deleteResumeRow(db, id);
   if (existing.filePath) {
     try {
       unlinkSync(existing.filePath);
@@ -150,15 +150,8 @@ export function deleteResume(db: Db, id: string): boolean {
 
   // Auto-promote the newest remaining resume if we deleted the primary.
   if (existing.isPrimary) {
-    const newest = db
-      .select()
-      .from(resumes)
-      .orderBy(desc(resumes.createdAt), desc(resumes.id))
-      .limit(1)
-      .get();
-    if (newest) {
-      db.update(resumes).set({ isPrimary: true }).where(eq(resumes.id, newest.id)).run();
-    }
+    const newest = newestResumeRow(db);
+    if (newest) updateResumeRow(db, newest.id, { isPrimary: true });
   }
 
   return true;

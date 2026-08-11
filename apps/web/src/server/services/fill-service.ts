@@ -2,7 +2,6 @@ import {
   PIPELINE_STEPS,
   deriveApplicationInfo,
   mergeFieldReports,
-  answerSchema,
   type PipelineTask,
   type Artifact,
   type FieldReport,
@@ -13,7 +12,6 @@ import {
 import { formatEvidence, selectEvidence } from "@offeros/autofill";
 import type { AnswerEntry, FillPersonalInfo, FillProfile } from "@offeros/autofill";
 import type { Db } from "../db/client";
-import { answers } from "../db/schema";
 import {
   createPipelineTask,
   getPipelineTask,
@@ -30,6 +28,7 @@ import { getArtifact } from "../repositories/artifact-repo";
 import { getJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getProfile } from "../repositories/profile-repo";
 import { appendEvent, listEvents } from "../repositories/application-event-repo";
+import { listAnswers } from "../repositories/answer-repo";
 import { buildProfileFacts, resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { listResumes } from "./resume-service";
 import { recordFillOutcome } from "./form-memory";
@@ -304,17 +303,6 @@ function toFillPersonal(profile: Profile | null): FillPersonalInfo {
   };
 }
 
-/** All saved answers, mapped to the engine's AnswerEntry (structurally identical to core's). */
-/** The user's stored answers. Exported because the queue's dealbreaker check
- *  reads the same commitments (sponsorship) rather than keeping its own copy. */
-export function listAnswerBank(db: Db): AnswerEntry[] {
-  return db
-    .select()
-    .from(answers)
-    .all()
-    .map((row) => answerSchema.parse(row.doc) as AnswerEntry);
-}
-
 /** Content of an artifact's current version, or null if the artifact is absent. */
 function currentVersionContent(artifact: Artifact | null): string | null {
   if (!artifact) return null;
@@ -353,7 +341,7 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
     // derived. The derived entries below only cover questions the bank has
     // nothing for.
     answerBank: [
-      ...listAnswerBank(db),
+      ...(listAnswers(db) as AnswerEntry[]),
       ...derivedAnswers(
         profile,
         `${application?.jobInfo.jobTitle ?? ""} ${application?.jdText ?? ""}`,

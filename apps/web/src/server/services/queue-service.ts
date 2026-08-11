@@ -7,7 +7,7 @@ import { createPipelineTask } from "../repositories/pipeline-task-repo";
 import { getApplication } from "../repositories/application-repo";
 import { appendEvent } from "../repositories/application-event-repo";
 import { findConflicts, type ApplicantConstraints } from "@offeros/autofill";
-import { listAnswerBank } from "./fill-service";
+import { listAnswers } from "../repositories/answer-repo";
 import { runTool } from "../agent/run-tool";
 import type { Tool } from "../agent/types";
 
@@ -80,7 +80,7 @@ const HUMAN_GATES = new Set(["fill-form", "submit"]);
  * would be a second place for the same fact to go stale.
  */
 function applicantConstraints(db: Db): ApplicantConstraints {
-  const bank = listAnswerBank(db);
+  const bank = listAnswers(db);
   const sponsorship = bank.find((a) => a.questionPatterns.some((p) => /sponsor/i.test(p)));
   return {
     needsSponsorship: sponsorship ? /^\s*yes\b/i.test(sponsorship.answer) : false,
