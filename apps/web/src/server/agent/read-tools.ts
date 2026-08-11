@@ -8,6 +8,8 @@ import { listAnswers } from "../repositories/answer-repo";
 import { getFit } from "../repositories/fit-repo";
 import { getProfile } from "../repositories/profile-repo";
 import { listResumes } from "../services/resume-service";
+import { getArtifact } from "../repositories/artifact-repo";
+import { resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { formMemorySummary, listIncidents } from "../repositories/form-memory-repo";
 import { buildInbox } from "../services/attention-service";
 import type { Tool, ToolContext } from "./types";
@@ -252,20 +254,32 @@ export const searchAnswersTool: Tool<{ query: string }, { matches: string[]; tot
   verify: async () => null,
 };
 
+/** How much of a job description one read may put in front of the model.
+ *  Long enough to answer "what does this job want", short enough not to eat
+ *  the whole observation window. */
+const JD_BUDGET = 2000;
+
 export interface JobDetail {
   company: string;
   title: string;
   status: string;
   step?: string;
   applyLink?: string;
-  fit?: { overall: number; label: string };
+  /** The job description text, if one was captured. Truncated to JD_BUDGET;
+   *  `jdTruncated` says when there is more. Absent means no JD was stored
+   *  (e.g. the job was added from an apply-only link with no description). */
+  jdText?: string;
+  jdTruncated?: boolean;
+  /** The user's own note on this application, if they left one. */
+  notes?: string;
+  fit?: { overall: number; label: string; whyMatch?: string; gaps?: string[] };
 }
 
 /** One application in full, for when the agent has narrowed down to it. */
 export const readApplicationTool: Tool<void, JobDetail> = {
   id: "read_application",
   description:
-    "Read one application's job, current step, and fit score. Use after list_applications when the question is about a specific job.",
+    "Read one application in full: the job, current step, fit score AND its gaps, the user's note, and the job description text (when one was captured). Use after list_applications for any question about a specific job — including 'what does this job want' or 'read me the JD'.",
   run: async (ctx) => {
     const app = getApplication(ctx.db, ctx.applicationId);
     if (!app) {
@@ -277,16 +291,31 @@ export const readApplicationTool: Tool<void, JobDetail> = {
     }
     const task = ctx.taskId ? getPipelineTask(ctx.db, ctx.taskId) : undefined;
     const fit = getFit(ctx.db, ctx.applicationId);
+    const jd = app.jdText?.trim() ?? "";
     return {
       ok: true,
-      summary: `${app.jobInfo.jobTitle} at ${app.jobInfo.companyName}`,
+      summary: `${app.jobInfo.jobTitle} at ${app.jobInfo.companyName}${jd ? "" : " (no JD stored)"}`,
       result: {
         company: app.jobInfo.companyName,
         title: app.jobInfo.jobTitle,
         status: app.status,
         ...(task ? { step: PIPELINE_STEPS[task.step]?.key } : {}),
         ...(app.jobInfo.applyLink ? { applyLink: app.jobInfo.applyLink } : {}),
-        ...(fit ? { fit: { overall: fit.overall, label: fit.label } } : {}),
+        ...(jd ? { jdText: jd.slice(0, JD_BUDGET) } : {}),
+        ...(jd.length > JD_BUDGET ? { jdTruncated: true } : {}),
+        ...(app.notes?.trim() ? { notes: app.notes.trim() } : {}),
+        ...(fit
+          ? {
+              fit: {
+                overall: fit.overall,
+                label: fit.label,
+                ...(fit.whyMatch ? { whyMatch: fit.whyMatch } : {}),
+                ...(fit.notAlignedSkills.length > 0
+                  ? { gaps: fit.notAlignedSkills.slice(0, ROW_BUDGET).map((g) => g.skill) }
+                  : {}),
+              },
+            }
+          : {}),
       },
     };
   },
@@ -402,6 +431,106 @@ export const readInboxTool: Tool<
   verify: async () => null,
 };
 
+/** How much document text one read may put in front of the model. Long enough
+ *  to analyse or quote a résumé, short enough not to eat the whole window. */
+const DOC_BUDGET = 6000;
+
+/** The user's actual résumé text — the thing "read/analyse my résumé" needs.
+ *  Returns the effective résumé's stored text (the application's selected one,
+ *  else the primary). Honest when a résumé exists but its text was never
+ *  extracted: it says so and points at the structured profile, rather than the
+ *  dead "I can't read it" the old hasText boolean produced. */
+export const readResumeTool: Tool<
+  void,
+  { name?: string; text?: string; truncated?: boolean; hasText: boolean }
+> = {
+  id: "read_resume",
+  description:
+    "Read the text of the user's own uploaded résumé (the selected one for this application, else the primary). Use for 'read/analyse my résumé' or any question about what the résumé says. If the résumé has no extracted text, this says so — fall back to read_profile for the structured work history and skills.",
+  run: async (ctx) => {
+    const app = getApplication(ctx.db, ctx.applicationId);
+    const resume = resolveEffectiveResume({ resumeId: app?.resumeId }, listResumes(ctx.db));
+    if (!resume) {
+      return {
+        ok: true,
+        summary: "no résumé on file",
+        result: { hasText: false },
+      };
+    }
+    const text = resume.text?.trim() ?? "";
+    if (!text) {
+      return {
+        ok: true,
+        summary: `résumé "${resume.name}" has no extracted text`,
+        result: { name: resume.name, hasText: false },
+      };
+    }
+    return {
+      ok: true,
+      summary: `résumé "${resume.name}" (${text.length} chars)`,
+      result: {
+        name: resume.name,
+        text: text.slice(0, DOC_BUDGET),
+        ...(text.length > DOC_BUDGET ? { truncated: true } : {}),
+        hasText: true,
+      },
+    };
+  },
+  verify: async () => null,
+};
+
+/** What the agent GENERATED for this job — the tailored résumé or the cover
+ *  letter — read back so it can be shown, quoted, or iterated on. This is the
+ *  fix for "you made a résumé and I never saw it": the content was always
+ *  stored, just unreachable. */
+export const readArtifactTool: Tool<
+  { kind: "resume" | "cover-letter" },
+  { kind: string; version: number; content: string; truncated?: boolean; rationale?: string }
+> = {
+  id: "read_artifact",
+  description:
+    'Read the current text of something the agent generated for THIS application — a tailored résumé or a cover letter. Input {"kind":"resume"} or {"kind":"cover-letter"}. Use right after tailor_resume / generate_cover_letter to show the user what was produced, or when they ask to see the generated résumé/letter.',
+  parse: (input) => {
+    const kind = (input as { kind?: unknown } | null)?.kind;
+    if (kind !== "resume" && kind !== "cover-letter") {
+      throw new Error('kind must be "resume" or "cover-letter"');
+    }
+    return { kind };
+  },
+  run: async (ctx, input) => {
+    if (!ctx.taskId) {
+      return {
+        ok: false,
+        summary: "no task for this application yet",
+        failure: { kind: "precondition", reason: "nothing has been generated for this job" },
+      };
+    }
+    const noun = input.kind === "resume" ? "tailored résumé" : "cover letter";
+    const artifact = getArtifact(ctx.db, ctx.taskId, input.kind);
+    const version = artifact?.versions.find((v) => v.id === artifact.currentVersionId);
+    if (!artifact || !version) {
+      return {
+        ok: false,
+        summary: `no ${noun} has been generated yet`,
+        failure: { kind: "precondition", reason: `no ${input.kind} artifact for this task` },
+      };
+    }
+    const content = version.content.trim();
+    return {
+      ok: true,
+      summary: `${noun} v${artifact.versions.length} (${content.length} chars)`,
+      result: {
+        kind: input.kind,
+        version: artifact.versions.length,
+        content: content.slice(0, DOC_BUDGET),
+        ...(content.length > DOC_BUDGET ? { truncated: true } : {}),
+        ...(version.rationale ? { rationale: version.rationale } : {}),
+      },
+    };
+  },
+  verify: async () => null,
+};
+
 /** Every read the agent may perform, by id. */
 export const READ_TOOLS = {
   [listApplicationsTool.id]: listApplicationsTool,
@@ -410,6 +539,8 @@ export const READ_TOOLS = {
   [readTraceTool.id]: readTraceTool,
   [searchAnswersTool.id]: searchAnswersTool,
   [readProfileTool.id]: readProfileTool,
+  [readResumeTool.id]: readResumeTool,
+  [readArtifactTool.id]: readArtifactTool,
   [readFormMemoryTool.id]: readFormMemoryTool,
   [readInboxTool.id]: readInboxTool,
 } as const;

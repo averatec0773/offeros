@@ -120,16 +120,29 @@ export const coverLetterTool: Tool<void, ArtifactRun> = {
 };
 
 /** Score this application against the job (advisory, never a gate). */
-export const computeFitTool: Tool<void, { overall: number }> = {
+export const computeFitTool: Tool<
+  void,
+  { overall: number; label: string; whyMatch?: string; gaps?: string[] }
+> = {
   id: "compute_fit",
   description:
-    "Score how well the user fits this job and list the gaps. Advisory: it never blocks an application, it informs whether to spend effort on one.",
+    "Score how well the user fits this job AND list the gaps (missing/weak skills) and why it's a match. Advisory: it never blocks an application, it informs whether to spend effort on one.",
   run: async (ctx) => {
     // The fit task is application-scoped; the pipeline context supplies the
     // provider wiring whether or not an agent task exists yet.
     const runLlm = buildPipelineContext(ctx.taskId ?? ctx.applicationId).runLlm;
     const fit = await computeFit(ctx.db, ctx.applicationId, { runLlm });
-    return { ok: true, summary: `fit ${fit.overall}%`, result: { overall: fit.overall } };
+    const gaps = fit.notAlignedSkills.slice(0, 12).map((g) => g.skill);
+    return {
+      ok: true,
+      summary: `fit ${fit.overall}%${gaps.length ? ` · ${gaps.length} gap(s)` : ""}`,
+      result: {
+        overall: fit.overall,
+        label: fit.label,
+        ...(fit.whyMatch ? { whyMatch: fit.whyMatch } : {}),
+        ...(gaps.length ? { gaps } : {}),
+      },
+    };
   },
   verify: async (ctx) => getFit(ctx.db, ctx.applicationId) !== null,
 };
