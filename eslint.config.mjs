@@ -10,8 +10,10 @@ export default tseslint.config(
       "**/.next/**",
       // The pre-push hook builds here rather than into .next, so a
       // verification build cannot freeze whatever a running dev server is
-      // serving. Build output either way.
+      // serving. `.next-sandbox` is the same trick by hand, for poking at the
+      // app against a throwaway database. Build output either way.
       "**/.next-verify/**",
+      "**/.next-sandbox/**",
       "**/.output/**",
       "**/.wxt/**",
       "**/drizzle/**",

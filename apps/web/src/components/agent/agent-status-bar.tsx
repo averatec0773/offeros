@@ -124,7 +124,7 @@ export function AgentStatusBar({ state, jobCount, onAction, queue }: AgentStatus
             <List className="size-4.5" />
           </button>
           <Link
-            href="/settings"
+            href="/settings/ai"
             aria-label="Settings"
             className="inline-flex size-8 items-center justify-center rounded-full text-primary-foreground/70 transition-colors hover:bg-primary-foreground/10 hover:text-primary-foreground"
           >
