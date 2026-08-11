@@ -1,12 +1,10 @@
-import { PIPELINE_STEPS, type Application, type Campaign, type PipelineTask } from "@offeros/core";
+import { PIPELINE_STEPS, type Application, type PipelineTask } from "@offeros/core";
 import { diagnoseFill, type FillDiagnosis } from "@offeros/autofill";
 import { listApplications, getApplication } from "../repositories/application-repo";
 import { listPipelineTasks, getPipelineTask } from "../repositories/pipeline-task-repo";
 import { newestTaskByApplication } from "../repositories/pipeline-task-by-application";
 import { listTrace } from "../repositories/agent-trace-repo";
 import { listEvents } from "../repositories/application-event-repo";
-import { listCampaigns, getCampaign } from "../repositories/campaign-repo";
-import { campaignProgress, describeProgress } from "../services/campaign-service";
 import { listAnswers } from "../repositories/answer-repo";
 import { getFit } from "../repositories/fit-repo";
 import { getProfile } from "../repositories/profile-repo";
@@ -140,96 +138,6 @@ export const listApplicationsTool: Tool<
         // keeps one runaway list from eating the reasoning window.
         applications: lines.slice(0, ROW_BUDGET),
       },
-    };
-  },
-  verify: async () => null,
-};
-
-export interface CampaignLine {
-  id: string;
-  name: string;
-  /** The campaign's own state ("active", "archived"), not its members'. */
-  status: string;
-  members: number;
-  submitted: number;
-  needsYou: number;
-  inProgress: number;
-  /** The same one-line progress the campaigns page shows. */
-  progress: string;
-}
-
-/**
- * Batches, and how far each one has got.
- *
- * Campaigns were entirely invisible to the agent: the user groups a wave of
- * applications, runs it, and then "how is my August batch going?" could only
- * be answered by listing every application and hoping the names lined up.
- *
- * The arithmetic is `campaignProgress` — the SAME function the campaigns page
- * counts with, not a second implementation that can drift from it. With no
- * input this lists every campaign; with a campaignId it opens one, returning
- * its member applications and their split by status.
- */
-export const readCampaignTool: Tool<
-  { campaignId?: string } | void,
-  | { campaigns: CampaignLine[]; total: number }
-  | { campaign: CampaignLine; byStatus: Record<string, number>; applications: ApplicationLine[] }
-> = {
-  id: "read_campaign",
-  description:
-    'Read the user\'s campaigns — named batches of applications. With no input, lists every campaign with how far each has got (members, submitted, waiting on the user). Pass {"campaignId":"<id>"} to open one: its member applications and their split by status. Use for "how is my batch going", "what is in this campaign", or any question about a group of applications rather than one job.',
-  parse: (input) => {
-    const id = (input as Record<string, unknown> | null)?.campaignId;
-    return typeof id === "string" && id.trim() !== "" ? { campaignId: id.trim() } : undefined;
-  },
-  run: async (ctx, input) => {
-    const applications = listApplications(ctx.db);
-    const byApp = newestTaskByApplication(listPipelineTasks(ctx.db));
-    const lineFor = (campaign: Campaign): CampaignLine => {
-      const progress = campaignProgress(campaign.id, applications, byApp);
-      return {
-        id: campaign.id,
-        name: campaign.name,
-        status: campaign.status,
-        ...progress,
-        progress: describeProgress(progress),
-      };
-    };
-
-    if (input?.campaignId) {
-      const campaign = getCampaign(ctx.db, input.campaignId);
-      if (!campaign) {
-        return {
-          ok: false,
-          summary: `no campaign ${input.campaignId}`,
-          failure: { kind: "precondition", reason: "unknown campaign id" },
-        };
-      }
-      const members = applications.filter((a) => a.campaignId === campaign.id);
-      const lines = members.map((a) => toApplicationLine(a, byApp));
-      const byStatus = splitByStatus(lines);
-      const split = describeSplit(byStatus);
-      return {
-        ok: true,
-        summary: `"${campaign.name}": ${lineFor(campaign).progress}${split ? ` — ${split}` : ""}`,
-        result: {
-          campaign: lineFor(campaign),
-          byStatus,
-          applications: lines.slice(0, ROW_BUDGET),
-        },
-      };
-    }
-
-    const campaigns = listCampaigns(ctx.db).map(lineFor);
-    return {
-      ok: true,
-      summary: campaigns.length
-        ? `${campaigns.length} campaign(s): ${campaigns
-            .slice(0, ROW_BUDGET)
-            .map((c) => `"${c.name}" (${c.progress})`)
-            .join("; ")}`
-        : "no campaigns yet",
-      result: { total: campaigns.length, campaigns: campaigns.slice(0, ROW_BUDGET) },
     };
   },
   verify: async () => null,
@@ -567,7 +475,7 @@ export const readFormMemoryTool: Tool<
 > = {
   id: "read_form_memory",
   description:
-    'Read what the fill engine has learned: how many distinct questions it has met, which recur, and the recorded incidents (things that genuinely went wrong). Pass {"applicationId":"<id>"} to see one application\'s incidents, or nothing for the campaign-wide picture.',
+    'Read what the fill engine has learned: how many distinct questions it has met, which recur, and the recorded incidents (things that genuinely went wrong). Pass {"applicationId":"<id>"} to see one application\'s incidents, or nothing for the picture across every application.',
   parse: (input) => {
     const id = (input as Record<string, unknown> | null)?.applicationId;
     return typeof id === "string" && id !== "" ? { applicationId: id } : undefined;
@@ -730,7 +638,6 @@ export const readArtifactTool: Tool<
 /** Every read the agent may perform, by id. */
 export const READ_TOOLS = {
   [listApplicationsTool.id]: listApplicationsTool,
-  [readCampaignTool.id]: readCampaignTool,
   [readApplicationTool.id]: readApplicationTool,
   [readFillReportTool.id]: readFillReportTool,
   [readTraceTool.id]: readTraceTool,

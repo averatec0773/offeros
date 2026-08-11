@@ -7,14 +7,7 @@ import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
 import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { appendEvent } from "../../repositories/application-event-repo";
-import {
-  readFillReportTool,
-  readTimelineTool,
-  READ_TOOLS,
-  type TimelineLine,
-  type CampaignLine,
-  type ApplicationLine,
-} from "../read-tools";
+import { readFillReportTool, readTimelineTool, READ_TOOLS, type TimelineLine } from "../read-tools";
 import type { ToolContext } from "../types";
 
 /**
@@ -321,95 +314,5 @@ describe("read_timeline exposes the application_events log the agent could not s
 
   it("is registered as a read tool", () => {
     expect(READ_TOOLS.read_timeline).toBe(readTimelineTool);
-  });
-});
-
-import { createCampaign, assignToCampaign } from "../../repositories/campaign-repo";
-import { readCampaignTool } from "../read-tools";
-
-describe("read_campaign makes batches visible to the agent", () => {
-  /** Two campaigns: "August wave" with 3 members (1 submitted), "Backup" empty. */
-  function seedCampaigns() {
-    const august = createCampaign(db, { name: "August wave" }).id;
-    const backup = createCampaign(db, { name: "Backup" }).id;
-    const ids = [appId];
-    for (let i = 2; i <= 3; i++) {
-      ids.push(
-        createApplication(db, {
-          jobInfo: { jobId: `j${i}`, jobTitle: `Role ${i}`, companyName: `Co${i}` },
-        }).id,
-      );
-    }
-    assignToCampaign(db, august, ids);
-    updateApplication(db, ids[0]!, { status: "applied" });
-    return { august, backup };
-  }
-
-  it("lists every campaign with its progress when given no input", async () => {
-    seedCampaigns();
-
-    const obs = await readCampaignTool.run({ db, applicationId: appId }, undefined);
-
-    expect(obs.ok).toBe(true);
-    const r = obs.result as { total: number; campaigns: CampaignLine[] };
-    expect(r.total).toBe(2);
-    const august = r.campaigns.find((c) => c.name === "August wave")!;
-    expect(august).toMatchObject({ members: 3, submitted: 1, inProgress: 2, status: "active" });
-    // The same one-liner the campaigns page shows — one implementation, not two.
-    expect(august.progress).toContain("1/3 submitted");
-    expect(r.campaigns.find((c) => c.name === "Backup")!.members).toBe(0);
-    expect(obs.summary).toContain("August wave");
-  });
-
-  it("opens one campaign: its members and their split by status", async () => {
-    const { august } = seedCampaigns();
-
-    const obs = await readCampaignTool.run({ db, applicationId: appId }, { campaignId: august });
-
-    expect(obs.ok).toBe(true);
-    const r = obs.result as {
-      campaign: CampaignLine;
-      byStatus: Record<string, number>;
-      applications: ApplicationLine[];
-    };
-    expect(r.campaign.name).toBe("August wave");
-    expect(r.applications).toHaveLength(3);
-    expect(r.byStatus).toEqual({ applied: 1, saved: 2 });
-  });
-
-  it("returns only the named campaign's members, not every application", async () => {
-    const { backup } = seedCampaigns();
-    // An application in no campaign at all must not leak into a campaign read.
-    createApplication(db, {
-      jobInfo: { jobId: "loose", jobTitle: "Unfiled", companyName: "Nowhere" },
-    });
-
-    const obs = await readCampaignTool.run({ db, applicationId: appId }, { campaignId: backup });
-
-    const r = obs.result as { campaign: CampaignLine; applications: ApplicationLine[] };
-    expect(r.campaign.members).toBe(0);
-    expect(r.applications).toEqual([]);
-  });
-
-  it("refuses an unknown campaign id as a precondition, not a crash", async () => {
-    const obs = await readCampaignTool.run({ db, applicationId: appId }, { campaignId: "nope" });
-    expect(obs.ok).toBe(false);
-    expect(obs.failure?.kind).toBe("precondition");
-  });
-
-  it("is honest when no campaign exists yet", async () => {
-    const obs = await readCampaignTool.run({ db, applicationId: appId }, undefined);
-    expect(obs.ok).toBe(true);
-    expect(obs.summary).toBe("no campaigns yet");
-  });
-
-  it("parse accepts a campaignId and treats blank/absent as list-everything", () => {
-    expect(readCampaignTool.parse!({ campaignId: " c1 " })).toEqual({ campaignId: "c1" });
-    expect(readCampaignTool.parse!({ campaignId: "" })).toBeUndefined();
-    expect(readCampaignTool.parse!(null)).toBeUndefined();
-  });
-
-  it("is registered as a read tool", () => {
-    expect(READ_TOOLS.read_campaign).toBe(readCampaignTool);
   });
 });

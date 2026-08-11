@@ -6,7 +6,6 @@ import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
 import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { getProfile } from "@/server/repositories/profile-repo";
 import { listFits } from "@/server/repositories/fit-repo";
-import { listCampaigns } from "@/server/repositories/campaign-repo";
 import { ApplicationList } from "@/components/agent/application-list";
 import { QueueBar } from "@/components/agent/queue-bar";
 
@@ -93,11 +92,7 @@ export default function HomePage() {
           )}
         </div>
       ) : (
-        <ApplicationList
-          active={active.map(toRow)}
-          finished={finished.map(toRow)}
-          campaigns={listCampaigns(db)}
-        />
+        <ApplicationList active={active.map(toRow)} finished={finished.map(toRow)} />
       )}
     </main>
   );

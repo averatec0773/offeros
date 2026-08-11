@@ -56,9 +56,6 @@ CREATE TABLE IF NOT EXISTS style_memories (
 CREATE TABLE IF NOT EXISTS chat_messages (
   id TEXT PRIMARY KEY, scope TEXT NOT NULL, role TEXT NOT NULL,
   content TEXT NOT NULL, steps TEXT, ran_out_of_steps INTEGER, at INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS campaigns (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, note TEXT, status TEXT NOT NULL,
-  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS form_shapes (
   question_key TEXT PRIMARY KEY, vendor TEXT NOT NULL, question TEXT NOT NULL,
   classified_type TEXT NOT NULL, seen_count INTEGER NOT NULL DEFAULT 0,
@@ -109,7 +106,6 @@ const ADDED_COLUMNS: ReadonlyArray<readonly [table: string, column: string, ddl:
   ["resumes", "text", "text TEXT"],
   ["applications", "resume_id", "resume_id TEXT"],
   ["applications", "attach_resume", "attach_resume TEXT"],
-  ["applications", "campaign_id", "campaign_id TEXT"],
   // Assistant messages: did the loop hit its step budget before answering?
   // Persisted so a reloaded thread still shows the "stopped at the limit"
   // notice, and so out-of-steps rate is measurable after the fact.

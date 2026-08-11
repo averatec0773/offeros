@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/", label: "Applications" },
   { href: "/agent", label: "Agent" },
-  { href: "/campaigns", label: "Campaigns" },
   { href: "/profile", label: "Profile" },
   { href: "/settings/templates", label: "Templates" },
   { href: "/settings/ai", label: "Settings" },

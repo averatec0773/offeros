@@ -45,7 +45,6 @@ export const applications = sqliteTable("applications", {
   notes: text("notes"),
   resumeId: text("resume_id"),
   attachResume: text("attach_resume"),
-  campaignId: text("campaign_id"),
   appliedAt: integer("applied_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
@@ -55,7 +54,7 @@ export const applications = sqliteTable("applications", {
  * One chat message in an agent conversation thread.
  *
  * `scope` is the thread key: an applicationId for per-application threads, or
- * the literal "global" for the campaign-wide console thread. Three chat doors
+ * the literal "global" for the cross-application console thread. Three chat doors
  * (console, workspace, list-row Ask — and later the extension panel) share
  * threads by scope, which is what makes a conversation continue across
  * surfaces and reloads.
@@ -77,17 +76,6 @@ export const chatMessages = sqliteTable("chat_messages", {
    *  and out-of-steps rate stays measurable. */
   ranOutOfSteps: integer("ran_out_of_steps", { mode: "boolean" }),
   at: integer("at").notNull(),
-});
-
-/** A named batch of applications — see `@offeros/core`'s `campaignSchema` for
- *  the domain contract and the single-membership rationale. */
-export const campaigns = sqliteTable("campaigns", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  note: text("note"),
-  status: text("status").notNull(),
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull(),
 });
 
 export const pipelineTasks = sqliteTable("agent_tasks", {
@@ -252,6 +240,5 @@ export const schema = {
   styleMemories,
   formShapes,
   fillIncidents,
-  campaigns,
   chatMessages,
 };

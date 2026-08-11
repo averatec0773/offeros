@@ -54,7 +54,7 @@ export interface RunTurnArgs {
   ctx: ToolContext;
   question: string;
   /**
-   * Resolve an application the agent named, so a campaign-level conversation
+   * Resolve an application the agent named, so a cross-application conversation
    * can move between jobs. Absent means the conversation is pinned to one
    * application and the agent may not wander.
    */
@@ -204,7 +204,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     }
 
     // A tool call may name a different application — that is how one
-    // conversation covers a whole campaign. Re-scoping here rather than inside
+    // conversation covers every application. Re-scoping here rather than inside
     // the tools keeps the ledger honest: `runTool` writes the trace against
     // ctx.applicationId, so the subject has to move with the call.
     const named = applicationIdIn(decision.input);
@@ -316,7 +316,7 @@ function applicationIdIn(input: unknown): string | null {
  * What the model sees.
  *
  * The tool menu, then the findings so far — nothing else. Progressive
- * disclosure is the point: a fill report has seventy rows and a campaign has
+ * disclosure is the point: a fill report has seventy rows and the whole list has
  * many reports, so the agent is given the means to fetch what it needs rather
  * than everything up front. What it has already fetched stays, because
  * dropping it would make the loop re-fetch and pay twice.

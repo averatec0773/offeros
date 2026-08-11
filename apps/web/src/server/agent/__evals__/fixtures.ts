@@ -30,7 +30,7 @@ export interface EvalFixture {
   note: string;
   question: string;
   /** Seed the throwaway DB; return the applicationId the turn is scoped to,
-   *  or undefined for a global (campaign-wide) question. */
+   *  or undefined for a global (cross-application) question. */
   seed: (db: Db) => string | undefined;
   /** Return a list of failure messages — empty means the scenario passed.
    *  Gets the turn result and the DB (post-turn) so it can assert on both. */

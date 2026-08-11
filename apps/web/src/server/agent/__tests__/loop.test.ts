@@ -266,7 +266,7 @@ describe("acting tools", () => {
   });
 });
 
-describe("campaign scope", () => {
+describe("global scope", () => {
   /** Records the application each call was scoped to, which is what the trace
    *  would have recorded. */
   function spyingTool(seen: string[]): Tool<never, unknown> {
@@ -282,7 +282,7 @@ describe("campaign scope", () => {
   }
 
   it("re-scopes a call to the application the agent named", async () => {
-    // The whole point of a campaign conversation: one turn, several jobs. The
+    // The whole point of a global conversation: one turn, several jobs. The
     // subject has to move with the call, because runTool writes the trace
     // against ctx.applicationId — otherwise work lands on the wrong job's
     // ledger.

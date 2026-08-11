@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  *
  * `applicationId` is optional, and its absence is the difference between the
  * two conversations this serves. With it, the agent is pinned to one job and
- * never asks which. Without it — the campaign console — it can move between
+ * never asks which. Without it — the console — it can move between
  * jobs, and `focus` is how: the loop re-scopes each call to whichever
  * application the agent named, so the trace records the work against the job it
  * was actually about.
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       return ok(result);
     }
 
-    // Campaign scope. The context needs SOME application id — every tool call
+    // Global scope. The context needs SOME application id — every tool call
     // is recorded against one — so it starts on the newest and moves as the
     // agent names others. A user with no applications gets a plain answer
     // rather than an error: "nothing to talk about yet" is the truth.

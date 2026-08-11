@@ -6,7 +6,6 @@ import type {
   ApplicationStatus,
   Artifact,
   ArtifactVersion,
-  Campaign,
   FillHandoff,
   FitAnalysis,
   JdAnalysis,
@@ -127,7 +126,7 @@ export const api = {
     stats: () => request<FillStats>(`/agent/stats`),
     /** One turn of the agent chat. The steps come back with the answer so the
      *  UI can show what was read to produce it. */
-    /** Omit applicationId to talk about the whole campaign. */
+    /** Omit applicationId to talk about every application. */
     chat: (question: string, applicationId?: string) =>
       request<{ answer: string; steps: AgentStep[]; ranOutOfSteps: boolean }>(
         `/agent/chat`,
@@ -145,20 +144,6 @@ export const api = {
           at: number;
         }[]
       >(`/agent/chat/history${applicationId ? `?applicationId=${applicationId}` : ""}`),
-  },
-  campaigns: {
-    list: () => request<Campaign[]>("/campaigns"),
-    create: (input: { name: string; note?: string }) =>
-      request<Campaign>("/campaigns", json("POST", input)),
-    update: (id: string, patch: Partial<Pick<Campaign, "name" | "note" | "status">>) =>
-      request<Campaign>(`/campaigns/${id}`, json("PATCH", patch)),
-    remove: (id: string) => request<{ deleted: boolean }>(`/campaigns/${id}`, { method: "DELETE" }),
-    /** campaignId null = move the applications out of any campaign. */
-    assign: (campaignId: string | null, applicationIds: string[]) =>
-      request<{ assigned: number }>(
-        "/campaigns/assign",
-        json("POST", { campaignId, applicationIds }),
-      ),
   },
   queue: {
     status: () => request<QueueStatus>(`/agent/queue`),

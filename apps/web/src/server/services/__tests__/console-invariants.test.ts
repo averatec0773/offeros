@@ -1,5 +1,5 @@
 /**
- * Adversarial audit of the campaign console (`attention-service.ts` and the
+ * Adversarial audit of the console (`attention-service.ts` and the
  * trace feed it renders). Every case here FAILS today.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
