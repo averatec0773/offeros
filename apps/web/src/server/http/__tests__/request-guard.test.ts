@@ -54,8 +54,20 @@ describe("isAllowedOrigin", () => {
     }
   });
 
-  it("accepts any chrome-extension origin", () => {
+  it("accepts any chrome-extension origin when no allowlist is configured", () => {
     expect(isAllowedOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop")).toBe(true);
+  });
+
+  it("with an allowlist, accepts only listed extension ids", () => {
+    const allow = ["goodidgoodidgoodidgoodidgoodid00"];
+    expect(isAllowedOrigin("chrome-extension://goodidgoodidgoodidgoodidgoodid00", allow)).toBe(
+      true,
+    );
+    expect(isAllowedOrigin("chrome-extension://evilidevilidevilidevilidevilid00", allow)).toBe(
+      false,
+    );
+    // An empty allowlist stays permissive (pre-alpha default).
+    expect(isAllowedOrigin("chrome-extension://anything", [])).toBe(true);
   });
 
   it("rejects scheme confusion around the chrome-extension check", () => {
@@ -120,6 +132,32 @@ describe("isAllowedApiRequest", () => {
         host: "127.0.0.1:3000",
         origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop",
       }),
+    ).toBe(true);
+  });
+
+  it("with an allowlist, blocks an unlisted extension even on a GET (read-path)", () => {
+    const allowedExtensionIds = ["goodidgoodidgoodidgoodidgoodid00"];
+    // The audit's V1: a hostile extension reading PII via a safe method.
+    expect(
+      allow({
+        method: "GET",
+        host: "127.0.0.1:3000",
+        origin: "chrome-extension://evilidevilidevilidevilidevilid00",
+        allowedExtensionIds,
+      }),
+    ).toBe(false);
+    // The allowlisted extension still gets through, GET or write.
+    expect(
+      allow({
+        method: "GET",
+        host: "127.0.0.1:3000",
+        origin: "chrome-extension://goodidgoodidgoodidgoodidgoodid00",
+        allowedExtensionIds,
+      }),
+    ).toBe(true);
+    // A non-extension GET is unaffected by the extension allowlist.
+    expect(
+      allow({ method: "GET", host: "127.0.0.1:3000", allowedExtensionIds, origin: undefined }),
     ).toBe(true);
   });
 

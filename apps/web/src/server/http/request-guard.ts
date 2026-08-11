@@ -35,6 +35,14 @@ export type ApiRequestInfo = {
   host: string | null | undefined;
   /** Raw `Origin` header. Absent → allowed; `"null"` → rejected on writes. */
   origin?: string | null;
+  /**
+   * Extension ids the owner has allowlisted (from OFFEROS_ALLOWED_EXTENSION_IDS).
+   * EMPTY/absent → any `chrome-extension://` origin is accepted, because a
+   * side-loaded pre-alpha extension has no stable published id to pin yet. Once
+   * ids are configured, only those pass — closing the "any installed extension
+   * can read your data" gap from the 2026-08-10 security audit.
+   */
+  allowedExtensionIds?: readonly string[];
 };
 
 /** Strip the port from a Host header value, keeping IPv6 brackets intact. */
@@ -53,7 +61,7 @@ export function isLocalHost(host: string | null | undefined): boolean {
   return LOCAL_HOSTS.has(hostName(host));
 }
 
-export function isAllowedOrigin(origin: string): boolean {
+export function isAllowedOrigin(origin: string, allowedExtensionIds?: readonly string[]): boolean {
   // `Origin: null` is what sandboxed iframes and some cross-site redirects
   // send. It carries no provenance, so it never counts as local.
   if (origin === "null") return false;
@@ -63,16 +71,35 @@ export function isAllowedOrigin(origin: string): boolean {
   } catch {
     return false;
   }
-  if (url.protocol === EXTENSION_SCHEME) return true;
+  if (url.protocol === EXTENSION_SCHEME) {
+    // No allowlist configured → accept any extension (the pre-alpha default;
+    // no stable published id exists to pin). Configured → only listed ids.
+    // For a chrome-extension:// origin, url.hostname is the extension id.
+    if (!allowedExtensionIds || allowedExtensionIds.length === 0) return true;
+    return allowedExtensionIds.includes(url.hostname);
+  }
   if (!LOCAL_ORIGIN_SCHEMES.has(url.protocol)) return false;
   return LOCAL_HOSTS.has(url.hostname.toLowerCase());
 }
 
 /** True when this request may reach the API. See the module comment for why. */
-export function isAllowedApiRequest({ method, host, origin }: ApiRequestInfo): boolean {
+export function isAllowedApiRequest({
+  method,
+  host,
+  origin,
+  allowedExtensionIds,
+}: ApiRequestInfo): boolean {
   if (!isLocalHost(host)) return false;
+  const hasOrigin = origin !== undefined && origin !== null && origin !== "";
+  // A browser extension always attaches its chrome-extension Origin, even on a
+  // GET. If an allowlist is configured, check it regardless of method — the
+  // read-path is where a hostile extension would exfiltrate PII, and exempting
+  // it as a "safe method" was the compounding half of the audit's V1 finding.
+  if (hasOrigin && origin!.startsWith(EXTENSION_SCHEME)) {
+    return isAllowedOrigin(origin!, allowedExtensionIds);
+  }
   if (SAFE_METHODS.has(method.toUpperCase())) return true;
   // Absent Origin means a non-browser client — no CSRF risk to defend against.
-  if (origin === undefined || origin === null || origin === "") return true;
-  return isAllowedOrigin(origin);
+  if (!hasOrigin) return true;
+  return isAllowedOrigin(origin!, allowedExtensionIds);
 }

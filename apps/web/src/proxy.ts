@@ -17,11 +17,20 @@ const FORBIDDEN = {
   result: null,
 };
 
+/** Optional owner allowlist of extension ids. Empty = accept any extension
+ *  origin (pre-alpha default). Set OFFEROS_ALLOWED_EXTENSION_IDS to a
+ *  comma-separated list once the extension has a stable published id. */
+const ALLOWED_EXTENSION_IDS = (process.env.OFFEROS_ALLOWED_EXTENSION_IDS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 export function proxy(request: NextRequest) {
   const allowed = isAllowedApiRequest({
     method: request.method,
     host: request.headers.get("host"),
     origin: request.headers.get("origin"),
+    allowedExtensionIds: ALLOWED_EXTENSION_IDS,
   });
   if (allowed) return NextResponse.next();
   return NextResponse.json(FORBIDDEN, { status: 403 });

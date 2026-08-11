@@ -15,16 +15,23 @@ intentionally unauthenticated — it relies on the server only ever answering
 the person sitting at that machine. Every request — page routes as well as
 `/api/v1` (the middleware matcher covers both) — is checked against a
 loopback `Host` header, and mutating requests are additionally checked
-against an `Origin` allowlist (the web app's own origin and any
-`chrome-extension://` origin). The allowlist accepts any extension id rather
-than a pinned one — we don't currently pin one (WXT's manifest `key` field,
-wired via `VITE_CHROME_EXT_KEY` in `apps/extension/wxt.config.ts`, would give
-a deterministic id with no Web Store listing required, but it isn't enforced
-by default). The Host check is what actually keeps the API localhost-only;
-Origin on top of it is CSRF defense, not an identity check, and pinning the
-extension id is possible future hardening. Requests that fail either check
-are rejected with a 403
-before reaching any route handler.
+against an `Origin` allowlist (the web app's own origin and, subject to the
+setting below, `chrome-extension://` origins).
+
+**Extension-origin allowlist.** By default any `chrome-extension://` origin is
+accepted, because a side-loaded pre-alpha extension has no stable published id
+to pin. Set `OFFEROS_ALLOWED_EXTENSION_IDS` (comma-separated ids) to restrict
+access to your own extension — when set, only those ids pass, and the check
+applies to reads as well as writes, so another installed extension cannot read
+your data through a "safe" GET either. Give the extension a deterministic id by
+committing WXT's manifest `key` (via `VITE_CHROME_EXT_KEY` in
+`apps/extension/wxt.config.ts`) or by publishing it, then allowlist that id.
+
+The Host check is what keeps the API localhost-only regardless of the above.
+Requests that fail any check are rejected with a 403 before reaching any route
+handler. A request with **no** `Origin` (curl, scripts, non-browser local
+clients) is allowed on mutating methods by design — this is a single-user local
+app, and local code execution is already outside the trust boundary.
 
 Running an OfferOS instance reachable from outside localhost (reverse proxy,
 port forwarding, `0.0.0.0` binding) is outside the supported deployment model
