@@ -1723,16 +1723,21 @@ describe("FillPanel", () => {
         await userEvent.click(fillBtn);
       });
 
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({
-            fieldId: "r1",
-            outcome: "needs-user",
-            reason: CUSTOM_UPLOADER_REASON,
-          }),
-        ]),
-        false,
+      // The fill runs async end to end (scan awaits field metadata, then the
+      // attach rejects, then the report posts). Wait for the report rather than
+      // asserting synchronously after the click — the latter was the flake.
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "r1",
+              outcome: "needs-user",
+              reason: CUSTOM_UPLOADER_REASON,
+            }),
+          ]),
+          false,
+        ),
       );
     });
 
@@ -1755,12 +1760,12 @@ describe("FillPanel", () => {
 
       // résumé attached (tailored), but the cover-letter route/attach never fired.
       // The fill is asynchronous end to end — the scan itself now awaits the
-      // page's field metadata — so this waits for the effect rather than
-      // assuming it has already happened. Asserting synchronously was a latent
-      // flake that only showed up under load.
-      await waitFor(() => expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume"));
+      // page's field metadata, then fetches the PDF, then attaches. Wait for the
+      // LAST step (the attach) so the earlier ones are guaranteed done; asserting
+      // any of them synchronously after the click was a latent flake under load.
+      await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(1));
+      expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume");
       expect(api.fetchArtifactPdf).not.toHaveBeenCalledWith("t1", "cover-letter");
-      expect(attachFile).toHaveBeenCalledTimes(1);
     });
 
     it("attaches a confirmed cover letter as a cover-letter-file PDF", async () => {
