@@ -61,9 +61,15 @@ export async function POST(request: Request) {
       scope: string,
       turn: Omit<Parameters<typeof runTurn>[0], "history" | "runLlm">,
     ) => {
+      // Assistant turns are TRUNCATED into the window on purpose. Reproduced
+      // live: after several similar questions, the model imitated the shape
+      // of its own earlier answers over the current answer rules — better
+      // data and better instructions lost to precedent. A 200-char snippet
+      // keeps the referents ("the second one", "that job") that history
+      // exists for, without carrying enough prose to imitate.
       const history = listRecentMessages(db, scope, 10).map((m) => ({
         role: m.role,
-        content: m.content,
+        content: m.role === "assistant" ? m.content.slice(0, 200) : m.content,
       }));
       appendChatMessage(db, { scope, role: "user", content: question.trim() });
       const result = await runTurn({ ...turn, history, runLlm: makeAgentLlm(db) });

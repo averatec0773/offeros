@@ -300,7 +300,7 @@ function buildContext(
   // a fill or an edit lands, so facts are re-read through tools every turn.
   const past =
     history && history.length > 0
-      ? `Recent conversation (oldest first — use it to understand what the user is referring to, but re-read facts through tools rather than trusting earlier answers):\n${history
+      ? `Recent conversation (oldest first — use it ONLY to resolve what the user is referring to. Do not imitate earlier answers: they may predate better tools and better rules, and the answer rules outrank precedent. Re-read facts through tools):\n${history
           .map((m) => `${m.role === "user" ? "User" : "You"}: ${m.content}`)
           .join("\n")}`
       : "";
