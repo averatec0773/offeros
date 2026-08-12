@@ -1380,6 +1380,139 @@ describe("FillPanel", () => {
       expect(api.updateAnswer).not.toHaveBeenCalled();
     });
 
+    /**
+     * Refining is the same call with the user's own words attached. What these
+     * hold: the instruction reaches the server, the new text reaches the page
+     * through the ordinary verified write, Accept still works afterwards, and a
+     * failure is shown rather than swallowed.
+     */
+    describe("per-field refine", () => {
+      const openRefine = async () => {
+        await act(async () => {
+          await userEvent.click(screen.getByRole("button", { name: /Refine/ }));
+        });
+        return screen.getByRole("textbox", { name: /How should this answer change/ });
+      };
+
+      it("sends the typed instruction along with the current draft", async () => {
+        const api = apiWithGeneratedAnswer();
+        renderPanel({ api });
+        await fillAndGetTextarea();
+
+        const input = await openRefine();
+        await act(async () => {
+          await userEvent.type(input, "Shorter, and lead with the compiler work");
+          await userEvent.click(screen.getByRole("button", { name: /Rewrite/ }));
+        });
+
+        expect(api.generateAnswer).toHaveBeenLastCalledWith(
+          "t1",
+          expect.objectContaining({
+            question: answerLabel,
+            existingAnswer: generatedAnswer,
+            instruction: "Shorter, and lead with the compiler work",
+          }),
+        );
+      });
+
+      it("writes the refined text back through the ordinary fill path", async () => {
+        const api = apiWithGeneratedAnswer({
+          generateAnswer: vi
+            .fn()
+            .mockResolvedValueOnce({ ok: true, value: { answer: generatedAnswer } })
+            .mockResolvedValueOnce({ ok: true, value: { answer: "Short version." } }),
+        });
+        const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+        renderPanel({ api, fill });
+        await fillAndGetTextarea();
+
+        const input = await openRefine();
+        await act(async () => {
+          await userEvent.type(input, "shorter");
+          await userEvent.click(screen.getByRole("button", { name: /Rewrite/ }));
+        });
+
+        expect(fill.mock.calls.flatMap((c) => c[0])).toEqual(
+          expect.arrayContaining([{ fieldId: "q1", value: "Short version." }]),
+        );
+        expect(screen.getByDisplayValue("Short version.")).toBeInTheDocument();
+      });
+
+      it("Accept still saves the refined text to the answer bank", async () => {
+        const api = apiWithGeneratedAnswer({
+          generateAnswer: vi
+            .fn()
+            .mockResolvedValueOnce({ ok: true, value: { answer: generatedAnswer } })
+            .mockResolvedValueOnce({ ok: true, value: { answer: "Short version." } }),
+          listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({
+            ok: true,
+            value: [],
+          })),
+        });
+        renderPanel({ api });
+        await fillAndGetTextarea();
+
+        const input = await openRefine();
+        await act(async () => {
+          await userEvent.type(input, "shorter");
+          await userEvent.click(screen.getByRole("button", { name: /Rewrite/ }));
+        });
+        await act(async () => {
+          await userEvent.click(screen.getByRole("button", { name: "Accept" }));
+        });
+
+        expect(api.createAnswer).toHaveBeenCalledWith({
+          question: answerLabel,
+          answer: "Short version.",
+        });
+      });
+
+      it("shows the failure instead of doing nothing", async () => {
+        const api = apiWithGeneratedAnswer({
+          generateAnswer: vi
+            .fn()
+            .mockResolvedValueOnce({ ok: true, value: { answer: generatedAnswer } })
+            .mockResolvedValueOnce({ ok: false, error: "No AI provider connected" }),
+        });
+        renderPanel({ api });
+        await fillAndGetTextarea();
+
+        const input = await openRefine();
+        await act(async () => {
+          await userEvent.type(input, "shorter");
+          await userEvent.click(screen.getByRole("button", { name: /Rewrite/ }));
+        });
+
+        expect(await screen.findByText("No AI provider connected")).toBeInTheDocument();
+        // The draft is untouched — a failed refine must not lose the answer.
+        expect(screen.getByDisplayValue(generatedAnswer)).toBeInTheDocument();
+      });
+
+      it("an empty instruction does nothing at all", async () => {
+        const api = apiWithGeneratedAnswer();
+        renderPanel({ api });
+        await fillAndGetTextarea();
+
+        await openRefine();
+        const before = (api.generateAnswer as unknown as { mock: { calls: unknown[] } }).mock.calls
+          .length;
+        await act(async () => {
+          await userEvent.click(screen.getByRole("button", { name: /Rewrite/ }));
+        });
+        expect(
+          (api.generateAnswer as unknown as { mock: { calls: unknown[] } }).mock.calls.length,
+        ).toBe(before);
+      });
+
+      it("marks refine as spending the user's own API credit", async () => {
+        renderPanel({ api: apiWithGeneratedAnswer() });
+        await fillAndGetTextarea();
+        expect(screen.getByRole("button", { name: /Refine/ }).getAttribute("title")).toContain(
+          "your own API key",
+        );
+      });
+    });
+
     it("generating an answer alone (no accept click) never calls the answer-bank APIs", async () => {
       const api = apiWithGeneratedAnswer({
         listAnswers: vi.fn(async (): Promise<ApiResult<AnswerEntry[]>> => ({

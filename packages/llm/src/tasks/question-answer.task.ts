@@ -12,6 +12,17 @@ export interface QuestionAnswerInput {
   jdText: string;
   resumeText: string;
   existingAnswer?: string;
+  /**
+   * What the applicant asked for, in their own words ("shorter", "lead with the
+   * ML work"). Deliberately NOT fenced: this is the one string in the prompt
+   * the user typed themselves, and fencing it would tell the model to treat
+   * their own request as data to be ignored. Everything scraped from the page
+   * stays fenced around it.
+   *
+   * Only meaningful alongside `existingAnswer` — an instruction with nothing to
+   * revise is just a first draft with a hint.
+   */
+  instruction?: string;
 }
 
 export interface QuestionAnswerOutput {
@@ -28,6 +39,8 @@ const DEFAULT_SYSTEM = [
   "GROUNDING (hard constraint): ground every claim in the provided profile summary, resume, and job description. Never invent employers, dates, metrics, skills, or visa/relocation facts that are not present in the inputs. If the inputs do not contain the fact the question needs (e.g. availability, salary expectations), say so plainly in the answer rather than inventing it, so the applicant can edit it in.",
   "",
   "When an existing answer is given, treat it as a draft to improve — refine and ground it — not as something to contradict.",
+  "",
+  "REVISION: when the applicant has asked for a specific change, that request comes from the applicant themselves, not from the page — follow it. Change what they asked to change and leave the rest of the answer alone; a request to shorten is not a licence to rewrite. Grounding still binds: if what they ask for would require a fact the inputs do not contain, write the rest as asked and leave that part for them rather than inventing it.",
   "",
   "Respond with the answer text only: plain text, no JSON, no markdown formatting, no headings or bullet scaffolding.",
   "",
@@ -75,6 +88,9 @@ export const questionAnswerTask: LlmTask<QuestionAnswerInput, QuestionAnswerOutp
       "Job description:",
       fenceUntrusted(neutralizeFenceTokens(i.jdText)),
       i.existingAnswer ? `\nExisting draft answer to improve:\n---\n${i.existingAnswer}\n---` : "",
+      // The applicant's own words about their own answer. Unfenced on purpose —
+      // see `instruction` on the input type.
+      i.instruction?.trim() ? `\nThe applicant asks for this change:\n${i.instruction.trim()}` : "",
     ]
       .filter((l) => l !== "")
       .join("\n"),

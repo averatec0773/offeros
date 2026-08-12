@@ -16,12 +16,24 @@ const answerBodySchema = z.object({
   context: z.string().optional(),
   options: z.array(z.string().min(1)).max(50).optional(),
   existingAnswer: z.string().optional(),
+  /**
+   * A revision the user typed ("shorter", "lead with the ML work"). Capped
+   * because it goes into the prompt unfenced — it is the user's own words about
+   * their own answer, and fencing it would tell the model to ignore the person
+   * who asked. The cap is the whole of the protection that gives up, so it is a
+   * small one: an instruction is a phrase, not a document.
+   */
+  instruction: z.string().max(500).optional(),
 });
 
 /**
- * Draft a grounded answer to a single free-text application question, using the
- * task's profile/JD/résumé as the fact base and the same provider wiring the
- * pipeline steps use.
+ * Draft — or revise — a grounded answer to a single application question, using
+ * the task's profile/JD/résumé as the fact base and the same provider wiring
+ * the pipeline steps use.
+ *
+ * Revision is the same call with `existingAnswer` + `instruction`: one route,
+ * one grounding assembly, one set of guards. A separate refine endpoint would
+ * have been a second place for those three things to drift apart.
  */
 export async function POST(request: Request, ctx: Ctx) {
   return handle(async () => {
@@ -37,6 +49,7 @@ export async function POST(request: Request, ctx: Ctx) {
       context: body.context,
       options: body.options,
       existingAnswer: body.existingAnswer,
+      instruction: body.instruction,
     })) as QuestionAnswerOutput;
     return ok({ answer: output.answer });
   });

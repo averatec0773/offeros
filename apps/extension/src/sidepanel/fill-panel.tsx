@@ -222,6 +222,12 @@ export function FillPanel({
     null,
   );
   const aiAppliedRef = useRef<Set<string>>(new Set());
+  /** Per-field refine: which row is open, what was typed, which row is running,
+   *  and what went wrong on it. Keyed by fieldId so two rows never share state. */
+  const [refineOpen, setRefineOpen] = useState<string | null>(null);
+  const [refineText, setRefineText] = useState("");
+  const [refineBusy, setRefineBusy] = useState<string | null>(null);
+  const [answerError, setAnswerError] = useState<Map<string, string>>(new Map());
   const [reported, setReported] = useState(false);
   /** Why a Done was refused, when it was. Shown rather than swallowed: a
    *  silently rejected Done is indistinguishable from a working one. */
@@ -753,42 +759,80 @@ export function FillPanel({
 
   // Regenerate one AI answer: re-ask with the current answer as context, rewrite the
   // field, and re-send the report so the workspace sees the new value.
-  const regenerateAnswer = async (entry: {
-    fieldId: string;
-    label: string;
-    answer: string;
-    options?: string[];
-  }) => {
+  /**
+   * Ask for this answer again — optionally saying what to change about it.
+   *
+   * Regenerate and refine are the same call: the only difference is whether the
+   * user said anything about what they wanted. Keeping them one function means
+   * the write-back, the report update, and the "this is no longer the saved
+   * answer" bookkeeping cannot drift between the two.
+   *
+   * A failure is shown on the row rather than swallowed. Silently doing nothing
+   * to a button press is indistinguishable from doing nothing at all — and when
+   * the model succeeded but the page refused the write, the new text is still
+   * put in the panel, because it is worth copying even if the field would not
+   * take it.
+   */
+  const regenerateAnswer = async (
+    entry: {
+      fieldId: string;
+      label: string;
+      answer: string;
+      options?: string[];
+    },
+    instruction?: string,
+  ) => {
     const b = bundleRef.current;
-    if (!b) return;
-    const ans = await api.generateAnswer(b.taskId, {
-      question: entry.label,
-      label: entry.label,
-      context: b.jdSummary ?? undefined,
-      options: entry.options,
-      existingAnswer: entry.answer,
-    });
-    if (!ans.ok || !(await writeOne(entry.fieldId, ans.value.answer))) return;
-    const answer = ans.value.answer;
-    markWritten(entry.fieldId, answer);
-    setAiAnswers((prev) => prev.map((e) => (e.fieldId === entry.fieldId ? { ...e, answer } : e)));
-    setSavedFieldIds((prev) => {
-      if (!prev.has(entry.fieldId)) return prev;
-      const next = new Set(prev);
+    if (!b || refineBusy !== null) return;
+    setRefineBusy(entry.fieldId);
+    setAnswerError((prev) => {
+      const next = new Map(prev);
       next.delete(entry.fieldId);
       return next;
     });
-    for (const [k, r] of reportsRef.current) {
-      if (r.fieldId === entry.fieldId) {
-        reportsRef.current.set(k, {
-          ...r,
-          value: answer,
-          outcome: "filled",
-          source: "ai-generated",
-        });
+    const fail = (message: string) =>
+      setAnswerError((prev) => new Map(prev).set(entry.fieldId, message));
+    try {
+      const ans = await api.generateAnswer(b.taskId, {
+        question: entry.label,
+        label: entry.label,
+        context: b.jdSummary ?? undefined,
+        options: entry.options,
+        existingAnswer: entry.answer,
+        instruction,
+      });
+      if (!ans.ok) {
+        fail(ans.error);
+        return;
       }
+      const answer = ans.value.answer;
+      // The panel shows the new text either way — the write may still fail.
+      setAiAnswers((prev) => prev.map((e) => (e.fieldId === entry.fieldId ? { ...e, answer } : e)));
+      setSavedFieldIds((prev) => {
+        if (!prev.has(entry.fieldId)) return prev;
+        const next = new Set(prev);
+        next.delete(entry.fieldId);
+        return next;
+      });
+      if (!(await writeOne(entry.fieldId, answer))) {
+        fail("The page didn't take the new answer — copy it in yourself.");
+        return;
+      }
+      markWritten(entry.fieldId, answer);
+      for (const [k, r] of reportsRef.current) {
+        if (r.fieldId === entry.fieldId) {
+          reportsRef.current.set(k, {
+            ...r,
+            value: answer,
+            outcome: "filled",
+            source: "ai-generated",
+          });
+        }
+      }
+      await api.postReport(b.taskId, allReports(), false);
+    } finally {
+      setRefineBusy(null);
     }
-    await api.postReport(b.taskId, allReports(), false);
   };
 
   // Accept the (possibly user-edited) AI answer text in the panel: write it into the
@@ -1601,13 +1645,63 @@ export function FillPanel({
                     <span className="flex-1 truncate text-text-primary">{a.label}</span>
                     <button
                       type="button"
+                      onClick={() => {
+                        setRefineOpen((cur) => (cur === a.fieldId ? null : a.fieldId));
+                        setRefineText("");
+                      }}
+                      aria-expanded={refineOpen === a.fieldId}
+                      disabled={refineBusy !== null}
+                      title={SPEND_TITLE}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-[color,transform] duration-fast ease-out-strong hover:text-text-primary active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
+                    >
+                      <SpendMark />
+                      Refine
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void regenerateAnswer(a)}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-[color,transform] duration-fast ease-out-strong hover:text-text-primary active:scale-[0.97]"
+                      disabled={refineBusy !== null}
+                      title={SPEND_TITLE}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro text-text-secondary transition-[color,transform] duration-fast ease-out-strong hover:text-text-primary active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
                     >
                       <RefreshCw aria-hidden className="h-3 w-3" />
-                      Regenerate
+                      {refineBusy === a.fieldId ? "Working…" : "Regenerate"}
                     </button>
                   </div>
+                  {refineOpen === a.fieldId && (
+                    <form
+                      className="flex items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const instruction = refineText.trim();
+                        if (instruction === "") return;
+                        setRefineOpen(null);
+                        setRefineText("");
+                        void regenerateAnswer(a, instruction);
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        aria-label={`How should this answer change? ${a.label}`}
+                        placeholder="Shorter · Lead with the ML work · Less formal"
+                        value={refineText}
+                        onChange={(e) => setRefineText(e.target.value)}
+                        className="min-w-0 flex-1 rounded-full border border-border-subtle bg-bg-base px-3 py-1 text-caption text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
+                      />
+                      <button
+                        type="submit"
+                        disabled={refineText.trim() === "" || refineBusy !== null}
+                        title={SPEND_TITLE}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-1 text-micro font-semibold text-text-primary transition-[color,transform] duration-fast ease-out-strong hover:bg-bg-elevated active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
+                      >
+                        <SpendMark />
+                        Rewrite
+                      </button>
+                    </form>
+                  )}
+                  {answerError.get(a.fieldId) && (
+                    <p className="text-caption text-warning">{answerError.get(a.fieldId)}</p>
+                  )}
                   {a.options ? (
                     <select
                       aria-label={`Answer: ${a.label}`}

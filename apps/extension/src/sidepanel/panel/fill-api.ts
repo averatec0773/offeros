@@ -31,6 +31,8 @@ export interface FillApi {
       context?: string;
       options?: string[];
       existingAnswer?: string;
+      /** A revision the user typed, sent alongside `existingAnswer`. */
+      instruction?: string;
     },
   ) => Promise<ApiResult<{ answer: string }>>;
   /**

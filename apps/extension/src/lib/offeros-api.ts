@@ -250,6 +250,8 @@ export function generateAnswer(
     context?: string;
     options?: string[];
     existingAnswer?: string;
+    /** A revision the user typed, sent alongside `existingAnswer`. */
+    instruction?: string;
   },
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<{ answer: string }>> {
