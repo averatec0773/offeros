@@ -64,7 +64,12 @@ function matchesUrl(pattern: string, url: string): boolean {
   return re.test(url);
 }
 
-const SAMPLE_URL: Record<AtsId, string> = {
+// `generic` is excluded deliberately: it is the recipe for a site the user
+// enabled by hand, it is not in RECIPES, and `matchAts` never returns it for a
+// URL — so there is no address that should reach it.
+type MatchableAtsId = Exclude<AtsId, "generic">;
+
+const SAMPLE_URL: Record<MatchableAtsId, string> = {
   greenhouse: "https://boards.greenhouse.io/acme/jobs/4321",
   lever: "https://jobs.lever.co/acme/1234-5678",
   ashby: "https://jobs.ashbyhq.com/acme/abcd-1234/application",
@@ -87,39 +92,52 @@ function hostPermissions(): string[] {
 describe("every supported ATS is reachable by every script that needs it", () => {
   it("names a sample URL for every recipe", () => {
     for (const recipe of RECIPES) {
-      expect(SAMPLE_URL[recipe.atsId], `no sample URL for ${recipe.atsId}`).toBeTruthy();
+      const id = recipe.atsId as MatchableAtsId;
+      expect(SAMPLE_URL[id], `no sample URL for ${id}`).toBeTruthy();
     }
   });
 
-  it.each(RECIPES.map((r) => r.atsId))("%s: the recipe recognises its own sample URL", (atsId) => {
-    const recipe = RECIPES.find((r) => r.atsId === atsId)!;
-    expect(recipe.urlPatterns.some((p) => p.test(SAMPLE_URL[atsId]))).toBe(true);
-  });
+  it.each(RECIPES.map((r) => r.atsId as MatchableAtsId))(
+    "%s: the recipe recognises its own sample URL",
+    (atsId) => {
+      const recipe = RECIPES.find((r) => r.atsId === atsId)!;
+      expect(recipe.urlPatterns.some((p) => p.test(SAMPLE_URL[atsId]))).toBe(true);
+    },
+  );
 
-  it.each(RECIPES.map((r) => r.atsId))("%s: the engine content script is injected", (atsId) => {
-    const url = SAMPLE_URL[atsId];
-    expect(
-      matchList(atsContent.matches).some((p) => matchesUrl(p, url)),
-      url,
-    ).toBe(true);
-  });
+  it.each(RECIPES.map((r) => r.atsId as MatchableAtsId))(
+    "%s: the engine content script is injected",
+    (atsId) => {
+      const url = SAMPLE_URL[atsId];
+      expect(
+        matchList(atsContent.matches).some((p) => matchesUrl(p, url)),
+        url,
+      ).toBe(true);
+    },
+  );
 
   // The one that was actually broken.
-  it.each(RECIPES.map((r) => r.atsId))("%s: the combobox driver is injected", (atsId) => {
-    const url = SAMPLE_URL[atsId];
-    expect(
-      matchList(atsDriverContent.matches).some((p) => matchesUrl(p, url)),
-      url,
-    ).toBe(true);
-  });
+  it.each(RECIPES.map((r) => r.atsId as MatchableAtsId))(
+    "%s: the combobox driver is injected",
+    (atsId) => {
+      const url = SAMPLE_URL[atsId];
+      expect(
+        matchList(atsDriverContent.matches).some((p) => matchesUrl(p, url)),
+        url,
+      ).toBe(true);
+    },
+  );
 
-  it.each(RECIPES.map((r) => r.atsId))("%s: host permissions cover it", (atsId) => {
-    const url = SAMPLE_URL[atsId];
-    expect(
-      hostPermissions().some((p) => matchesUrl(p, url)),
-      url,
-    ).toBe(true);
-  });
+  it.each(RECIPES.map((r) => r.atsId as MatchableAtsId))(
+    "%s: host permissions cover it",
+    (atsId) => {
+      const url = SAMPLE_URL[atsId];
+      expect(
+        hostPermissions().some((p) => matchesUrl(p, url)),
+        url,
+      ).toBe(true);
+    },
+  );
 
   it("the two content scripts are injected on exactly the same pages", () => {
     expect(matchList(atsDriverContent.matches)).toEqual(matchList(atsContent.matches));

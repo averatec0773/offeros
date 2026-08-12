@@ -2,6 +2,7 @@ import { startDevReload } from "../src/lib/dev-reload";
 import { matchAts } from "../src/lib/autofill/recipes";
 import { isStartWebAppRequest, startWebAppViaHost } from "../src/lib/web-launcher";
 import { captureTab, isCaptureTabRequest } from "../src/lib/tab-capture";
+import { enableOnTab, injectEngine, isEnableOnTabRequest } from "../src/lib/site-enable";
 import {
   isOpenFillTabRequest,
   isGetFillBindingRequest,
@@ -54,16 +55,9 @@ export default defineBackground(() => {
       try {
         await browser.tabs.sendMessage(tab.id, { kind: "OFFEROS_ENGINE_PING" });
       } catch {
-        await chrome.scripting
-          .executeScript({ target: { tabId: tab.id }, files: ["content-scripts/ats.js"] })
-          .catch(() => {});
-        await chrome.scripting
-          .executeScript({
-            target: { tabId: tab.id },
-            files: ["content-scripts/ats-driver.js"],
-            world: "MAIN",
-          })
-          .catch(() => {});
+        // Same pair the enable button injects — one definition, so a third
+        // script can never be added to one path and forgotten in the other.
+        await injectEngine(tab.id, chrome.scripting).catch(() => {});
       }
     }
   };
@@ -119,6 +113,18 @@ export default defineBackground(() => {
       if (isOpenFillTabRequest(msg)) return openFillTab(msg.handoffId, msg.url);
       if (isGetFillBindingRequest(msg)) {
         return getFillBindingFor(msg.tabId ?? sender.tab?.id);
+      }
+      // "Enable OfferOS on this page": the user asked for this tab, so the
+      // engine goes into this tab. The URL is read from the tab itself rather
+      // than taken from the panel's message — the panel's copy could be stale
+      // by a navigation, and the check that decides whether a page may be
+      // injected has to run against the page actually being injected.
+      if (isEnableOnTabRequest(msg)) {
+        const { tabId } = msg;
+        return browser.tabs
+          .get(tabId)
+          .then((tab) => enableOnTab(tabId, tab.url ?? "", chrome.scripting))
+          .catch(() => ({ ok: false, error: "That tab is gone — open the page again." }));
       }
       return undefined;
     },

@@ -39,6 +39,7 @@ import {
 import { requestTabCapture } from "../../src/lib/tab-capture";
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
+import { requestEnableOnTab } from "../../src/lib/site-enable";
 import { getFillBinding } from "../../src/lib/fill-binding";
 import { subscribeAgentEvents } from "../../src/lib/agent-events";
 import { ExternalLink, PlugZap } from "lucide-react";
@@ -74,7 +75,50 @@ const homeApi = { getInbox: () => getInbox() };
 
 export default function App() {
   const activeTab = useActiveTab();
-  const supported = activeTab !== null && matchAts(activeTab.url) !== null;
+
+  /**
+   * Tabs the user has switched OfferOS on for.
+   *
+   * Deliberately per-tab, in memory, and never persisted: "I asked for this
+   * page" is a statement about a visit, not a preference. A tab that navigates
+   * away loses its injected scripts anyway, so remembering the grant would only
+   * make the panel claim a reach it no longer has. The tab-URL effect below
+   * drops the id the moment the page changes, which puts the button back where
+   * an honest panel would put it — in front of the user.
+   */
+  const [enabledTabs, setEnabledTabs] = useState<Map<number, string>>(new Map());
+  const activeTabId = activeTab?.id;
+  const activeTabUrl = activeTab?.url ?? "";
+  const enabledHere =
+    activeTabId !== undefined &&
+    enabledTabs.get(activeTabId) === activeTabUrl &&
+    activeTabUrl !== "";
+  const supported = (activeTab !== null && matchAts(activeTab.url) !== null) || enabledHere;
+
+  // A navigation ends the grant. Chrome tears the injected scripts down with
+  // the document; keeping the entry would leave the panel showing a fill view
+  // over a page with no engine in it.
+  useEffect(() => {
+    if (activeTabId === undefined) return;
+    setEnabledTabs((prev) => {
+      const remembered = prev.get(activeTabId);
+      if (remembered === undefined || remembered === activeTabUrl) return prev;
+      const next = new Map(prev);
+      next.delete(activeTabId);
+      return next;
+    });
+  }, [activeTabId, activeTabUrl]);
+
+  const enableHere = useCallback(async () => {
+    if (activeTabId === undefined) return { ok: false, error: "No page to enable yet." };
+    const res = await requestEnableOnTab(activeTabId);
+    if (res.ok) {
+      setEnabledTabs((prev) => new Map(prev).set(activeTabId, activeTabUrl));
+      // The engine has only just arrived; the panel's scan loop is idle by now.
+      setRescanNonce((n) => n + 1);
+    }
+    return res;
+  }, [activeTabId, activeTabUrl]);
 
   const [apiBase, setApiBase] = useState("");
   const [webReachable, setWebReachable] = useState(true);
@@ -283,6 +327,8 @@ export default function App() {
             webReachable={webReachable}
             openWebApp={openWebApp}
             openApplication={openApplication}
+            tabUrl={activeTab?.url}
+            onEnableHere={enableHere}
           />
         )}
       </div>

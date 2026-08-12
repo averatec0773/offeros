@@ -1,4 +1,4 @@
-import { matchAts } from "../src/lib/autofill/recipes";
+import { matchAts, looksLikeApplicationForm } from "../src/lib/autofill/recipes";
 import { registerEngine } from "../src/lib/engine/engine-service";
 import { createPanelOverlay } from "../src/lib/overlay/panel-overlay";
 import { getFillBinding } from "../src/lib/fill-binding";
@@ -13,7 +13,20 @@ export default defineContentScript({
   // PAGE_CHANGED as hydration mutates, so the panel re-scans to full quality.
   runAt: "document_end",
   async main(ctx) {
-    if (!matchAts(location.href)) return;
+    // Two ways to be here, and they are not the same.
+    //
+    // The manifest injects this script automatically on the five listed ATS
+    // platforms, and there `matchAts` names the site. Everywhere else the
+    // script only arrives because the user pressed "Enable OfferOS on this
+    // page" — no match, no recipe, and no site knowledge whatsoever. That case
+    // has to earn its place: a blog comment box and a newsletter signup are
+    // both forms, and filling one with somebody's phone number because they
+    // asked for help on a careers page would be the worst kind of eager.
+    //
+    // So an unmatched page registers the engine only if it actually looks like
+    // an application form. When it does not, the script simply does nothing and
+    // the panel keeps saying it cannot reach the page — which is true.
+    if (!matchAts(location.href) && !looksLikeApplicationForm(document)) return;
 
     // Fill-highlight style (one literal color — on the page, not in any shadow
     // root, so it cannot read var(--brand)). #00f0a0 is the web app's brand green

@@ -20,7 +20,8 @@
     "adaptation:pdf": "node scripts/resume-adaptation.mjs",
     "probe:workday": "node scripts/workday-skills-probe.mjs",
     "test:watch": "vitest",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "e2e:enable": "node scripts/e2e-enable-on-page.mjs"
   },
   "dependencies": {
     "@offeros/autofill": "*",

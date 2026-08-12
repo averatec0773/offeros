@@ -1,4 +1,4 @@
-export type AtsId = "greenhouse" | "lever" | "ashby" | "icims" | "myworkday";
+export type AtsId = "greenhouse" | "lever" | "ashby" | "icims" | "myworkday" | "generic";
 
 export interface AtsRecipe {
   atsId: AtsId;
@@ -64,6 +64,62 @@ export const RECIPES: AtsRecipe[] = [
     pierceShadow: true,
   },
 ];
+
+/**
+ * The recipe for a site nobody has written a recipe for.
+ *
+ * Not in `RECIPES`, and deliberately not reachable by URL: `matchAts` still
+ * answers null for an unknown host, so nothing about automatic injection
+ * changes. This is only handed out once the user has said "run here", and it
+ * carries no site knowledge at all — a plain form selector and the plain field
+ * list. Everything clever about an unknown page has to come from the field
+ * classifier and the generic driver, not from a guess encoded here.
+ */
+export const GENERIC_RECIPE: AtsRecipe = {
+  atsId: "generic",
+  urlPatterns: [],
+  formSelector: "form",
+  fieldSelector: FIELDS,
+};
+
+/**
+ * Does this page look like something worth offering to fill?
+ *
+ * The conservative half of enabling an arbitrary site. A blog's comment box and
+ * a newsletter signup are forms; treating them as application forms would put
+ * the user's phone number in a comment field. So a form has to look like an
+ * application: it either takes a file (a résumé upload is close to conclusive)
+ * or it asks at least three labelled questions. One search box does not
+ * qualify, and neither does a two-field login.
+ *
+ * Wrong in the safe direction on purpose. A missed application form leaves the
+ * user where they already were — filling it themselves — while a false positive
+ * spends their data on a page that never asked for it.
+ */
+const MIN_LABELLED_FIELDS = 3;
+
+export function looksLikeApplicationForm(root: ParentNode): boolean {
+  // A document with nothing to read is not an application form. Callers reach
+  // this from the engine, which may be handed a document that has not rendered.
+  if (typeof root?.querySelectorAll !== "function") return false;
+  const forms = [...root.querySelectorAll("form")];
+  const scopes: ParentNode[] = forms.length > 0 ? forms : [root];
+  return scopes.some((scope) => {
+    if (scope.querySelector("input[type=file]")) return true;
+    const fields = [...scope.querySelectorAll(FIELDS)];
+    const labelled = fields.filter((el) => {
+      const id = el.getAttribute("id");
+      const hasLabel = id ? scope.querySelector(`label[for="${CSS.escape(id)}"]`) !== null : false;
+      return (
+        hasLabel ||
+        el.getAttribute("aria-label") !== null ||
+        el.getAttribute("aria-labelledby") !== null ||
+        el.closest("label") !== null
+      );
+    });
+    return labelled.length >= MIN_LABELLED_FIELDS;
+  });
+}
 
 export function matchAts(url: string): AtsRecipe | null {
   for (const recipe of RECIPES) {

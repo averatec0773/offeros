@@ -1,5 +1,11 @@
 import { classifyField, type FieldDescriptor } from "@offeros/autofill";
-import { matchAts, companyFromDocTitle, companyFromUrl } from "../autofill/recipes";
+import {
+  matchAts,
+  companyFromDocTitle,
+  companyFromUrl,
+  looksLikeApplicationForm,
+  GENERIC_RECIPE,
+} from "../autofill/recipes";
 import {
   scanFields,
   applyFillDetailed,
@@ -145,7 +151,26 @@ export function createEngine(doc: Document): Engine {
 
   const scan = async (): Promise<ScanResponse> => {
     const href = url();
-    const recipe = matchAts(href);
+    // On an unmatched host the engine is only running because the user enabled
+    // it here, and it gets the generic recipe — a plain form selector, no site
+    // knowledge of any kind. But only if the page actually looks like an
+    // application form: a blog comment box and a newsletter signup are both
+    // forms, and answering `ok` for one would offer to put somebody's phone
+    // number in it. When it does not look like one, the answer is the same
+    // `not_supported` an unknown site has always given.
+    const matched = matchAts(href);
+    // Reading the page can itself fail (a document that has not rendered, a
+    // frame that turns out to be cross-origin). A page we cannot read is not
+    // one we should offer to fill, so that is the same answer as "this is not
+    // an application form".
+    const generic = () => {
+      try {
+        return looksLikeApplicationForm(edoc()) ? GENERIC_RECIPE : null;
+      } catch {
+        return null;
+      }
+    };
+    const recipe = matched ?? generic();
     if (!recipe) return { ok: false, reason: "not_supported" };
     // Ask the page what its fields are before falling back to reading them.
     // Sites that expose nothing (Lever is server-rendered jQuery) return an

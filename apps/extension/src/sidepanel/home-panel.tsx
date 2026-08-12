@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, Inbox } from "lucide-react";
 import { Button } from "../components/ui/button";
 import type { ApiResult, InboxItem } from "../lib/offeros-api";
+import { whyCannotEnable } from "../lib/site-enable";
 
 /**
  * What the panel shows when the page is NOT a supported application form.
@@ -38,6 +39,8 @@ export function HomePanel({
   webReachable,
   openWebApp,
   openApplication,
+  tabUrl,
+  onEnableHere,
 }: {
   api: HomePanelApi;
   /** False while the web app is down — the App-level banner already explains
@@ -45,9 +48,16 @@ export function HomePanel({
   webReachable: boolean;
   openWebApp: () => void;
   openApplication: (applicationId: string) => void;
+  /** The page the user is looking at. Absent while the tab is still resolving. */
+  tabUrl?: string;
+  /** Inject the engine into this tab, because the user asked. Absent in
+   *  contexts with no tab to enable (tests, the overlay's own frame). */
+  onEnableHere?: () => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [items, setItems] = useState<InboxItem[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [enabling, setEnabling] = useState(false);
+  const [enableError, setEnableError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!webReachable) return;
@@ -65,6 +75,8 @@ export function HomePanel({
       live = false;
     };
   }, [api, webReachable]);
+
+  const blockedReason = tabUrl ? whyCannotEnable(tabUrl) : null;
 
   return (
     <div className="space-y-3">
@@ -123,10 +135,49 @@ export function HomePanel({
         )}
       </div>
 
+      {/* Any other site, on request.
+          The five platforms below are the ones OfferOS is injected into
+          automatically. Everywhere else it is absent until asked — which is the
+          point, but it left the panel with nothing to say on the other several
+          thousand career sites. Now it has a button. */}
+      {onEnableHere && tabUrl && (
+        <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
+          <p className="text-body font-semibold text-text-primary">Use OfferOS on this page</p>
+          {blockedReason ? (
+            <p className="mt-1 text-caption leading-relaxed text-text-secondary">{blockedReason}</p>
+          ) : (
+            <>
+              <p className="mt-1 text-caption leading-relaxed text-text-secondary">
+                OfferOS isn't running here. Turn it on to read this page's form and fill it — this
+                page, this visit. Leave the page and it's off again.
+              </p>
+              <Button
+                variant="primary"
+                className="mt-3 w-full rounded-full"
+                disabled={enabling}
+                onClick={() => {
+                  setEnabling(true);
+                  setEnableError(null);
+                  void onEnableHere()
+                    .then((res) => {
+                      if (!res.ok) setEnableError(res.error ?? "Couldn't start OfferOS here.");
+                    })
+                    .finally(() => setEnabling(false));
+                }}
+              >
+                {enabling ? "Starting…" : "Enable OfferOS on this page"}
+              </Button>
+              {enableError && <p className="mt-2 text-caption text-warning">{enableError}</p>}
+            </>
+          )}
+        </div>
+      )}
+
       <div className="rounded-2xl border border-border-subtle bg-bg-elevated p-4">
-        <p className="text-body font-semibold text-text-primary">Filling works here</p>
+        <p className="text-body font-semibold text-text-primary">Always on here</p>
         <p className="mt-1 text-caption leading-relaxed text-text-secondary">
-          Open an application form on one of these and this panel takes over.
+          Open an application form on one of these and this panel takes over, with no button to
+          press.
         </p>
         <ul className="mt-3 space-y-1.5">
           {PLATFORMS.map((p) => (
