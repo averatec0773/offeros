@@ -10,6 +10,7 @@ import { annotateFieldMeta } from "../src/lib/autofill/read-field-meta";
 import { verifyCommitted } from "../src/lib/autofill/select-commit";
 import { matchOptionValue, type SelectOption } from "@offeros/autofill";
 import { fillSkills } from "../src/lib/autofill/skills-fill";
+import { atsMatches } from "../src/lib/ats-hosts";
 
 // React fiber access — documented narrow cast, see plan Global Constraints.
 interface FiberNode {
@@ -95,15 +96,7 @@ function skillsHost(fieldId: string): Element | null {
 }
 
 export default defineContentScript({
-  matches: [
-    "https://*.greenhouse.io/*",
-    "https://boards.greenhouse.io/*",
-    "https://job-boards.greenhouse.io/*",
-    "https://jobs.lever.co/*",
-    "https://jobs.eu.lever.co/*",
-    "https://*.ashbyhq.com/*",
-    "https://*.myworkdayjobs.com/*",
-  ],
+  matches: atsMatches(),
   world: "MAIN",
   main() {
     window.addEventListener("message", (ev: MessageEvent) => {

@@ -2,18 +2,10 @@ import { matchAts } from "../src/lib/autofill/recipes";
 import { registerEngine } from "../src/lib/engine/engine-service";
 import { createPanelOverlay } from "../src/lib/overlay/panel-overlay";
 import { getFillBinding } from "../src/lib/fill-binding";
+import { atsMatches } from "../src/lib/ats-hosts";
 
 export default defineContentScript({
-  matches: [
-    "https://*.greenhouse.io/*",
-    "https://boards.greenhouse.io/*",
-    "https://job-boards.greenhouse.io/*",
-    "https://jobs.lever.co/*",
-    "https://jobs.eu.lever.co/*",
-    "https://*.ashbyhq.com/*",
-    "https://*.icims.com/*",
-    "https://*.myworkdayjobs.com/*",
-  ],
+  matches: atsMatches(),
   // document_end, not the default document_idle: the panel starts probing the
   // moment the tab activates, and on heavy React ATS pages idle can be seconds
   // away — the engine's message listener must exist before the page settles.

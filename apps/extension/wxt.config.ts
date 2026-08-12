@@ -1,4 +1,5 @@
 import { defineConfig } from "wxt";
+import { atsMatches } from "./src/lib/ats-hosts";
 
 const devExtKey = process.env.VITE_CHROME_EXT_KEY ?? "";
 
@@ -16,28 +17,14 @@ export default defineConfig({
       // tabs get no extension gesture, so activeTab can never activate there.
       "<all_urls>",
       "http://localhost/*",
-      "https://*.greenhouse.io/*",
-      "https://boards.greenhouse.io/*",
-      "https://job-boards.greenhouse.io/*",
-      "https://jobs.lever.co/*",
-      "https://jobs.eu.lever.co/*",
-      "https://*.ashbyhq.com/*",
-      "https://*.icims.com/*",
-      "https://*.myworkdayjobs.com/*",
+      ...atsMatches(),
     ],
     // The in-page overlay embeds sidepanel.html in an iframe on apply pages;
     // the page can only load extension resources that are declared here.
     web_accessible_resources: [
       {
         resources: ["sidepanel.html", "chunks/*", "assets/*", "icon/*"],
-        matches: [
-          "https://*.greenhouse.io/*",
-          "https://jobs.lever.co/*",
-          "https://jobs.eu.lever.co/*",
-          "https://*.ashbyhq.com/*",
-          "https://*.icims.com/*",
-          "https://*.myworkdayjobs.com/*",
-        ],
+        matches: atsMatches(),
       },
     ],
     ...(devExtKey ? { key: devExtKey } : {}),
