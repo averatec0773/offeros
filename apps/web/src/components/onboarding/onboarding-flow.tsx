@@ -167,7 +167,7 @@ export function OnboardingFlow({
           // fires, so the warning is handed to the caller to surface once the
           // normal profile view is mounted, rather than shown here.
           warning =
-            "Your profile was saved, but the résumé file couldn't be stored. You can re-upload it from the profile's Resumes section.";
+            "Your profile was saved, but the résumé file couldn't be stored. You can re-upload it from Documents → Base résumés.";
         }
       }
       onComplete(saved, warning);

@@ -11,7 +11,6 @@ import { ExperienceList } from "./experience-list";
 import { SkillsEditor } from "./skills-editor";
 import { AnswersEditor } from "./answers-editor";
 import { EeoEditor } from "./eeo-editor";
-import { ResumesSection } from "@/components/documents/resumes-section";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 
 const SECTIONS: SectionNavItem[] = [
@@ -21,7 +20,6 @@ const SECTIONS: SectionNavItem[] = [
   { id: "skills", label: "Skills" },
   { id: "answers", label: "Answers" },
   { id: "eeo", label: "Equal Employment" },
-  { id: "resumes", label: "Résumés" },
 ];
 
 /** A blank, schema-valid profile document. */
@@ -200,8 +198,10 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
     );
   }
 
-  // Completeness tracks the core Profile document only — Answers/EEO/Resumes
-  // are independent entities with their own persistence, not Profile fields.
+  // Completeness tracks the core Profile document only — Answers and EEO are
+  // independent entities with their own persistence, not Profile fields. (The
+  // résumés were a third: they live on the Documents page now, since a file you
+  // uploaded is an asset, not a field of who you are.)
   const completenessChecks = [
     Boolean(draft.personal.name && draft.personal.email),
     draft.education.length > 0,
@@ -242,7 +242,7 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
 
       <div className="space-y-6">
         {/* The four profile-document sections autosave on change — no Save
-            footer. Answers/EEO/Résumés persist themselves per-action. */}
+            footer. Answers/EEO persist themselves per-action. */}
         <SectionCard id="personal" title="Personal">
           <PersonalForm value={draft.personal} onChange={(v) => patch("personal", v)} />
         </SectionCard>
@@ -270,10 +270,6 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
         >
           <EeoEditor />
         </SectionCard>
-
-        <SectionCard id="resumes" title="Résumés">
-          <ResumesSection />
-        </SectionCard>
       </div>
     </main>
   );
@@ -282,8 +278,8 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
 /**
  * Card chrome for a profile section. The profile-document sections (Personal,
  * Education, Experience, Skills) autosave on change; the entity sections
- * (Answers, Equal Employment, Résumés) persist themselves per-action against
- * their own API — either way there is no per-section Save footer.
+ * (Answers, Equal Employment) persist themselves per-action against their own
+ * API — either way there is no per-section Save footer.
  */
 function SectionCard({
   id,
