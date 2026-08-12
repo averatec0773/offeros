@@ -205,20 +205,24 @@ describe("materials", () => {
     await waitFor(() => expect(api.pipelineTasks.tailor).toHaveBeenCalledWith("t1"));
   });
 
-  it("Accept goes through the approve endpoint — the style-memory learning path", async () => {
-    mount({
-      initialTask: task(),
-      initialArtifacts: [resumeArtifact],
-    });
-    fireEvent.click(screen.getAllByRole("button", { name: "Accept" })[0]!);
-    await waitFor(() =>
-      expect(api.pipelineTasks.approveArtifact).toHaveBeenCalledWith("t1", "resume"),
-    );
+  it("names the state, the version and when — the record's job, not a preview", () => {
+    mount({ initialTask: task(), initialArtifacts: [resumeArtifact] });
+    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByText(/v1/)).toBeTruthy();
   });
 
-  it("offers a revision on a generated document", () => {
+  it("sends the deep work to the document's own route", () => {
     mount({ initialTask: task(), initialArtifacts: [resumeArtifact] });
-    expect(screen.getAllByRole("button", { name: /Change something/i }).length).toBeGreaterThan(0);
+    const open = screen.getAllByRole("link", { name: /Open/ })[0]!;
+    expect(open.getAttribute("href")).toBe("/applications/app-1/doc/resume");
+  });
+
+  it("no longer previews or edits documents in place", () => {
+    // The workbench is the one place to work on a document; a second, smaller
+    // copy of it here is what this replaced.
+    mount({ initialTask: task(), initialArtifacts: [resumeArtifact] });
+    expect(screen.queryByRole("button", { name: /Change something/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Accept$/ })).toBeNull();
   });
 });
 

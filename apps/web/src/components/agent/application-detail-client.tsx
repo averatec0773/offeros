@@ -13,7 +13,6 @@ import {
   type PipelineTask,
   type ResumeSummary,
 } from "@offeros/core";
-import type { LineDiff } from "@/lib/diff";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
 import type { JdAnalysis } from "@offeros/core";
 import type { RequirementsSummary } from "@/server/services/requirements-service";
@@ -22,16 +21,13 @@ import { extensionPresent, openFillTabViaExtension } from "@/lib/extension-bridg
 import { subscribeToAgentEvents } from "@/lib/agent-events";
 import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
-import { ArtifactViewer } from "./artifact-viewer";
 import { ConnectProviderNote } from "./connect-provider-note";
 import { FitCard } from "./fit-card";
 import { FormCard } from "./form-card";
+import { MaterialsCard } from "./materials-card";
 import { JdCard } from "./jd-card";
 import { RequirementsCard } from "./requirements-card";
-import { SpendChip } from "./spend-chip";
 import { TimelineCard } from "./timeline-card";
-import { TweakInput } from "./tweak-input";
-import { VersionDiff } from "./version-diff";
 
 /**
  * One application, as a record rather than a workbench.
@@ -103,9 +99,6 @@ export function ApplicationDetailClient({
   );
 
   const [generating, setGenerating] = useState<ArtifactKind | null>(null);
-  const [tweaking, setTweaking] = useState<ArtifactKind | null>(null);
-  const [tweakDiff, setTweakDiff] = useState<{ kind: ArtifactKind; diff: LineDiff } | null>(null);
-  const [approved, setApproved] = useState<ArtifactKind | null>(null);
   const [checking, setChecking] = useState(false);
   const [fitBusy, setFitBusy] = useState(false);
   const [fitLlmError, setFitLlmError] = useState(false);
@@ -115,7 +108,6 @@ export function ApplicationDetailClient({
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
 
-  const resumeArtifact = artifacts.find((a) => a.kind === "resume") ?? null;
   const coverLetterArtifact = artifacts.find((a) => a.kind === "cover-letter") ?? null;
 
   useEffect(() => {
@@ -268,7 +260,6 @@ export function ApplicationDetailClient({
     setGenerating(kind);
     setError(null);
     setShowConnectBanner(false);
-    setApproved(null);
     try {
       const id = await ensureTask();
       await (kind === "resume" ? api.pipelineTasks.tailor(id) : api.pipelineTasks.coverLetter(id));
@@ -279,19 +270,6 @@ export function ApplicationDetailClient({
     } finally {
       busyRef.current = false;
       setGenerating(null);
-    }
-  }
-
-  async function handleApprove(kind: ArtifactKind) {
-    if (!taskId) return;
-    setError(null);
-    try {
-      await api.pipelineTasks.approveArtifact(taskId, kind);
-      setApproved(kind);
-      setTweakDiff(null);
-      await refresh();
-    } catch {
-      setError("Couldn't record that. Please try again.");
     }
   }
 
@@ -453,6 +431,14 @@ export function ApplicationDetailClient({
 
         {/* ── The materials: what gets sent ───────────────────────────────── */}
         <div className="space-y-4">
+          <MaterialsCard
+            applicationId={application.id}
+            artifacts={artifacts}
+            events={events}
+            generating={generating}
+            onGenerate={(kind) => void handleGenerate(kind)}
+          />
+
           <RequirementsCard
             requirements={requirements}
             onCheck={handleCheck}
@@ -469,58 +455,6 @@ export function ApplicationDetailClient({
               llmError={fitLlmError}
             />
           )}
-
-          <MaterialCard
-            kind="resume"
-            title="Tailored résumé"
-            artifact={resumeArtifact}
-            generating={generating === "resume"}
-            approved={approved === "resume"}
-            onGenerate={() => void handleGenerate("resume")}
-            onTweak={() => setTweaking("resume")}
-            onApprove={() => void handleApprove("resume")}
-          />
-          {tweaking === "resume" && taskId && (
-            <TweakInput
-              taskId={taskId}
-              kind="resume"
-              onResult={(result) => {
-                setTweakDiff({ kind: "resume", diff: result.diff });
-                setTweaking(null);
-                setShowConnectBanner(false);
-                void refresh();
-              }}
-              onCancel={() => setTweaking(null)}
-              onError={(err) => isLlmNotConfigured(err) && setShowConnectBanner(true)}
-            />
-          )}
-          {tweakDiff?.kind === "resume" && <VersionDiff diff={tweakDiff.diff} />}
-
-          <MaterialCard
-            kind="cover-letter"
-            title="Cover letter"
-            artifact={coverLetterArtifact}
-            generating={generating === "cover-letter"}
-            approved={approved === "cover-letter"}
-            onGenerate={() => void handleGenerate("cover-letter")}
-            onTweak={() => setTweaking("cover-letter")}
-            onApprove={() => void handleApprove("cover-letter")}
-          />
-          {tweaking === "cover-letter" && taskId && (
-            <TweakInput
-              taskId={taskId}
-              kind="cover-letter"
-              onResult={(result) => {
-                setTweakDiff({ kind: "cover-letter", diff: result.diff });
-                setTweaking(null);
-                setShowConnectBanner(false);
-                void refresh();
-              }}
-              onCancel={() => setTweaking(null)}
-              onError={(err) => isLlmNotConfigured(err) && setShowConnectBanner(true)}
-            />
-          )}
-          {tweakDiff?.kind === "cover-letter" && <VersionDiff diff={tweakDiff.diff} />}
 
           {resumes.length > 0 && (
             <section className="rounded-2xl border border-border bg-card p-4">
@@ -572,79 +506,6 @@ export function ApplicationDetailClient({
         </div>
       </div>
     </main>
-  );
-}
-
-/**
- * One document: absent and offered, or present and reviewable.
- *
- * "Accept" is not a gate the app is waiting on — nothing blocks without it.
- * It exists because accepting after asking for three changes is the signal
- * style memory learns from, and that signal is only available if the user has
- * a way to say "yes, that one".
- */
-function MaterialCard({
-  kind,
-  title,
-  artifact,
-  generating,
-  approved,
-  onGenerate,
-  onTweak,
-  onApprove,
-}: {
-  kind: ArtifactKind;
-  title: string;
-  artifact: Artifact | null;
-  generating: boolean;
-  approved: boolean;
-  onGenerate: () => void;
-  onTweak: () => void;
-  onApprove: () => void;
-}) {
-  if (!artifact) {
-    return (
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="text-body font-semibold text-foreground">{title}</h2>
-        <p className="mt-1 text-caption text-muted-foreground">
-          {kind === "resume"
-            ? "Reorders and re-emphasises your own résumé for this posting."
-            : "Grounded in this posting and your résumé."}
-        </p>
-        <SpendChip
-          onClick={onGenerate}
-          label="Generate"
-          busyLabel="Generating…"
-          busy={generating}
-          variant="primary"
-          className="mt-3"
-        />
-      </section>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <ArtifactViewer artifact={artifact} />
-      <div className="flex flex-wrap items-center gap-2">
-        <SpendChip onClick={onTweak} label="Change something" />
-        <button
-          type="button"
-          onClick={onApprove}
-          className="rounded-full border border-border px-3.5 py-1.5 text-caption font-semibold text-foreground transition-colors hover:bg-muted"
-        >
-          Accept
-        </button>
-        <SpendChip
-          onClick={onGenerate}
-          label="Start over"
-          busyLabel="Generating…"
-          busy={generating}
-          variant="quiet"
-        />
-        {approved && <span className="text-caption text-success">Accepted</span>}
-      </div>
-    </div>
   );
 }
 

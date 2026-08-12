@@ -17,7 +17,13 @@ export function AppNav() {
   const pathname = usePathname();
 
   function isActive(href: string) {
-    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+    // "/" cannot use the prefix rule — it prefixes everything. But the
+    // applications list, one application, and a document being worked on are
+    // all the same section, so they all light the same lamp. Without this the
+    // nav went blank the moment you opened a job, which read as having left
+    // the app.
+    if (href === "/") return pathname === "/" || pathname.startsWith("/applications");
+    return pathname.startsWith(href);
   }
 
   return (
