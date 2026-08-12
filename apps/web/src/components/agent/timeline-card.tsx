@@ -58,6 +58,12 @@ function describeEvent(event: ApplicationEvent): string {
     }
     case "jd-analyzed":
       return "Read the job description";
+    case "jd-replaced": {
+      const chars = Number(payload.previousChars ?? 0);
+      return chars > 0
+        ? `Replaced the job description (${chars.toLocaleString()} characters discarded)`
+        : "Replaced the job description";
+    }
     case "fill-handoff-created":
       return "Opened the form to fill";
     case "instant-fill-started":

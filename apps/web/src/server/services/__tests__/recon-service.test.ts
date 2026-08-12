@@ -379,3 +379,79 @@ describe("job description backfill", () => {
     expect(htmlToText("<p>A &amp; B</p>")).toBe("A & B");
   });
 });
+
+/**
+ * Who is allowed to replace a description that is already stored.
+ *
+ * The rule was "only fill an empty one", which is right for a check that runs
+ * on its own — silently replacing text the user pasted would be taking
+ * something away from them. It is wrong for a check they pressed. A capture bug
+ * once stored a page's JavaScript as the job description, and with this rule
+ * there was no way to fix it from the UI: every fetch looked at the garbage,
+ * saw a non-empty string, and left it there.
+ */
+describe("replacing a stored description", () => {
+  const GARBAGE = "var app={init:function(){for(var i=0;i<10;i++){go(i);}}};".repeat(6);
+
+  it("an automatic check leaves what is already there alone", async () => {
+    const id = seed("https://boards.greenhouse.io/acme/jobs/4321", GARBAGE);
+    await reconApplication(db, id, {
+      resolve: publicDns,
+      fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
+    });
+    expect(getApplication(db, id)!.jdText).toBe(GARBAGE);
+  });
+
+  it("a check the user pressed replaces it", async () => {
+    const id = seed("https://boards.greenhouse.io/acme/jobs/4321", GARBAGE);
+    await reconApplication(db, id, {
+      allowOverwrite: true,
+      resolve: publicDns,
+      fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
+    });
+    const after = getApplication(db, id)!;
+    expect(after.jdText).not.toBe(GARBAGE);
+    expect(after.jdText).toContain("Python");
+  });
+
+  it("puts what it replaced on the timeline, so a bad fetch is traceable", () => {
+    // A fetch that makes things worse has to be findable afterwards.
+    return (async () => {
+      const id = seed("https://boards.greenhouse.io/acme/jobs/4321", GARBAGE);
+      await reconApplication(db, id, {
+        allowOverwrite: true,
+        resolve: publicDns,
+        fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
+      });
+      const replaced = listEvents(db, id).find((e) => e.kind === "jd-replaced");
+      expect(replaced).toBeTruthy();
+      expect((replaced!.payload as { previousChars: number }).previousChars).toBe(GARBAGE.length);
+      expect((replaced!.payload as { previousPreview: string }).previousPreview).toContain(
+        "var app",
+      );
+    })();
+  });
+
+  it("still fills an empty description without pressing anything", async () => {
+    const id = seed("https://boards.greenhouse.io/acme/jobs/4321");
+    await reconApplication(db, id, {
+      resolve: publicDns,
+      fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
+    });
+    expect(getApplication(db, id)!.jdText).toContain("Python");
+  });
+
+  it("does not record a replacement when the text is identical", async () => {
+    // Fetching the same description twice is not an event.
+    const id = seed("https://boards.greenhouse.io/acme/jobs/4321");
+    const run = () =>
+      reconApplication(db, id, {
+        allowOverwrite: true,
+        resolve: publicDns,
+        fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
+      });
+    await run();
+    await run();
+    expect(listEvents(db, id).filter((e) => e.kind === "jd-replaced")).toHaveLength(0);
+  });
+});

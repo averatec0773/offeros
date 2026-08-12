@@ -17,7 +17,9 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(_request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
-    const result = await reconApplication(getDb(), id);
+    // Pressed by a person, so a description that comes back may replace one
+    // already stored. Automatic checks never do.
+    const result = await reconApplication(getDb(), id, { allowOverwrite: true });
     return result ? ok(result) : notFound("application");
   });
 }

@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Banknote, CalendarClock, MapPin, Sparkles, TrendingUp } from "lucide-react";
-import type { JdAnalysis, JobInfo } from "@offeros/core";
+import {
+  looksLikeCapturedCode,
+  SUSPECT_JD_NOTICE,
+  type JdAnalysis,
+  type JobInfo,
+} from "@offeros/core";
 import { missingSkillsInJd, profileSkillsInJd, segmentJd } from "@/lib/jd-skills";
 import { cn } from "@/lib/utils";
 import { SpendChip } from "./spend-chip";
@@ -82,6 +87,9 @@ export function JdCard({
     [jdText, analysis, profileSkills],
   );
 
+  // Cheap enough to run on every render — it is a character scan over text the
+  // page is about to render anyway.
+  const suspectJd = useMemo(() => looksLikeCapturedCode(jdText), [jdText]);
   const lines = jdText.split("\n");
   const truncated = !expanded && lines.length > COLLAPSED_LINES;
   const shown = truncated ? lines.slice(0, COLLAPSED_LINES).join("\n") : jdText;
@@ -165,6 +173,25 @@ export function JdCard({
         </ul>
       )}
 
+      {/* A description that reads like captured page source. The capture bug is
+          fixed, but the records it already made are not, and a wall of minified
+          JavaScript looks like a wall of text at a glance. One line, offering
+          the two ways out. */}
+      {suspectJd && (
+        <div className="mt-3 rounded-xl border border-warning/40 bg-warning/5 p-3">
+          <p className="text-caption leading-relaxed text-foreground">{SUSPECT_JD_NOTICE}</p>
+          {onCheckPosting && (
+            <button
+              type="button"
+              onClick={onCheckPosting}
+              className="mt-2 rounded-full border border-border px-3 py-1 text-caption font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              Fetch it from the posting
+            </button>
+          )}
+        </div>
+      )}
+
       {jdText.trim() === "" ? (
         <EmptyJd
           editing={editing}
@@ -207,7 +234,7 @@ export function JdCard({
             </div>
           )}
 
-          <p className="mt-3 whitespace-pre-wrap text-body-sm leading-relaxed text-foreground/90">
+          <p className="mt-3 whitespace-pre-wrap break-words text-body-sm leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">
             {segments.map((segment, i) =>
               segment.kind === "plain" ? (
                 <span key={i}>{segment.text}</span>

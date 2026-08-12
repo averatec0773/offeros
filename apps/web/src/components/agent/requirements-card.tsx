@@ -93,7 +93,10 @@ export function RequirementsCard({
               </p>
               <ul className="mt-2 space-y-1">
                 {missing.map((question) => (
-                  <li key={question} className="text-caption text-foreground/80">
+                  <li
+                    key={question}
+                    className="break-words text-caption text-foreground/80 [overflow-wrap:anywhere]"
+                  >
                     {question}
                   </li>
                 ))}

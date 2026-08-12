@@ -83,6 +83,17 @@ export interface ReconDeps {
    *  must be able to say what a name resolves to without touching DNS. */
   resolve?: (hostname: string) => Promise<string[]>;
   now?: () => number;
+  /**
+   * The user asked for this check by pressing a button, so a description that
+   * comes back may replace one already stored.
+   *
+   * Off for every automatic run. The distinction is consent: a check that runs
+   * on its own must not overwrite text the user pasted, and a check they
+   * pressed must not refuse on the grounds that something is already there —
+   * which is how a stored page of captured JavaScript became unfixable from the
+   * UI.
+   */
+  allowOverwrite?: boolean;
 }
 
 /**
@@ -130,7 +141,9 @@ export async function reconApplication(
 
   // Anything the climb learned that we did not have is worth keeping, whatever
   // the verdict turns out to be.
-  const backfilled = extracted ? applyExtraction(db, applicationId, extracted) : false;
+  const backfilled = extracted
+    ? applyExtraction(db, applicationId, extracted, deps.allowOverwrite === true)
+    : false;
 
   try {
     // The verdict, read off the one climb above rather than a second round of
@@ -289,7 +302,12 @@ function summarise(extracted: ExtractedJob, backfilled: boolean) {
  * never replaces one, because an existing description may have come from the
  * real page or from the user. Returns whether a description landed.
  */
-function applyExtraction(db: Db, applicationId: string, extracted: ExtractedJob): boolean {
+function applyExtraction(
+  db: Db,
+  applicationId: string,
+  extracted: ExtractedJob,
+  allowOverwrite: boolean,
+): boolean {
   const vendor = extracted.vendor ?? "unknown";
   if (extracted.questions.length > 0) {
     recordShapes(
@@ -310,14 +328,41 @@ function applyExtraction(db: Db, applicationId: string, extracted: ExtractedJob)
 
   const existing = getApplication(db, applicationId);
   const description = extracted.fields.jdText?.trim();
-  if (existing && !existing.jdText?.trim() && description) {
+  if (!existing || !description) return false;
+
+  const current = existing.jdText?.trim() ?? "";
+  if (current === "") {
     updateApplication(db, applicationId, {
       jdText: description,
       jdSource: extracted.sources.jdText ?? "page",
     });
     return true;
   }
-  return false;
+
+  // Something is already stored. An automatic check leaves it alone — it runs
+  // without being asked, and silently replacing what the user has could throw
+  // away a description they pasted themselves. A check the user PRESSED is a
+  // different act: pressing "fetch it from the posting" is the request to go
+  // and get it, and refusing on the grounds that something is already there is
+  // how a page full of captured JavaScript became impossible to fix from the UI.
+  if (!allowOverwrite || current === description) return false;
+
+  updateApplication(db, applicationId, {
+    jdText: description,
+    jdSource: extracted.sources.jdText ?? "page",
+  });
+  // The replaced text goes on the timeline, not into the void: a fetch that
+  // makes things worse has to be traceable to the moment it happened.
+  appendEvent(db, {
+    applicationId,
+    kind: "jd-replaced",
+    payload: {
+      previousChars: current.length,
+      previousPreview: current.slice(0, 280),
+      source: extracted.sources.jdText ?? "page",
+    },
+  });
+  return true;
 }
 
 /**

@@ -58,7 +58,10 @@ export function FillReportCard({ reports }: { reports: FieldReport[] }) {
                 className="flex items-start gap-1.5 text-body text-foreground"
               >
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand" />
-                <span>
+                {/* Labels and values come off arbitrary pages — a minified
+                    token or a long URL has no spaces to break at, and without
+                    this it stretches the card past the column. */}
+                <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                   <span className="font-medium">{r.label}</span>
                   {r.source === "none" ? (
                     r.value && <span className="text-muted-foreground">: {r.value}</span>
@@ -119,7 +122,7 @@ function CauseBlock({ group }: { group: CauseGroup }) {
         {group.fields.map((field, i) => (
           <li
             key={`${field}-${i}`}
-            className="rounded-full bg-background px-2 py-0.5 text-caption text-foreground"
+            className="max-w-full break-words rounded-full bg-background px-2 py-0.5 text-caption text-foreground [overflow-wrap:anywhere]"
           >
             {field}
           </li>
