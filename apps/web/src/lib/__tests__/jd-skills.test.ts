@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { profileSkillsInJd, segmentJd, missingFromAnalysis } from "../jd-skills";
+import { profileSkillsInJd, segmentJd, missingSkillsInJd } from "../jd-skills";
 
 /**
  * The zero-cost half of the JD card. It has to be right about two things: not
@@ -91,18 +91,38 @@ describe("segmentJd", () => {
   });
 });
 
-describe("missingFromAnalysis", () => {
-  it("keeps the gaps the applicant genuinely lacks", () => {
-    expect(missingFromAnalysis(["Go", "Kubernetes"], ["Python"])).toEqual(["Go", "Kubernetes"]);
+describe("missingSkillsInJd", () => {
+  const jd = "You will need Go and Kubernetes, plus NoSQL databases.";
+  const analysis = { requiredSkills: ["Go", "Kubernetes"], gaps: ["NoSQL"] };
+
+  it("keeps the terms the posting names and the applicant lacks", () => {
+    expect(missingSkillsInJd(jd, analysis, ["Python"])).toEqual(["Go", "Kubernetes", "NoSQL"]);
   });
 
-  it("drops a gap the applicant actually has, alias included", () => {
-    // The analysis said "Kubernetes"; the profile says "k8s". Not a gap.
-    expect(missingFromAnalysis(["Kubernetes", "Go"], ["k8s"])).toEqual(["Go"]);
+  it("drops a term the applicant has, alias included", () => {
+    expect(missingSkillsInJd(jd, analysis, ["k8s"])).toEqual(["Go", "NoSQL"]);
   });
 
-  it("is empty when there is no analysis yet — it never guesses a requirement", () => {
-    expect(missingFromAnalysis([], ["Python"])).toEqual([]);
+  it("drops prose — the analysis writes gaps for a reader, not as tokens", () => {
+    // Straight from a live run: three sentences that would otherwise have
+    // rendered as 200-character skill chips.
+    const prose = {
+      requiredSkills: [
+        "Bachelor's degree in Computer Science or a related technical field (or equivalent practical experience)",
+      ],
+      gaps: [
+        "There is no evidence from the profile of comfort with NoSQL databases, as the experience focuses more on SQL.",
+      ],
+    };
+    expect(missingSkillsInJd(jd, prose, ["Python"])).toEqual([]);
+  });
+
+  it("drops a term that is nowhere in the posting — nothing to point at", () => {
+    expect(missingSkillsInJd("We need Go.", { requiredSkills: ["Rust"] }, ["Python"])).toEqual([]);
+  });
+
+  it("says nothing at all without an analysis", () => {
+    expect(missingSkillsInJd(jd, null, ["Python"])).toEqual([]);
   });
 });
 

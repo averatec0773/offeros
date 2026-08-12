@@ -84,6 +84,19 @@ describe("the free layer", () => {
     expect([...missing].some((m) => m.textContent === "Go")).toBe(true);
   });
 
+  it("shows no gap chip when the analysis wrote prose instead of terms", () => {
+    // Real analyses often phrase gaps as sentences. A 200-character chip helps
+    // nobody, so the free layer keeps quiet.
+    mount({
+      analysis: {
+        ...analysis,
+        requiredSkills: [],
+        gaps: ["There is no evidence from the profile of comfort with NoSQL databases, as noted."],
+      },
+    });
+    expect(document.querySelectorAll('mark[data-skill="missing"]')).toHaveLength(0);
+  });
+
   it("collapses a long posting behind an expander, and expands it", () => {
     const long = Array.from({ length: 40 }, (_, i) => `Line ${i}`).join("\n");
     mount({ jdText: long });

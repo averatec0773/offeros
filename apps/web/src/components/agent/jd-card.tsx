@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Banknote, CalendarClock, MapPin, Sparkles, TrendingUp } from "lucide-react";
 import type { JdAnalysis, JobInfo } from "@offeros/core";
-import { missingFromAnalysis, profileSkillsInJd, segmentJd } from "@/lib/jd-skills";
+import { missingSkillsInJd, profileSkillsInJd, segmentJd } from "@/lib/jd-skills";
 import { cn } from "@/lib/utils";
 import { SpendChip } from "./spend-chip";
 
@@ -58,8 +58,8 @@ export function JdCard({
 
   const have = useMemo(() => profileSkillsInJd(jdText, profileSkills), [jdText, profileSkills]);
   const missing = useMemo(
-    () => missingFromAnalysis(analysis?.gaps ?? [], profileSkills),
-    [analysis?.gaps, profileSkills],
+    () => missingSkillsInJd(jdText, analysis, profileSkills),
+    [jdText, analysis, profileSkills],
   );
 
   const lines = jdText.split("\n");

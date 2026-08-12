@@ -145,19 +145,57 @@ export function segmentJd(
 }
 
 /**
- * The skills a job description asks for that the applicant does not have.
+ * The skills a posting asks for that the applicant does not have — as terms,
+ * not as prose.
  *
- * Deliberately derived from the stored analysis rather than guessed from the
- * text: knowing a term appears is not knowing it is *required*. With no
- * analysis yet, this is empty — the zero-cost layer highlights what it can
- * prove and stays quiet about the rest.
+ * The analysis writes `requiredSkills` and `gaps` for a reader, so in practice
+ * they arrive as whole sentences ("There is no evidence from the profile of
+ * comfort with NoSQL databases, as …"). Running one live posting through this
+ * produced three 200-character "skill chips", which is how this filter came to
+ * exist.
+ *
+ * Two rules, and both have to hold:
+ *
+ *   1. It has to LOOK like a term — a few words, not a clause.
+ *   2. It has to actually appear in the posting. A chip whose word is nowhere
+ *      in the text has nothing to highlight and nothing to point at, so it is
+ *      noise however true it is.
+ *
+ * When the model writes prose, the honest result is an empty list: the free
+ * layer says less rather than saying it badly.
  */
-export function missingFromAnalysis(
-  analysisGaps: readonly string[],
+const MAX_TERM_WORDS = 4;
+const MAX_TERM_CHARS = 40;
+
+function looksLikeTerm(candidate: string): boolean {
+  const trimmed = candidate.trim();
+  if (trimmed === "" || trimmed.length > MAX_TERM_CHARS) return false;
+  if (trimmed.split(/\s+/).length > MAX_TERM_WORDS) return false;
+  // A clause gives itself away with sentence punctuation.
+  return !/[,;:]|\.\s/.test(trimmed);
+}
+
+export function missingSkillsInJd(
+  jdText: string,
+  analysis: { requiredSkills?: readonly string[]; gaps?: readonly string[] } | null,
   profileSkills: readonly string[],
 ): string[] {
-  const candidates = profileSkills.flatMap((s) => skillCandidates(s));
-  return analysisGaps.filter(
-    (gap) => gap.trim() !== "" && pickSkillMatch(candidates, skillCandidates(gap)) === null,
-  );
+  if (!analysis || !jdText.trim()) return [];
+  const profileCandidates = profileSkills.flatMap((s) => skillCandidates(s));
+  const seen = new Set<string>();
+  const missing: string[] = [];
+
+  for (const candidate of [...(analysis.requiredSkills ?? []), ...(analysis.gaps ?? [])]) {
+    const term = candidate.trim();
+    if (!looksLikeTerm(term)) continue;
+    const key = term.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // Already theirs? Then it is not a gap, whatever the analysis called it.
+    if (pickSkillMatch(profileCandidates, skillCandidates(term)) !== null) continue;
+    // Nowhere in the posting? Then there is nothing to highlight.
+    if (skillCandidates(term).every((t) => findTerm(jdText, t) === -1)) continue;
+    missing.push(term);
+  }
+  return missing;
 }

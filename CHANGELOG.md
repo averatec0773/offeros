@@ -41,14 +41,30 @@ identity and demographics, questions with a factual right answer you alone know
 acknowledgements. Policy questions the app did fill are listed afterwards for
 you to check.
 
-**An application is a record, not a workflow.** Each job gets one page:
-everything that has happened to it (what a fill put in and what it could not,
-what went wrong, screenshots of the fields that needed attention, the whole
-timeline), and everything you have to send (a tailored résumé and a cover
+**An application is a record, not a workflow.** Each job gets one page that
+says each thing once: the posting, one card for the form (the button before you
+fill, the count after, and anything needing you pinned on top, with the
+field-by-field detail and what went wrong folded away), the newest few timeline
+entries with the rest a click away, and everything you have to send (a tailored résumé and a cover
 letter — generate, revise, accept). Its state is yours to set: saved, applying,
 applied, interview, offer, rejected, archived. There are no steps to approve
 and nothing to start; the generation still runs, it just no longer asks
 permission at each turn.
+
+**The job description, in two layers that cost different things.** The posting
+itself is always there, collapsed to a dozen lines with the meta you care about
+(pay first), and the skills you already have are highlighted in the employer's
+own text — no upload, no wait, no call to your model, because your profile is
+already on your machine. The reading is the part that costs: one button, one
+call on your key, stored so you pay for it once, and shown as a peer tab so it
+never buries the source. With no description saved, two free ways to get one:
+paste it, or let the posting check fetch it.
+
+**One mark on everything that spends.** Every button that calls your AI
+provider carries the same glyph and the same tooltip; every button that does
+not carries neither. Checking a posting, filling a form, changing a status are
+unmarked because they are free. One glance says which of the things in front of
+you is the expensive one.
 
 **Job reconnaissance.** One click asks the posting two questions: are you still
 up, and what will your form ask? On Greenhouse the answer comes from the
