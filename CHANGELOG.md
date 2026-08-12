@@ -19,6 +19,53 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-18
+
+### Fixed
+
+**"23/73 required fields filled" was not about required fields.** The progress
+line on an application counted every field OfferOS filled over every control it
+met — including the ones it had correctly left alone. On a real application that
+read 23 of 73 when the truth was 17 of 24. The numbers now count what the
+sentence says they count.
+
+**A job description that was one sentence long.** Some postings are written by
+JavaScript, so a server fetching them sees only the blurb meant for link
+previews. That blurb was outranking the real page text and being stored as the
+description. It is now ranked below anything fuller, a one-line tagline does not
+qualify at all, and where it genuinely is all a server can see, the card says so
+instead of presenting it as the posting.
+
+**The résumé upload that could not be seen.** Forms that style their own upload
+button hide the real file input underneath. OfferOS skipped it for being
+invisible, so there was nothing to attach to and the résumé was silently never
+uploaded. File inputs are now read even when hidden — they are the one control
+routinely hidden on purpose — and the attach finds the real one behind a custom
+button.
+
+**Fields labelled `value`.** When a page gives a field no label, OfferOS falls
+back to whatever the page calls it internally, and some pages call everything
+something generic. Several different questions were arriving named "value". A
+label that fits every field names none, so those now count as no label and the
+field goes to the AI reader with its surrounding text.
+
+### Added
+
+**Education and work history sections open themselves.** Plenty of forms start
+these as an empty table with an "Add" button — the rows do not exist until
+something presses it, so there was nothing to fill and nothing to show. OfferOS
+can now open them, stopping at whatever limit the page states and saying so
+honestly when a press produces no row.
+
+**The description can be read from the page you are looking at.** When a posting
+only exists once a browser has drawn it, the panel can now send what it sees to
+OfferOS, replacing a description that came back as a fragment.
+
+**The AI reader is always one press away.** It used to appear only when a form
+had gone badly wrong, which meant that on a form OfferOS mostly understood, the
+two or three fields that most needed a second opinion could not reach it. It now
+sits on the fill card with the number of fields it would actually look at.
+
 ## 2026-08-17
 
 ### Fixed

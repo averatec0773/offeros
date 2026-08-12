@@ -36,6 +36,15 @@ const FORM = `<!doctype html><html><head><title>Apply — Example Systems</title
   <label for="n">Full name *</label><input id="n" name="name" type="text" required />
   <label for="p">Phone</label><input id="p" name="phone" type="tel" />
   <label for="r">Resume/CV</label><input id="r" name="resume" type="file" aria-label="Resume/CV" />
+  <div role="region" aria-label="Educational Details">
+    <div id="edu-rows"></div>
+    <button type="button" id="edu-add"
+      aria-label="Add an entry to the Educational Details tabular section. 0 of 10 entries added currently.">+ Add</button>
+  </div>
+  <div class="lyte-fileupload" cx-prop-label="Upload CV">
+    <button type="button">Choose file</button>
+    <input type="file" id="" name="rec-form_9001_file" style="display:none" />
+  </div>
   <span id="cq">Country</span>
   <div id="cb" role="combobox" aria-labelledby="cq" aria-expanded="false" tabindex="0">Select one</div>
   <button type="submit">Submit application</button>
@@ -44,6 +53,15 @@ const FORM = `<!doctype html><html><head><title>Apply — Example Systems</title
   // A custom dropdown built the way most of them are: ARIA roles, and a
   // listbox portalled to the end of <body>. No framework, no adapter — this
   // is what the generic driver has to cope with.
+  // A tabular repeater: rows exist only after the Add button is pressed.
+  var eduRows = document.getElementById("edu-rows");
+  document.getElementById("edu-add").addEventListener("click", function () {
+    if (eduRows.querySelectorAll("input").length / 2 >= 10) return;
+    var row = document.createElement("div");
+    row.innerHTML = '<input name="school" /><input name="degree" />';
+    eduRows.appendChild(row);
+  });
+
   var cb = document.getElementById("cb");
   cb.addEventListener("click", function () {
     if (document.getElementById("lb")) return;
@@ -224,6 +242,47 @@ try {
     log("aria_combobox_filled", comboFill?.filled);
     const shown = await page.evaluate(() => document.getElementById("cb").textContent);
     check("aria_combobox_committed", shown, "Canada");
+  }
+
+  // 4c) The repeater: rows that do not exist until asked for.
+  const eduBefore = await page.evaluate(() => document.querySelectorAll("#edu-rows input").length);
+  const expanded = await sw.evaluate(
+    async (id) =>
+      await chrome.tabs.sendMessage(id, { kind: "OFFEROS_ENGINE_EXPAND_REPEATERS", wanted: 3 }),
+    tabId,
+  );
+  const eduAfter = await page.evaluate(() => document.querySelectorAll("#edu-rows input").length);
+  log("repeater_sections", JSON.stringify(expanded?.sections ?? []));
+  check("repeater_rows_added", expanded?.added, 3);
+  check("repeater_fields_before", eduBefore, 0);
+  check("repeater_fields_after", eduAfter, 6);
+
+  // 4d) The hidden file input behind a custom uploader.
+  const rescan = await sw.evaluate(
+    async (id) => await chrome.tabs.sendMessage(id, { kind: "OFFEROS_ENGINE_SCAN" }),
+    tabId,
+  );
+  const hidden = rescan?.ok
+    ? rescan.descriptors.find((d) => d.type === "file" && d.label === "Upload CV")
+    : null;
+  check("custom_uploader_scanned", hidden != null, true);
+  if (hidden) {
+    const attached = await sw.evaluate(
+      async ({ id, fid }) =>
+        await chrome.tabs.sendMessage(id, {
+          kind: "OFFEROS_ENGINE_ATTACH_FILE",
+          fieldId: fid,
+          fileName: "resume.pdf",
+          mimeType: "application/pdf",
+          bytesBase64: btoa("%PDF-1.4 synthetic fixture"),
+        }),
+      { id: tabId, fid: hidden.fieldId },
+    );
+    check("custom_uploader_attached", attached?.ok, true);
+    const shown = await page.evaluate(
+      () => document.querySelector('input[name="rec-form_9001_file"]').files[0]?.name ?? "",
+    );
+    check("custom_uploader_file_on_page", shown, "resume.pdf");
   }
 
   // 5) MAIN-world driver present in the page's own world — the half that
