@@ -77,3 +77,59 @@ describe("captureJd", () => {
     expect(captureJd(document).source).toBe("dom");
   });
 });
+
+/**
+ * A job description made of JavaScript.
+ *
+ * `textContent` returns the source of every `<script>` inside a node, and on a
+ * page built by a component framework that is most of the bytes. A real capture
+ * came back as code, which was then stored as the job description, shown on the
+ * page, and sent to a model as though it were what the employer wrote.
+ */
+describe("what counts as the page's text", () => {
+  it("does not read a script's source as job description", () => {
+    document.body.innerHTML = `<main>
+      <h1>Backend Engineer</h1>
+      <p>We are hiring a backend engineer to own our ingestion pipeline.</p>
+      <script>var app = {init: function(){ for (var i=0;i<10;i++) doThing(i); }};</script>
+    </main>`;
+    const { text: jd } = captureJd(document, 10);
+    expect(jd).toContain("own our ingestion pipeline");
+    expect(jd).not.toContain("function");
+    expect(jd).not.toContain("var app");
+  });
+
+  it("ignores styles, noscript and inert templates too", () => {
+    document.body.innerHTML = `<main>
+      <style>.crm-row{display:flex}</style>
+      <noscript>Please enable JavaScript.</noscript>
+      <template is="component"><p>A copy of the whole form.</p></template>
+      <p>We are hiring a backend engineer.</p>
+    </main>`;
+    const { text: jd } = captureJd(document, 10);
+    expect(jd).toContain("hiring a backend engineer");
+    expect(jd).not.toContain("display:flex");
+    expect(jd).not.toContain("enable JavaScript");
+    expect(jd).not.toContain("copy of the whole form");
+  });
+
+  it("keeps stripping scripts out of a structured description too", () => {
+    // The JSON-LD path decodes an HTML description; a script inside THAT is the
+    // same leak by a different door. Built through the DOM rather than
+    // innerHTML, because a nested </script> would end the outer element at
+    // parse time and the fixture would be testing the parser, not the code.
+    document.body.innerHTML = `<main><p>fallback body text</p></main>`;
+    const ld = document.createElement("script");
+    ld.setAttribute("type", "application/ld+json");
+    ld.textContent = JSON.stringify({
+      "@type": "JobPosting",
+      title: "Backend Engineer",
+      description: "<p>Own the pipeline end to end.</p><script>alert(1)</scr" + "ipt>",
+    });
+    document.body.appendChild(ld);
+
+    const { text: jd } = captureJd(document, 10);
+    expect(jd).toContain("Own the pipeline end to end");
+    expect(jd).not.toContain("alert(1)");
+  });
+});

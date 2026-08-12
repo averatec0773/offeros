@@ -7,10 +7,31 @@ export interface JdCaptureResult {
   company?: string;
 }
 
+/**
+ * Elements whose text content is not text.
+ *
+ * `textContent` returns everything inside a node including the source of every
+ * `<script>` and `<style>` in it, and on a page built by a component framework
+ * that is most of the bytes. A real capture came back as a job description made
+ * of JavaScript, which then got stored, shown, and sent to a model as though it
+ * were what the employer wrote.
+ *
+ * `<template>` is here for the same reason as in the scanner: its contents are
+ * inert markup waiting to be cloned, so reading them repeats the page.
+ */
+const NON_TEXT = "script, style, noscript, template, svg";
+
+/** Visible-ish text of a node — what `innerText` means, without needing layout. */
+function readableText(node: ParentNode): string {
+  const clone = (node as Element).cloneNode(true) as HTMLElement;
+  for (const el of Array.from(clone.querySelectorAll(NON_TEXT))) el.remove();
+  return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
 const stripHtml = (html: string): string => {
   const div = document.createElement("div");
   div.innerHTML = html;
-  return (div.textContent ?? "").replace(/\s+/g, " ").trim();
+  return readableText(div);
 };
 
 // Belt for the structured title/company that flow into prompts as short labels
@@ -72,7 +93,7 @@ function fromJsonLd(root: ParentNode): JsonLdCapture | null {
 
 function fromDom(root: ParentNode): string {
   const main = root.querySelector("main") ?? root.querySelector("body") ?? root;
-  return ((main as HTMLElement).textContent ?? "").replace(/\s+/g, " ").trim();
+  return readableText(main as ParentNode);
 }
 
 const MAX_JD_LEN = 12000;
