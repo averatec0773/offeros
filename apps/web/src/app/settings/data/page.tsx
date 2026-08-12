@@ -1,3 +1,4 @@
+import { BackfillJd } from "@/components/settings/backfill-jd";
 import { DataSettings } from "@/components/settings/data-settings";
 import { SettingsNav } from "@/components/settings/settings-nav";
 
@@ -11,6 +12,10 @@ export default function DataSettingsPage() {
         laptop or a bad disk.
       </p>
       <DataSettings />
+
+      <div className="mt-6">
+        <BackfillJd />
+      </div>
     </main>
   );
 }

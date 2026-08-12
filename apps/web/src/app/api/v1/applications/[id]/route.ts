@@ -12,6 +12,7 @@ const patchSchema = z.object({
   status: z.enum(APPLICATION_STATUSES).optional(),
   notes: z.string().optional(),
   jdText: z.string().optional(),
+  jdSource: z.string().optional(),
   resumeId: z.string().optional(),
   attachResume: z.enum(ATTACH_RESUME_OPTIONS).optional(),
   appliedAt: z.number().optional(),

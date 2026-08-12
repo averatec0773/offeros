@@ -30,9 +30,25 @@ const COLLAPSED_LINES = 12;
 
 type View = "text" | "reading";
 
+/**
+ * Where a description came from, in the plainest words available.
+ *
+ * Worth saying because the sources are not equally trustworthy: a platform's
+ * API returns the posting the employer wrote, while text scraped out of a page
+ * can pick up navigation and boilerplate. A reader deciding whether to trust
+ * what they are reading should not have to guess which one this was.
+ */
+const SOURCE_NOTE: Record<string, string> = {
+  "vendor-api": "From the job board's own listing.",
+  page: "Extracted from the posting page — may include some page furniture.",
+  browser: "Captured from the page as your browser rendered it.",
+  manual: "You pasted this in.",
+};
+
 export function JdCard({
   jobInfo,
   jdText,
+  jdSource,
   analysis,
   profileSkills,
   onAnalyze,
@@ -43,6 +59,9 @@ export function JdCard({
 }: {
   jobInfo: JobInfo;
   jdText: string;
+  /** Absent for descriptions saved before provenance was recorded — shown as
+   *  nothing rather than as a guess. */
+  jdSource?: string;
   analysis: JdAnalysis | null;
   profileSkills: string[];
   onAnalyze: (instruction?: string) => void;
@@ -214,6 +233,10 @@ export function JdCard({
             )}
             {truncated && "…"}
           </p>
+
+          {jdSource && SOURCE_NOTE[jdSource] && (
+            <p className="mt-2 text-caption text-muted-foreground">{SOURCE_NOTE[jdSource]}</p>
+          )}
 
           {lines.length > COLLAPSED_LINES && (
             <button

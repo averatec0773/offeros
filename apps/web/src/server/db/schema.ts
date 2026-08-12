@@ -42,6 +42,7 @@ export const applications = sqliteTable("applications", {
   jobInfo: text("job_info", { mode: "json" }).$type<JobInfo>().notNull(),
   status: text("status").notNull(),
   jdText: text("jd_text"),
+  jdSource: text("jd_source"),
   notes: text("notes"),
   resumeId: text("resume_id"),
   attachResume: text("attach_resume"),

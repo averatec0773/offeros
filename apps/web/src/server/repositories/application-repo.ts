@@ -18,6 +18,7 @@ function toDomain(row: Row): Application {
     jobInfo: row.jobInfo,
     status: row.status,
     jdText: row.jdText ?? undefined,
+    jdSource: row.jdSource ?? undefined,
     notes: row.notes ?? undefined,
     resumeId: row.resumeId ?? undefined,
     attachResume: row.attachResume ?? undefined,
@@ -52,6 +53,7 @@ export function createApplication(
     jobInfo: JobInfo;
     status?: ApplicationStatus;
     jdText?: string;
+    jdSource?: string;
     attachResume?: Application["attachResume"];
   },
 ): Application {
@@ -61,6 +63,7 @@ export function createApplication(
     jobInfo: input.jobInfo,
     status: input.status ?? ("saved" as ApplicationStatus),
     jdText: input.jdText ?? null,
+    jdSource: input.jdSource ?? null,
     notes: null,
     resumeId: null,
     attachResume: input.attachResume ?? null,
@@ -77,7 +80,9 @@ export function updateApplication(
   id: string,
   // appliedAt additionally accepts null = clear (undoing a mark-as-submitted);
   // undefined still means "leave unchanged" like every other field.
-  patch: Partial<Pick<Application, "status" | "notes" | "jdText" | "resumeId" | "attachResume">> & {
+  patch: Partial<
+    Pick<Application, "status" | "notes" | "jdText" | "jdSource" | "resumeId" | "attachResume">
+  > & {
     appliedAt?: number | null;
   },
 ): Application | null {
@@ -88,6 +93,7 @@ export function updateApplication(
       status: patch.status ?? existing.status,
       notes: patch.notes ?? existing.notes,
       jdText: patch.jdText ?? existing.jdText,
+      jdSource: patch.jdSource ?? existing.jdSource,
       resumeId: patch.resumeId ?? existing.resumeId,
       attachResume: patch.attachResume ?? existing.attachResume,
       appliedAt: patch.appliedAt === null ? null : (patch.appliedAt ?? existing.appliedAt),

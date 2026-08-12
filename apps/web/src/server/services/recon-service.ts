@@ -247,7 +247,13 @@ export async function reconApplication(
 export async function describeJobUrl(
   url: string,
   deps: ReconDeps = {},
-): Promise<{ title: string; company: string; location: string; jdText: string } | null> {
+): Promise<{
+  title: string;
+  company: string;
+  location: string;
+  jdText: string;
+  source?: string;
+} | null> {
   const found = await extractJob(url, {
     ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
     ...(deps.resolve ? { resolve: deps.resolve } : {}),
@@ -258,6 +264,7 @@ export async function describeJobUrl(
     company: found.fields.company ?? "",
     location: found.fields.location ?? "",
     jdText: found.fields.jdText ?? "",
+    ...(found.sources.jdText ? { source: found.sources.jdText } : {}),
   };
 }
 
@@ -304,7 +311,10 @@ function applyExtraction(db: Db, applicationId: string, extracted: ExtractedJob)
   const existing = getApplication(db, applicationId);
   const description = extracted.fields.jdText?.trim();
   if (existing && !existing.jdText?.trim() && description) {
-    updateApplication(db, applicationId, { jdText: description });
+    updateApplication(db, applicationId, {
+      jdText: description,
+      jdSource: extracted.sources.jdText ?? "page",
+    });
     return true;
   }
   return false;

@@ -32,6 +32,13 @@ export const applicationSchema = z.object({
   jobInfo: jobInfoSchema,
   status: z.enum(APPLICATION_STATUSES),
   jdText: z.string().optional(),
+  /**
+   * Where the description came from — "vendor-api", "page", "browser" or
+   * "manual". Optional and never backfilled: a description saved before this
+   * existed has an unknown provenance, and saying so is more honest than
+   * guessing one.
+   */
+  jdSource: z.string().optional(),
   notes: z.string().optional(),
   resumeId: z.string().optional(),
   attachResume: z.enum(ATTACH_RESUME_OPTIONS).optional(),

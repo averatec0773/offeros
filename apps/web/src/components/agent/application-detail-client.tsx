@@ -92,6 +92,7 @@ export function ApplicationDetailClient({
   const [events, setEvents] = useState<ApplicationEvent[]>(initialEvents);
   const [requirements, setRequirements] = useState<RequirementsSummary>(initialRequirements);
   const [jdText, setJdText] = useState(application.jdText ?? "");
+  const [jdSource, setJdSource] = useState(application.jdSource);
   const [jdAnalysis, setJdAnalysis] = useState<JdAnalysis | null>(initialJdAnalysis);
   const [analyzing, setAnalyzing] = useState(false);
   const [savingJd, setSavingJd] = useState(false);
@@ -139,7 +140,10 @@ export function ApplicationDetailClient({
     // A posting check can backfill the description, so re-read it here rather
     // than making the user reload to see what the check found.
     const fresh = await api.applications.get(application.id).catch(() => null);
-    if (fresh) setJdText(fresh.jdText ?? "");
+    if (fresh) {
+      setJdText(fresh.jdText ?? "");
+      setJdSource(fresh.jdSource);
+    }
     if (taskId) {
       try {
         const data = await api.pipelineTasks.get(taskId);
@@ -208,7 +212,7 @@ export function ApplicationDetailClient({
     const previous = jdText;
     setJdText(trimmed); // optimistic
     try {
-      await api.applications.update(application.id, { jdText: trimmed });
+      await api.applications.update(application.id, { jdText: trimmed, jdSource: "manual" });
       await refresh();
     } catch {
       setJdText(previous);
@@ -472,6 +476,7 @@ export function ApplicationDetailClient({
           <JdCard
             jobInfo={jobInfo}
             jdText={jdText}
+            {...(jdSource ? { jdSource } : {})}
             analysis={jdAnalysis}
             profileSkills={profileSkills}
             onAnalyze={(instruction) => void handleAnalyzeJd(instruction)}

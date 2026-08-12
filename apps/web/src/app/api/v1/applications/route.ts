@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         applyLink: url,
         ...(described?.location ? { jobLocation: described.location } : {}),
       },
-      ...(described?.jdText ? { jdText: described.jdText } : {}),
+      ...(described?.jdText ? { jdText: described.jdText, jdSource: described.source } : {}),
     });
 
     // One check on arrival: is it still open, and what will it ask? Failure is

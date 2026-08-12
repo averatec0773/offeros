@@ -115,6 +115,9 @@ const ADDED_COLUMNS: ReadonlyArray<readonly [table: string, column: string, ddl:
   // which is exactly what the default says.
   ["form_shapes", "required", "required INTEGER NOT NULL DEFAULT 0"],
   ["form_shapes", "source", "source TEXT NOT NULL DEFAULT 'fill'"],
+  // Where a description came from. Null on every row that predates it, which
+  // reads as "unknown" — the truth, rather than a guessed provenance.
+  ["applications", "jd_source", "jd_source TEXT"],
 ];
 
 /** SQLite errors on `ALTER TABLE ADD COLUMN` if the column already exists, so

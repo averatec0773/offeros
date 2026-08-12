@@ -88,6 +88,7 @@ export const api = {
         status: ApplicationStatus;
         notes: string;
         jdText: string;
+        jdSource: string;
         resumeId: string;
         attachResume: "tailored" | "original";
         appliedAt: number;
@@ -105,6 +106,16 @@ export const api = {
       ),
     /** Check whether the posting is still up, and learn what its form asks. */
     recon: (id: string) => request<ReconResult>(`/applications/${id}/recon`, json("POST", {})),
+    /** How many tracked jobs have no description yet. */
+    backfillCount: () => request<{ missing: number; cap: number }>("/applications/backfill-jd"),
+    /** Re-run extraction for those, and report what happened to each. */
+    backfillJd: () =>
+      request<{
+        considered: number;
+        filled: number;
+        failed: number;
+        results: { id: string; job: string; ok: boolean; detail: string }[];
+      }>("/applications/backfill-jd", json("POST", {})),
     /** The stored AI reading of this posting. */
     jdAnalysis: (id: string) => request<JdAnalysis>(`/applications/${id}/jd-analysis`),
     /** Read the posting with the model — one call, on the user's key. */
