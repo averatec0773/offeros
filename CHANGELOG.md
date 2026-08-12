@@ -66,6 +66,37 @@ not carries neither. Checking a posting, filling a form, changing a status are
 unmarked because they are free. One glance says which of the things in front of
 you is the expensive one.
 
+**A workbench for each document.** A generated résumé or cover letter gets a
+page of its own: the document at full width, and beside it revise, what
+changed, the version history with the reason each version exists, Accept and
+PDF. It has a URL, so the back button and a link both behave. On the
+application itself the two documents shrink to two lines — state, version, when
+— because that is what a record should say.
+
+**The reading answers four questions.** Pay, sponsorship, remote policy and
+deadline come back as stated, explicitly ruled out, or not mentioned — and the
+third one is written out rather than left blank. A posting that never mentions
+sponsorship has not refused it, and reading silence as a "no" would talk you
+out of an application you should make. You can also give the reading a lens
+("focus on the pay"), and the page says which lens produced what you are
+looking at.
+
+**Fairer scoring on degrees.** A requirement phrased as "Computer Science or a
+related field" is now read the inclusive way employers mean it, with your
+degree passed in as a fact rather than left in a paragraph to be found.
+Adjacent fields count; education is marked unmet only when a posting names a
+credential you plainly lack.
+
+**When things happened.** Added, posted, applied, last checked — on one line
+under the job title. The posting's own freshness wording is shown as written,
+a deadline is only ever one the posting stated, and anything not captured is
+simply absent rather than filled with a placeholder.
+
+**Company faces.** Letters on a colour derived from the company name — offline,
+instant, and the same colour for that company forever. When a posting is
+checked, its site's icon is fetched once and kept on your machine; pages read
+it locally, so browsing your own applications never calls an employer's server.
+
 **Job reconnaissance.** One click asks the posting two questions: are you still
 up, and what will your form ask? On Greenhouse the answer comes from the
 platform's own job-board API — every question, its type, and whether it is

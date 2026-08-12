@@ -166,3 +166,34 @@ describe("computeFit", () => {
     await expect(computeFit(db, "missing", { runLlm: async () => FIT_OUTPUT })).rejects.toThrow();
   });
 });
+
+describe("prose requirements are not skills", () => {
+  it("keeps a sentence out of the deterministic missing list", () => {
+    // A real case: the analysis wrote "Bachelor's degree in Computer Science or
+    // a related technical field" as a requiredSkill. It can never match a
+    // profile skill, so it landed in `missing` — and the fit prompt is told to
+    // stay consistent with that list, which is how a degree the applicant HAS
+    // came back as a gap.
+    const overlap = computeSkillOverlap(["Python", "Artificial Intelligence"], {
+      id: "jd-1",
+      applicationId: "app-1",
+      summary: "",
+      responsibilities: [],
+      requiredSkills: [
+        "Bachelor's degree in Computer Science or a related technical field (or equivalent)",
+        "Python",
+        "Comfort with both SQL and NoSQL databases",
+        "Go",
+      ],
+      preferredSkills: ["A problem-solving mindset and genuine curiosity about AI"],
+      matchNotes: [],
+      gaps: [],
+      coverLetterRequirement: "optional",
+      createdAt: 1,
+    });
+
+    expect(overlap.missing).toEqual(["Go"]);
+    expect(overlap.matched).toEqual(["Python"]);
+    expect(overlap.missing.some((s) => /degree|bachelor/i.test(s))).toBe(false);
+  });
+});

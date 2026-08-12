@@ -5,6 +5,7 @@ import { pickSkillMatch, skillCandidates } from "@offeros/autofill";
 import type { Db } from "../db/client";
 import { getApplication } from "../repositories/application-repo";
 import { getProfile } from "../repositories/profile-repo";
+import { looksLikeSkillTerm } from "@/lib/jd-skills";
 import { getJdAnalysis } from "../repositories/jd-analysis-repo";
 import { getArtifact } from "../repositories/artifact-repo";
 import { getPipelineTaskByApplicationId } from "../repositories/pipeline-task-by-application";
@@ -38,8 +39,16 @@ export function computeSkillOverlap(
   profileSkills: string[],
   jdAnalysis: JdAnalysis | null,
 ): { matched: string[]; missing: string[] } {
-  const required = jdAnalysis?.requiredSkills ?? [];
-  const preferred = jdAnalysis?.preferredSkills ?? [];
+  // The analysis writes requirements for a reader, so these arrive as whole
+  // sentences ("Bachelor's degree in Computer Science or a related technical
+  // field…"). A sentence can never match a profile skill, so every one of them
+  // landed in `missing` — and the fit prompt tells the model to stay
+  // consistent with that list, which is how a degree the applicant HAS was
+  // being reported as a gap even after the equivalence rule fixed the score.
+  // Only term-shaped entries are skills; the prose requirements are still read
+  // by the model, straight from the job description.
+  const required = (jdAnalysis?.requiredSkills ?? []).filter(looksLikeSkillTerm);
+  const preferred = (jdAnalysis?.preferredSkills ?? []).filter(looksLikeSkillTerm);
   const profileCandidates = profileSkills.flatMap(skillCandidates);
   const profileHas = (jdSkill: string): boolean =>
     pickSkillMatch(profileCandidates, skillCandidates(jdSkill)) !== null;

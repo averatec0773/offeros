@@ -167,7 +167,7 @@ export function segmentJd(
 const MAX_TERM_WORDS = 4;
 const MAX_TERM_CHARS = 40;
 
-function looksLikeTerm(candidate: string): boolean {
+export function looksLikeSkillTerm(candidate: string): boolean {
   const trimmed = candidate.trim();
   if (trimmed === "" || trimmed.length > MAX_TERM_CHARS) return false;
   if (trimmed.split(/\s+/).length > MAX_TERM_WORDS) return false;
@@ -187,7 +187,7 @@ export function missingSkillsInJd(
 
   for (const candidate of [...(analysis.requiredSkills ?? []), ...(analysis.gaps ?? [])]) {
     const term = candidate.trim();
-    if (!looksLikeTerm(term)) continue;
+    if (!looksLikeSkillTerm(term)) continue;
     const key = term.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
