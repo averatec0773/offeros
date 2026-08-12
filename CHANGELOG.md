@@ -19,7 +19,7 @@ Notable changes only; not every commit is an entry.
 
 ---
 
-## 2026-08-13
+## 2026-08-12
 
 ### Added
 
@@ -67,10 +67,6 @@ the page already holds are never on it, whoever typed them.
 own slug — "from your profile", "from your saved answers", and, for a field a
 model placed, "AI-matched field", because that is a different level of
 confidence and worth seeing as one.
-
----
-
-## 2026-08-12
 
 ### Fixed
 
