@@ -7,16 +7,8 @@ import {
   type PipelineTask,
   type FitAnalysis,
 } from "@offeros/core";
+import { CompanyAvatar } from "./company-avatar";
 import { MatchScoreRing } from "./match-score-ring";
-
-function initials(company: string): string {
-  return company
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word[0] ?? "")
-    .join("")
-    .toUpperCase();
-}
 
 /** STRONG/GOOD MATCH tiering (data-driven, not hardcoded per call site). */
 export function fitLabelFor(overall: number): "Strong match" | "Good match" | "Needs work" {
@@ -65,9 +57,10 @@ export function ApplicationRow({
 
   const body = (
     <>
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-body font-semibold">
-        {initials(jobInfo.companyName)}
-      </span>
+      <CompanyAvatar
+        company={jobInfo.companyName}
+        logoUrl={`/api/v1/applications/${application.id}/logo`}
+      />
 
       <span className="min-w-0 flex-1">
         <span className="block truncate text-body text-muted-foreground">

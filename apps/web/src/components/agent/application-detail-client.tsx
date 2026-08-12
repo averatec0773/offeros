@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
 import { ConnectProviderNote } from "./connect-provider-note";
 import { ApplicationMetaRow } from "./application-meta-row";
+import { CompanyAvatar } from "./company-avatar";
 import { FitCard } from "./fit-card";
 import { FormCard } from "./form-card";
 import { MaterialsCard } from "./materials-card";
@@ -345,25 +346,32 @@ export function ApplicationDetailClient({
     <main className="mx-auto w-full max-w-[1120px] px-6 py-6">
       <header className="rounded-2xl border border-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-body text-muted-foreground">
-              {jobInfo.companyName}
-              {jobInfo.jobLocation ? ` · ${jobInfo.jobLocation}` : ""}
-            </p>
-            <h1 className="mt-0.5 text-heading font-semibold text-foreground">
-              {jobInfo.jobTitle}
-            </h1>
-            {jobInfo.applyLink && (
-              <a
-                href={jobInfo.applyLink}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 inline-flex items-center gap-1 text-caption text-muted-foreground hover:text-foreground"
-              >
-                <ExternalLink aria-hidden className="size-3.5" />
-                Original posting
-              </a>
-            )}
+          <div className="flex min-w-0 items-start gap-3">
+            <CompanyAvatar
+              company={jobInfo.companyName}
+              logoUrl={`/api/v1/applications/${application.id}/logo`}
+              size={48}
+            />
+            <div className="min-w-0">
+              <p className="text-body text-muted-foreground">
+                {jobInfo.companyName}
+                {jobInfo.jobLocation ? ` · ${jobInfo.jobLocation}` : ""}
+              </p>
+              <h1 className="mt-0.5 text-heading font-semibold text-foreground">
+                {jobInfo.jobTitle}
+              </h1>
+              {jobInfo.applyLink && (
+                <a
+                  href={jobInfo.applyLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-caption text-muted-foreground hover:text-foreground"
+                >
+                  <ExternalLink aria-hidden className="size-3.5" />
+                  Original posting
+                </a>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

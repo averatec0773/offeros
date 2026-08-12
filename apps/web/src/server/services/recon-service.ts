@@ -2,6 +2,7 @@ import type { Db } from "../db/client";
 import { getApplication, updateApplication } from "../repositories/application-repo";
 import { appendEvent } from "../repositories/application-event-repo";
 import { recordShapes } from "../repositories/form-memory-repo";
+import { cacheLogo } from "./logo-service";
 import { greenhouseRecon } from "./recon/greenhouse";
 import type { AtsRecon, ProbeResult, ReconQuestion, ReconVerdict } from "./recon/types";
 
@@ -105,6 +106,10 @@ export async function reconApplication(
   }
 
   const platform = PLATFORMS.find((p) => p.matches(url));
+  // Fire-and-forget, from the host we are already talking to. It must never
+  // affect the verdict, so it is not awaited and its failure is silent — the
+  // letter avatar is the floor, not a fallback.
+  void cacheLogo(applicationId, url, fetchImpl).catch(() => false);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
