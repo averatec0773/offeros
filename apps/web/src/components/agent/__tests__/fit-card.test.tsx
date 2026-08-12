@@ -32,11 +32,16 @@ describe("FitCard", () => {
 
     expect(screen.getByText(fit.whyMatch)).toBeTruthy();
 
-    expect(screen.getByText("Python")).toBeTruthy();
-    expect(screen.getByText(/Shipped ML systems/)).toBeTruthy();
+    // Skills are chips now: the verdict is glanceable, and the evidence or
+    // advice that used to be a sentence under each one is on hover, so the
+    // claim stays checkable without turning the card into two paragraphs.
+    const aligned = screen.getByText("Python");
+    expect(aligned.getAttribute("data-fit")).toBe("aligned");
+    expect(aligned.getAttribute("title")).toMatch(/Shipped ML systems/);
 
-    expect(screen.getByText("Kubernetes")).toBeTruthy();
-    expect(screen.getByText(/hands-on k8s course/)).toBeTruthy();
+    const gap = screen.getByText("Kubernetes");
+    expect(gap.getAttribute("data-fit")).toBe("not-aligned");
+    expect(gap.getAttribute("title")).toMatch(/hands-on k8s course/);
   });
 
   it("omits the aligned/not-aligned sections when empty", () => {

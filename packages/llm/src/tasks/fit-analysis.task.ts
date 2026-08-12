@@ -4,11 +4,29 @@ import { extractJson } from "../parse-json";
 import type { LlmTask } from "../task";
 import { fenceUntrusted, neutralizeFenceTokens } from "../untrusted";
 
+/** One degree, as the profile records it. */
+export interface FitEducation {
+  school: string;
+  degree: string;
+  field: string;
+}
+
 export interface FitAnalysisInput {
   profileSummary: string;
   resumeText: string;
   jdText: string;
   skillOverlap: { matched: string[]; missing: string[] };
+  /**
+   * The applicant's degrees, as structured fields rather than a sentence
+   * buried in the summary.
+   *
+   * This exists because of a real misjudgement: an applicant with a bachelor's
+   * in Artificial Intelligence was scored as not meeting "CS or a related
+   * field". The degree was in the summary the whole time — as prose, in a
+   * paragraph, competing with everything else in it. Stating it as a field
+   * makes the comparison the model has to make an explicit one.
+   */
+  education?: FitEducation[];
 }
 
 const strObj = (props: Record<string, unknown>, required: string[]) => ({
@@ -93,6 +111,8 @@ const DEFAULT_SYSTEM = [
   "alignedSkills: skills the JD wants that the applicant has. Every entry MUST cite concrete evidence from the résumé or profile summary (e.g. a project, role, or line that demonstrates it) — no evidence, no entry.",
   "notAlignedSkills: skills the JD wants that the applicant is missing or weak on. Every entry MUST give exactly one concrete, actionable suggestion for closing that gap.",
   "",
+  'EDUCATION EQUIVALENCE. When the JD phrases a requirement as "X or a related field" (or "equivalent", "or similar"), read it the inclusive way the employer means it. Adjacent quantitative and computing fields satisfy "Computer Science or related": Artificial Intelligence, Machine Learning, Data Science, Software/Computer/Electrical Engineering, Information Systems, Mathematics, Statistics, Physics. Mark education unmet ONLY when the posting names a specific credential the applicant plainly lacks (a licence, a doctorate where none exists, a field with no connection to the work). A degree that is adjacent is a MET requirement, not a gap — do not list it in notAlignedSkills and do not depress subScores.education for it.',
+  "",
   "You are given a deterministic skillOverlap computed separately (matched vs missing skills). Your scoring and narrative MUST be consistent with it: never claim a skill listed in `missing` is present in alignedSkills, and prefer drawing alignedSkills/notAlignedSkills from the matched/missing lists rather than contradicting them.",
   "",
   "Respond with JSON only, matching the given schema. No prose before or after the JSON.",
@@ -104,11 +124,24 @@ export const fitAnalysisTask: LlmTask<FitAnalysisInput, FitAnalysisOutput> = {
   id: "fit-analysis",
   defaultSystemPrompt: DEFAULT_SYSTEM,
   schema: FIT_ANALYSIS_JSON_SCHEMA as unknown as Record<string, unknown>,
-  buildUserPrompt: ({ profileSummary, resumeText, jdText, skillOverlap }) =>
+  buildUserPrompt: ({ profileSummary, resumeText, jdText, skillOverlap, education }) =>
     [
       "Applicant profile summary:",
       profileSummary,
       "",
+      // Stated as fields, not left to be found in the paragraph above.
+      ...(education && education.length > 0
+        ? [
+            "Applicant education (structured — compare degree requirements against THIS):",
+            ...education.map(
+              (e) =>
+                `- ${e.degree || "(degree not recorded)"} in ${e.field || "(field not recorded)"}${
+                  e.school ? `, ${e.school}` : ""
+                }`,
+            ),
+            "",
+          ]
+        : []),
       "Résumé text:",
       "---",
       resumeText,

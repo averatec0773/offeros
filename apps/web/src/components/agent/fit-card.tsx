@@ -59,39 +59,35 @@ export function FitCard({
 
       {fit.whyMatch && <p className="mt-3 text-body text-foreground/80">{fit.whyMatch}</p>}
 
-      {fit.alignedSkills.length > 0 && (
+      {(fit.alignedSkills.length > 0 || fit.notAlignedSkills.length > 0) && (
         <div className="mt-3">
-          <h4 className="text-caption font-semibold text-muted-foreground">Aligned skills</h4>
-          <ul className="mt-1.5 space-y-1.5">
+          {/* Chips, not a bulleted essay. Each entry used to carry a sentence
+              of evidence or advice under it, which turned a glanceable verdict
+              into two paragraphs of reading. The sentence is still there — on
+              hover — because the claim should still be checkable. Filled = you
+              have it, outline = the posting wants it and you do not. */}
+          <div className="flex flex-wrap gap-1.5">
             {fit.alignedSkills.map((item, i) => (
-              <li key={i}>
-                <span className="inline-flex items-center rounded-full bg-brand/10 px-2.5 py-1 text-caption font-semibold text-foreground">
-                  {item.skill}
-                </span>
-                {item.evidence && (
-                  <p className="mt-1 pl-1 text-caption text-muted-foreground">{item.evidence}</p>
-                )}
-              </li>
+              <span
+                key={`have-${i}`}
+                title={item.evidence || undefined}
+                data-fit="aligned"
+                className="inline-flex items-center rounded-full bg-brand/15 px-2.5 py-1 text-caption font-semibold text-foreground"
+              >
+                {item.skill}
+              </span>
             ))}
-          </ul>
-        </div>
-      )}
-
-      {fit.notAlignedSkills.length > 0 && (
-        <div className="mt-3 rounded-xl bg-warn-bg p-3">
-          <h4 className="text-caption font-semibold text-foreground">Not aligned</h4>
-          <ul className="mt-1.5 space-y-1.5">
             {fit.notAlignedSkills.map((item, i) => (
-              <li key={i}>
-                <span className="inline-flex items-center rounded-full bg-card px-2.5 py-1 text-caption font-semibold text-foreground ring-1 ring-inset ring-border">
-                  {item.skill}
-                </span>
-                {item.advice && (
-                  <p className="mt-1 pl-1 text-caption text-foreground/80">{item.advice}</p>
-                )}
-              </li>
+              <span
+                key={`gap-${i}`}
+                title={item.advice || undefined}
+                data-fit="not-aligned"
+                className="inline-flex items-center rounded-full bg-transparent px-2.5 py-1 text-caption font-semibold text-muted-foreground ring-1 ring-inset ring-border"
+              >
+                {item.skill}
+              </span>
             ))}
-          </ul>
+          </div>
         </div>
       )}
     </div>

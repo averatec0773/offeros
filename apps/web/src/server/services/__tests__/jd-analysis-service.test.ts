@@ -20,6 +20,12 @@ let appId: string;
 
 const OUTPUT = {
   summary: "A senior ML role.",
+  jobFacts: {
+    salary: { state: "not-mentioned" as const, detail: "" },
+    sponsorship: { state: "not-mentioned" as const, detail: "" },
+    remote: { state: "not-mentioned" as const, detail: "" },
+    deadline: { state: "not-mentioned" as const, detail: "" },
+  },
   responsibilities: ["Own the pipeline"],
   requiredSkills: ["Python", "Go"],
   preferredSkills: ["Kubernetes"],
@@ -87,5 +93,47 @@ describe("analyzeJd", () => {
     await expect(analyzeJd(db, "nope", { runLlm: async () => OUTPUT })).rejects.toBeInstanceOf(
       JdAnalysisError,
     );
+  });
+});
+
+describe("the reader's own viewpoint", () => {
+  it("goes into the request and is stored with the result", async () => {
+    const runLlm = vi.fn(async (_task: string, _input: unknown) => OUTPUT as unknown);
+    const analysis = await analyzeJd(db, appId, { runLlm }, "  focus on the pay  ");
+
+    const input = runLlm.mock.calls[0]![1] as { instruction?: string };
+    expect(input.instruction).toBe("focus on the pay");
+    // Stored, because a reading done through a lens is not the same reading.
+    expect(analysis.instruction).toBe("focus on the pay");
+    expect(getJdAnalysis(db, appId)!.instruction).toBe("focus on the pay");
+  });
+
+  it("is absent when not asked for, and clears on a straight re-read", async () => {
+    const runLlm = vi.fn(async (_task: string, _input: unknown) => OUTPUT as unknown);
+    await analyzeJd(db, appId, { runLlm }, "focus on the pay");
+    const plain = await analyzeJd(db, appId, { runLlm });
+
+    expect((runLlm.mock.calls[1]![1] as { instruction?: string }).instruction).toBeUndefined();
+    expect(plain.instruction).toBeUndefined();
+  });
+
+  it("sends the free fact hints alongside", async () => {
+    const runLlm = vi.fn(async (_task: string, _input: unknown) => OUTPUT as unknown);
+    await analyzeJd(db, appId, { runLlm });
+    // The seeded posting says "We need Python and Go." — no money, no visa.
+    expect((runLlm.mock.calls[0]![1] as { factHints?: string }).factHints).toBeUndefined();
+  });
+
+  it("points at the facts a posting does mention", async () => {
+    const withPay = createApplication(db, {
+      jobInfo: { jobId: "j9", jobTitle: "Eng", companyName: "Co" },
+      jdText: "Base salary $180,000. We sponsor H1B.",
+    }).id;
+    const runLlm = vi.fn(async (_task: string, _input: unknown) => OUTPUT as unknown);
+    await analyzeJd(db, withPay, { runLlm });
+
+    const hints = (runLlm.mock.calls[0]![1] as { factHints?: string }).factHints ?? "";
+    expect(hints).toContain("salary");
+    expect(hints).toContain("sponsorship");
   });
 });

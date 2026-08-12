@@ -8,6 +8,7 @@ export * from "./providers/types";
 export { callProvider, callAnthropic, callOpenAI } from "./providers";
 export * from "./tasks/resume-tailor.task";
 export * from "./tasks/jd-analysis.task";
+export { jdFactHints } from "./jd-fact-hints";
 export * from "./tasks/cover-letter.task";
 export * from "./tasks/question-answer.task";
 export * from "./tasks/resume-parse.task";

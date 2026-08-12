@@ -213,13 +213,13 @@ export function ApplicationDetailClient({
     }
   }
 
-  async function handleAnalyzeJd() {
+  async function handleAnalyzeJd(instruction?: string) {
     if (analyzing) return;
     setAnalyzing(true);
     setError(null);
     setShowConnectBanner(false);
     try {
-      setJdAnalysis(await api.applications.analyzeJd(application.id));
+      setJdAnalysis(await api.applications.analyzeJd(application.id, instruction));
       await refresh();
     } catch (err) {
       if (isLlmNotConfigured(err)) setShowConnectBanner(true);
@@ -409,7 +409,7 @@ export function ApplicationDetailClient({
             jdText={jdText}
             analysis={jdAnalysis}
             profileSkills={profileSkills}
-            onAnalyze={() => void handleAnalyzeJd()}
+            onAnalyze={(instruction) => void handleAnalyzeJd(instruction)}
             onSaveJdText={(text) => void handleSaveJdText(text)}
             onCheckPosting={() => void handleCheck()}
             analyzing={analyzing}

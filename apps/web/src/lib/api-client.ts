@@ -108,8 +108,11 @@ export const api = {
     /** The stored AI reading of this posting. */
     jdAnalysis: (id: string) => request<JdAnalysis>(`/applications/${id}/jd-analysis`),
     /** Read the posting with the model — one call, on the user's key. */
-    analyzeJd: (id: string) =>
-      request<JdAnalysis>(`/applications/${id}/jd-analysis`, json("POST", {})),
+    analyzeJd: (id: string, instruction?: string) =>
+      request<JdAnalysis>(
+        `/applications/${id}/jd-analysis`,
+        json("POST", instruction ? { instruction } : {}),
+      ),
     /** What the form asks and how much of it we can already answer. */
     requirements: (id: string) => request<RequirementsSummary>(`/applications/${id}/requirements`),
     /** The generation task for this application, created on demand. The page

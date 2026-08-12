@@ -163,3 +163,54 @@ describe("the paid layer", () => {
     expect(screen.queryByRole("tab", { name: "AI reading" })).toBeNull();
   });
 });
+
+describe("the four facts", () => {
+  const withFacts: JdAnalysis = {
+    ...analysis,
+    jobFacts: {
+      salary: { state: "stated", detail: "$180k–$200k" },
+      sponsorship: { state: "not-mentioned", detail: "" },
+      remote: { state: "denied", detail: "onsite only" },
+      deadline: { state: "not-mentioned", detail: "" },
+    },
+  };
+
+  it("writes 'not mentioned' out rather than leaving a blank", () => {
+    // The difference between "does not sponsor" and "says nothing about
+    // sponsoring" is the difference between not applying and applying.
+    mount({ analysis: withFacts });
+    fireEvent.click(screen.getByRole("tab", { name: "AI reading" }));
+    expect(screen.getAllByText("Not mentioned")).toHaveLength(2);
+    expect(screen.getByText("$180k–$200k")).toBeTruthy();
+    expect(screen.getByText("onsite only")).toBeTruthy();
+  });
+
+  it("shows nothing extra for a reading stored before facts existed", () => {
+    mount({ analysis });
+    fireEvent.click(screen.getByRole("tab", { name: "AI reading" }));
+    expect(screen.queryByText("Not mentioned")).toBeNull();
+  });
+});
+
+describe("reading through a lens", () => {
+  it("passes the typed viewpoint to the request", () => {
+    const props = mount();
+    fireEvent.change(screen.getByLabelText("Reading viewpoint"), {
+      target: { value: "  focus on the pay  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /AI reading/ }));
+    expect(props.onAnalyze).toHaveBeenCalledWith("focus on the pay");
+  });
+
+  it("passes nothing when the lens is left empty", () => {
+    const props = mount();
+    fireEvent.click(screen.getByRole("button", { name: /AI reading/ }));
+    expect(props.onAnalyze).toHaveBeenCalledWith(undefined);
+  });
+
+  it("says which lens produced what is on screen", () => {
+    mount({ analysis: { ...analysis, instruction: "focus on the pay" } });
+    fireEvent.click(screen.getByRole("tab", { name: "AI reading" }));
+    expect(screen.getByText(/Read through your lens/)).toBeTruthy();
+  });
+});

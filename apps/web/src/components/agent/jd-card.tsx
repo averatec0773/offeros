@@ -45,7 +45,7 @@ export function JdCard({
   jdText: string;
   analysis: JdAnalysis | null;
   profileSkills: string[];
-  onAnalyze: () => void;
+  onAnalyze: (instruction?: string) => void;
   onSaveJdText: (text: string) => void;
   onCheckPosting: () => void;
   analyzing?: boolean;
@@ -54,6 +54,7 @@ export function JdCard({
   const [view, setView] = useState<View>("text");
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [instruction, setInstruction] = useState("");
   const [draft, setDraft] = useState("");
 
   const have = useMemo(() => profileSkillsInJd(jdText, profileSkills), [jdText, profileSkills]);
@@ -110,8 +111,15 @@ export function JdCard({
                 ))}
               </div>
             )}
+            <input
+              value={instruction}
+              onChange={(event) => setInstruction(event.target.value)}
+              placeholder="Optional: a lens…"
+              aria-label="Reading viewpoint"
+              className="w-36 min-w-0 rounded-full border border-border bg-background px-3 py-1 text-caption text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
             <SpendChip
-              onClick={onAnalyze}
+              onClick={() => onAnalyze(instruction.trim() || undefined)}
               disabled={analyzing}
               label={analysis ? "Re-read" : "AI reading"}
               busyLabel="Reading…"
@@ -223,6 +231,48 @@ export function JdCard({
   );
 }
 
+const FACT_LABEL: Record<string, string> = {
+  salary: "Pay",
+  sponsorship: "Sponsorship",
+  remote: "Remote",
+  deadline: "Deadline",
+};
+
+/**
+ * The four facts, in three states.
+ *
+ * "Not mentioned" is written out rather than hidden, because the difference
+ * between "this posting says it does not sponsor" and "this posting says
+ * nothing about sponsoring" is the difference between not applying and
+ * applying. A blank would collapse the two.
+ */
+function JobFacts({ facts }: { facts: NonNullable<JdAnalysis["jobFacts"]> }) {
+  const rows = (["salary", "sponsorship", "remote", "deadline"] as const).map((key) => ({
+    key,
+    label: FACT_LABEL[key]!,
+    fact: facts[key],
+  }));
+  return (
+    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+      {rows.map(({ key, label, fact }) => (
+        <div key={key} className="contents">
+          <dt className="text-caption font-medium text-muted-foreground">{label}</dt>
+          <dd
+            className={cn(
+              "text-caption",
+              fact.state === "stated" && "text-foreground",
+              fact.state === "denied" && "font-medium text-warning",
+              fact.state === "not-mentioned" && "text-muted-foreground",
+            )}
+          >
+            {fact.state === "not-mentioned" ? "Not mentioned" : fact.detail || fact.state}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** The structured reading, once it has been paid for. */
 function Reading({ analysis }: { analysis: JdAnalysis }) {
   const sections: [string, string[]][] = [
@@ -233,6 +283,12 @@ function Reading({ analysis }: { analysis: JdAnalysis }) {
   ];
   return (
     <div className="mt-3 space-y-3">
+      {analysis.instruction && (
+        <p className="rounded-xl bg-muted px-3 py-2 text-caption text-muted-foreground">
+          Read through your lens: &ldquo;{analysis.instruction}&rdquo;
+        </p>
+      )}
+      {analysis.jobFacts && <JobFacts facts={analysis.jobFacts} />}
       {analysis.summary && (
         <p className="text-body-sm leading-relaxed text-foreground/90">{analysis.summary}</p>
       )}

@@ -26,14 +26,24 @@ export async function GET(_request: Request, ctx: Ctx) {
  * required: an analysis belongs to the application, and the task id only ever
  * served to wire up the provider.
  */
-export async function POST(_request: Request, ctx: Ctx) {
+export async function POST(request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
     const db = getDb();
     if (!getApplication(db, id)) return notFound("application");
+    const body: unknown = await request.json().catch(() => null);
+    const raw = (body as { instruction?: unknown } | null)?.instruction;
+    const instruction = typeof raw === "string" ? raw.trim().slice(0, 300) : undefined;
     const task = getPipelineTaskByApplicationId(db, id);
     try {
-      return ok(await analyzeJd(db, id, { runLlm: buildPipelineContext(task?.id ?? id).runLlm }));
+      return ok(
+        await analyzeJd(
+          db,
+          id,
+          { runLlm: buildPipelineContext(task?.id ?? id).runLlm },
+          instruction,
+        ),
+      );
     } catch (error) {
       // "There is nothing to read yet" is the caller's problem to fix, not a
       // server fault — the card offers paste and the posting check for it.

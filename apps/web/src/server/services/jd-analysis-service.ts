@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { JdAnalysis } from "@offeros/core";
-import type { JdAnalysisInput, JdAnalysisOutput } from "@offeros/llm";
+import { jdFactHints, type JdAnalysisInput, type JdAnalysisOutput } from "@offeros/llm";
 import type { Db } from "../db/client";
 import { getApplication } from "../repositories/application-repo";
 import { getJdAnalysis, saveJdAnalysis } from "../repositories/jd-analysis-repo";
@@ -43,6 +43,9 @@ export async function analyzeJd(
   db: Db,
   applicationId: string,
   deps: AnalyzeJdDeps,
+  /** A viewpoint the user typed, carried into the prompt and stored with the
+   *  result so the page can say which lens produced what it is showing. */
+  instruction?: string,
 ): Promise<JdAnalysis> {
   const application = getApplication(db, applicationId);
   if (!application) throw new JdAnalysisError(`application ${applicationId} not found`);
@@ -52,10 +55,14 @@ export async function analyzeJd(
   }
   const profile = getProfile(db);
 
+  const hints = jdFactHints(jdText);
+  const asked = instruction?.trim() ?? "";
   const input: JdAnalysisInput = {
     jdText,
     jobInfo: application.jobInfo,
     profileSummary: profile ? buildProfileFacts(profile) : "",
+    ...(asked ? { instruction: asked } : {}),
+    ...(hints ? { factHints: hints } : {}),
   };
   const output = (await deps.runLlm("jd-analysis", input)) as JdAnalysisOutput;
 
@@ -70,6 +77,10 @@ export async function analyzeJd(
     matchNotes: output.matchNotes,
     gaps: output.gaps,
     coverLetterRequirement: output.coverLetterRequirement,
+    jobFacts: output.jobFacts,
+    // Stored with the result: a reading done through a lens is not the same
+    // reading as one done straight, and the page should be able to say so.
+    ...(asked ? { instruction: asked } : {}),
     createdAt: existing?.createdAt ?? Date.now(),
   };
   saveJdAnalysis(db, analysis);

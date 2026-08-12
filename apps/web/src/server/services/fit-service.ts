@@ -79,11 +79,24 @@ export async function computeFit(
   const jdAnalysis = getJdAnalysis(db, applicationId);
   const skillOverlap = computeSkillOverlap(profile?.skills ?? [], jdAnalysis);
 
+  // Degrees go in as fields, not as prose the model has to find in the summary
+  // — an applicant with a bachelor's in Artificial Intelligence was being
+  // scored as not meeting "CS or a related field" while the degree sat in that
+  // paragraph the whole time.
+  const education = (profile?.education ?? [])
+    .map((entry) => ({
+      school: entry.school ?? "",
+      degree: entry.degree ?? "",
+      field: entry.field ?? "",
+    }))
+    .filter((entry) => entry.degree !== "" || entry.field !== "");
+
   const input: FitAnalysisInput = {
     profileSummary,
     resumeText,
     jdText: application.jdText ?? "",
     skillOverlap,
+    ...(education.length > 0 ? { education } : {}),
   };
   const output = (await deps.runLlm("fit-analysis", input)) as FitAnalysisOutput;
 
