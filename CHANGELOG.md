@@ -19,6 +19,40 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-17
+
+### Fixed
+
+**Forms whose fields have no id at all can now be read.** Some form builders
+leave the visible box with an empty id and keep the field's identity somewhere
+else entirely, so every way of matching a label to a field had nothing to match
+on. OfferOS now follows the identity wherever the page keeps it, reads a label
+carried as a component's own property, and looks one level further up the page
+for the row a field sits in. It also stops reading the hidden second copy of the
+form that these builders leave behind — which was being listed as a duplicate
+set of questions, and was winning the argument about what each field is called.
+
+**A job description made of JavaScript.** Reading a page's text picked up the
+source of every script on it, and on a modern careers page that is most of the
+bytes. Descriptions captured that way were stored, shown, and sent to the AI
+reader as though the employer had written them. Page text is now read the way a
+person sees it, with scripts, styles and hidden templates left out.
+
+**A description that came out wrong can be fixed.** Fetching a posting only ever
+filled an empty description, so a record already holding the wrong text could
+not be repaired from the page — every fetch saw something there and left it. A
+fetch you press may now replace what is stored, and what it replaced is recorded
+on the timeline in case the new one is worse. Automatic checks still never
+overwrite anything.
+
+**And a bad description is pointed out rather than left to be discovered.** When
+a stored description reads like page code instead of a posting, the page says so
+and offers to fetch it again or let you paste it yourself.
+
+**Long unbroken text no longer stretches the page.** A minified script or a very
+long link has no spaces to wrap at, and was pushing the description, the field
+report and the requirements list past the edge of their cards.
+
 ## 2026-08-16
 
 ### Fixed
