@@ -1488,6 +1488,33 @@ describe("FillPanel", () => {
         expect(screen.getByDisplayValue(generatedAnswer)).toBeInTheDocument();
       });
 
+      it("a refine whose report is rejected says so, instead of leaving the record stale", async () => {
+        // The page took the new text; only the recording failed. The panel must
+        // not look identical to full success — that is how the workspace ends
+        // up disagreeing with the real form.
+        const api = apiWithGeneratedAnswer({
+          generateAnswer: vi
+            .fn()
+            .mockResolvedValueOnce({ ok: true, value: { answer: generatedAnswer } })
+            .mockResolvedValueOnce({ ok: true, value: { answer: "Short version." } }),
+        });
+        (api.postReport as ReturnType<typeof vi.fn>)
+          .mockResolvedValueOnce({ ok: true, value: {} }) // the initial fill's report
+          .mockResolvedValue({ ok: false, error: "task is not awaiting fill" });
+        renderPanel({ api });
+        await fillAndGetTextarea();
+
+        const input = await openRefine();
+        await act(async () => {
+          await userEvent.type(input, "shorter");
+          await userEvent.click(screen.getByRole("button", { name: /Rewrite/ }));
+        });
+
+        expect(await screen.findByText(/recording it failed/)).toBeInTheDocument();
+        // The new text is still on the panel — it IS on the page.
+        expect(screen.getByDisplayValue("Short version.")).toBeInTheDocument();
+      });
+
       it("an empty instruction does nothing at all", async () => {
         const api = apiWithGeneratedAnswer();
         renderPanel({ api });

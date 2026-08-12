@@ -830,7 +830,13 @@ export function FillPanel({
           });
         }
       }
-      await api.postReport(b.taskId, allReports(), false);
+      // The page already has the new text; what can still fail is the record.
+      // Say so — a report that silently stays stale is how the workspace ends
+      // up disagreeing with the form (the exact bug the Done fix was about).
+      const posted = await api.postReport(b.taskId, allReports(), false);
+      if (!posted.ok) {
+        fail(`The page has the new answer, but recording it failed: ${posted.error}`);
+      }
     } finally {
       setRefineBusy(null);
     }
@@ -857,7 +863,12 @@ export function FillPanel({
           });
         }
       }
-      await api.postReport(b.taskId, allReports(), false);
+      const posted = await api.postReport(b.taskId, allReports(), false);
+      if (!posted.ok) {
+        setAnswerError((prev) =>
+          new Map(prev).set(entry.fieldId, `Accepted, but recording it failed: ${posted.error}`),
+        );
+      }
     }
     // Intentional fallthrough: the bank save below runs even when the DOM write just
     // failed. The accepted text is worth keeping in the answer bank for a future
