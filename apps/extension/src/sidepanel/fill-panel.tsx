@@ -438,6 +438,12 @@ export function FillPanel({
     reportsRef.current.clear();
     setAiAnswers([]);
     setPolicyAnswers([]);
+    // Agent suggestions are grounded in ONE job's description. fieldId is a
+    // content hash, so two companies on the same ATS template share ids —
+    // a suggestion kept across a job change could be applied, verbatim, to
+    // the wrong company's form.
+    setSuggestions(new Map());
+    setDraftHints(new Map());
     setSavedFieldIds(new Set());
     setReported(false);
     setFilledOnce(false);
@@ -1136,8 +1142,11 @@ export function FillPanel({
         setDone(false);
         // Acknowledgments belong to the page they were made on: their jump
         // targets no longer exist here, and listing them would attach one
-        // page's agreements to another.
+        // page's agreements to another. The same holds for agent suggestions
+        // and draft hints — their evidence came from the page that is gone.
         setPolicyAnswers([]);
+        setSuggestions(new Map());
+        setDraftHints(new Map());
       }
 
       // Auto-claim: one attempt per job while no bundle is held. An explicit

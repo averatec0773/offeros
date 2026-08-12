@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
 import type {
@@ -275,6 +275,36 @@ describe("what comes back", () => {
     expect(written).toContain("f2");
     // The guarded one has no value, so it is not among them.
     expect(written).not.toContain("f3");
+  });
+
+  it("forgets every suggestion when the tab moves to a different job", async () => {
+    // A suggestion is grounded in ONE job's description, and fieldId is a
+    // content hash — two companies on the same ATS template share ids. A
+    // suggestion that survived a job change could be applied, verbatim, to
+    // the wrong company's form.
+    const used = api();
+    const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+    const props = {
+      fill,
+      capture: vi.fn(async () => captureOk),
+      attachFile: vi.fn(async () => ({ ok: true })),
+      api: used,
+      openWebApp: vi.fn(),
+      openApplication: vi.fn(),
+      webReachable: true,
+      tabUrl: "https://ats.example.com/apply",
+    };
+    const view = render(<FillPanel scan={async () => scan} rescanNonce={0} {...props} />);
+    await screen.findByText("Ingenieur · Acme");
+    await act(async () => {
+      await userEvent.click(await analyseButton());
+    });
+    await screen.findByText("Northwind Systems");
+    view.rerender(
+      <FillPanel scan={async () => ({ ...scan, company: "Globex" })} rescanNonce={1} {...props} />,
+    );
+    await waitFor(() => expect(screen.queryByText("Northwind Systems")).toBeNull());
+    expect(fill).not.toHaveBeenCalled();
   });
 
   it("lets a suggestion be ignored without writing it", async () => {
