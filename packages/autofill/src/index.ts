@@ -19,6 +19,7 @@ export { pickSkillMatch, skillCandidates } from "./skill-match";
 export { normalizeQuestion, matchAnswer } from "./answer-match";
 
 export {
+  isGenericName,
   isTransientText,
   isUsableLabel,
   looksLikeHumanLabel,

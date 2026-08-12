@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  isGenericName,
   isTransientText,
   isUsableLabel,
   looksLikeCaptcha,
@@ -127,5 +128,55 @@ describe("CAPTCHAs are recognised so they can be handed back", () => {
     {},
   ])("%o is an ordinary field", (subject) => {
     expect(looksLikeCaptcha(subject)).toBe(false);
+  });
+});
+
+/**
+ * Words that name a control rather than ask anything.
+ *
+ * These arrive when the ladder falls back to a field's `name` and the page
+ * called it something generic. Each passes every other test — it is a word, a
+ * person can read it, it is not a widget state — and tells the user nothing.
+ * Seen on a real form as the label of several different questions at once,
+ * which is the giveaway: a label that fits every field identifies none.
+ */
+describe("generic control names are not questions", () => {
+  it.each([
+    "value",
+    "Value",
+    "input",
+    "field",
+    "text",
+    "data",
+    "entry",
+    "answer",
+    "question",
+    "label",
+    "name",
+    "title",
+    "type",
+    "option",
+    "form",
+    "content",
+    "details",
+    "information",
+    " Value ",
+    "-value-",
+  ])("%o names a control, not a question", (text) => {
+    expect(isGenericName(text)).toBe(true);
+    expect(isUsableLabel(text)).toBe(false);
+  });
+
+  it.each([
+    "Field of study",
+    "Current value of your portfolio",
+    "Job title",
+    "What type of role are you looking for?",
+    "Please answer in your own words",
+    "Full name",
+    "Contact information",
+  ])("%o is a real question that merely contains one", (text) => {
+    expect(isGenericName(text)).toBe(false);
+    expect(isUsableLabel(text)).toBe(true);
   });
 });

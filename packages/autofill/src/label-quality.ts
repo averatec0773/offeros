@@ -102,6 +102,52 @@ export function looksLikeIdentifier(text: string): boolean {
   return false;
 }
 
+/**
+ * Words that name a control's ROLE rather than its question.
+ *
+ * These arrive when the ladder falls back to a field's `name` attribute and the
+ * page called it something generic. `value`, `input`, `field` — each passes
+ * every other test here (it is a word, a person could read it, it is not a
+ * widget state) and tells the user nothing whatsoever. Seen on a real form as
+ * the label of several different questions at once, which is the giveaway: a
+ * label that fits every field identifies none.
+ *
+ * Only rejected when the whole label is one of them. "Field of study" and
+ * "Current value of your portfolio" are real questions.
+ */
+const GENERIC_NAMES = [
+  "value",
+  "values",
+  "input",
+  "inputs",
+  "field",
+  "fields",
+  "text",
+  "textbox",
+  "data",
+  "item",
+  "entry",
+  "answer",
+  "question",
+  "label",
+  "name", // "Name" alone is ambiguous on a form that also asks first/last
+  "title",
+  "type",
+  "option",
+  "options",
+  "form",
+  "content",
+  "detail",
+  "details",
+  "info",
+  "information",
+];
+
+/** True when the text names a control's role rather than asking anything. */
+export function isGenericName(text: string): boolean {
+  return GENERIC_NAMES.includes(stripDecoration(text));
+}
+
 /** Longest a label can be before it is a paragraph that swallowed a control. */
 const MAX_LABEL_CHARS = 200;
 
@@ -117,6 +163,7 @@ export function isUsableLabel(text: string | null | undefined): boolean {
   const t = text.replace(/\s+/g, " ").trim();
   if (t === "" || t.length > MAX_LABEL_CHARS) return false;
   if (isTransientText(t)) return false;
+  if (isGenericName(t)) return false;
   if (looksLikeIdentifier(t)) return false;
   return true;
 }

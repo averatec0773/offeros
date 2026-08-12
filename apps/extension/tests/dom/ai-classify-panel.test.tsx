@@ -197,6 +197,71 @@ async function mount(used: FillApi, fill = vi.fn(async (v: FillValue[]) => okFil
   return fill;
 }
 
+/**
+ * The AI read has to be reachable on a form that went WELL.
+ *
+ * It used to live inside the "most fields weren't recognised" banner, so on a
+ * form OfferOS mostly understood, the two or three fields that most needed a
+ * second opinion had no way to reach it — the button existed only when it was
+ * least needed.
+ */
+describe("the AI read is always available", () => {
+  const mostlyUnderstood: ScanResponse = {
+    ok: true,
+    atsId: "generic",
+    url: "https://ats.example.com/apply",
+    company: "Acme",
+    title: "Engineer",
+    descriptors: [
+      field("f1", "Email"),
+      field("f2", "First Name"),
+      field("f3", "Phone"),
+      field("f4", "Feld 7"),
+    ],
+  };
+
+  const mount = async (scanResponse: ScanResponse, used = api()) => {
+    render(
+      <FillPanel
+        scan={async () => scanResponse}
+        fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+        capture={vi.fn(async () => captureOk)}
+        attachFile={vi.fn(async () => ({ ok: true }))}
+        api={used}
+        rescanNonce={0}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+        tabUrl="https://ats.example.com/apply"
+      />,
+    );
+    await screen.findByText("Ingenieur · Acme");
+    return used;
+  };
+
+  it("offers it even when almost everything was recognised", async () => {
+    await mount(mostlyUnderstood);
+    // No drift banner here — most of this form was understood.
+    expect(screen.queryByText(/Most fields here weren't recognized/)).toBeNull();
+    expect(await screen.findByRole("button", { name: /Have AI read this form/ })).toBeTruthy();
+  });
+
+  it("says how many fields it would actually be given", async () => {
+    await mount(mostlyUnderstood);
+    // Pressing it spends money, so the count is next to the button.
+    expect(await screen.findByText(/1 field OfferOS couldn't place\./)).toBeTruthy();
+  });
+
+  it("still offers it when nothing is left, and says so", async () => {
+    await mount({
+      ...mostlyUnderstood,
+      descriptors: [field("f1", "Email"), field("f2", "First Name")],
+    });
+    expect(await screen.findByText(/Every field here was recognised\./)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Have AI read this form/ })).toBeTruthy();
+  });
+});
+
 describe("a form the closed vocabulary cannot read", () => {
   it("offers the AI read, because nothing here was recognised", async () => {
     await mount(api());

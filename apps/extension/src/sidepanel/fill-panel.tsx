@@ -1288,6 +1288,10 @@ export function FillPanel({
     (i) => i.status === "unknown" && !satisfiedByPage.has(i.fieldId),
   ).length;
   const drift = plan.length > 0 && classifiedRatio(plan) < 0.3;
+  // What the AI read would actually be given: the fields the deterministic
+  // engine gave up on. Shown next to the button so pressing it is an informed
+  // choice about spending, not a guess.
+  const unrecognised = plan.filter((i) => i.status === "unknown").length;
   // Built from the reports a run actually produced, not from the plan alone, so
   // a field the engine meant to fill and the page refused lands here too. Only
   // after a run: telling someone to fill six fields in before anything has been
@@ -1552,11 +1556,23 @@ export function FillPanel({
             openApplication={openApplication}
           />
         )}
-        {bundle && (drift || aiSummary) && (
+        {/* The AI read stays available whether or not the form went badly.
+            It used to live inside the "most fields weren't recognised" banner,
+            so on a form OfferOS mostly understood, the two or three fields that
+            most needed a second opinion had no way to reach it. The banner
+            remains as the loud case; the button is always here. */}
+        {bundle && (
           <div className="mb-2 space-y-1.5 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
             {drift && !aiSummary && (
               <p className="text-caption text-warning">
                 Most fields here weren't recognized — this form doesn't look like one OfferOS knows.
+              </p>
+            )}
+            {!drift && !aiSummary && (
+              <p className="text-caption text-text-secondary">
+                {unrecognised > 0
+                  ? `${unrecognised} field${unrecognised === 1 ? "" : "s"} OfferOS couldn't place.`
+                  : "Every field here was recognised."}
               </p>
             )}
             {aiSummary && (
@@ -1574,6 +1590,8 @@ export function FillPanel({
               className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 text-caption font-semibold text-text-primary transition-[color,transform] duration-fast ease-out-strong hover:bg-bg-base active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
             >
               <SpendMark />
+              {/* A constant label: the count lives in the line above, where it
+                  can change without the button becoming a moving target. */}
               {aiBusy
                 ? "Reading the form…"
                 : aiSummary
