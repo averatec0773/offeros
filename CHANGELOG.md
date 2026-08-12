@@ -19,6 +19,44 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-19
+
+### Fixed
+
+**The assistant told a user it had not done something it had just done.** Asked
+to fine-tune a résumé that did not exist yet, it generated one — and then
+answered that there was nothing to fine-tune and offered to generate it. The
+answer was written from a flat list of everything the turn had learned, where a
+failure from before the work sits next to the work itself; it believed the
+failure. What a turn CHANGED is now stated separately from what it read, and
+stated as fact: the answer has to report it. Generating a document costs money,
+so leaving it out of the reply is not one of the options.
+
+**A refusal that told the assistant nothing.** Tools that work on one
+application used to fail with "this tool needs a task" when the conversation had
+not settled on a job — no class, no way out — and the assistant retried them
+until it ran out of turn. They now refuse the way everything else in OfferOS
+refuses: with the reason and the fix (find the application first, or ask which
+one is meant).
+
+### Changed
+
+**A clear request gets done, not questioned.** "Change my résumé" when there is
+no draft yet means write the first one; that is the first step of the change,
+not a different request. The assistant now acts when the intent is clear, and
+saves its questions for real forks — several jobs it could be, or something only
+you know.
+
+**A finished chat turn reads as what came of it.** The fold under an answer used
+to say "6 steps · 1 did · 3 failed"; it now leads with the outcome ("Generated a
+tailored résumé") and keeps the tally inside, for when you want to see exactly
+what ran. A document the assistant produced links straight to that document's
+workbench instead of the application page. And "Stopped at the step limit"
+appears only when the turn produced nothing — printed above a résumé it had just
+written, it was apologising for the work.
+
+---
+
 ## 2026-08-18
 
 ### Fixed
