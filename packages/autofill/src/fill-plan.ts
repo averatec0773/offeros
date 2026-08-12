@@ -1,4 +1,5 @@
 import { classifyField, type CanonicalField, type FieldDescriptor } from "./classify";
+import { CAPTCHA_REASON, looksLikeCaptcha } from "./label-quality";
 import { questionKey } from "./fingerprint";
 import { splitName, normalizeLink } from "./format";
 import { matchAnswer } from "./answer-match";
@@ -19,6 +20,8 @@ export interface FillItem {
   values?: string[];
   /** Open-ended free-text question — offer per-field LLM generation. */
   generatable?: boolean;
+  /** A CAPTCHA. Permanently the user's; never attempted, by choice. */
+  captcha?: boolean;
 }
 
 // A free-text box (textarea) or a long question-like label the classifier and
@@ -123,6 +126,26 @@ export function buildFillPlan(
         value: "",
         source: "personal",
         required,
+      };
+    }
+
+    // A CAPTCHA is the site asking whether a person is present. Answering it
+    // for the applicant would be lying to the employer on their behalf, so it
+    // is refused before anything else looks at the field — ahead of the
+    // classifier, ahead of the answer bank, ahead of any generation. There is
+    // no solving service called here and there must never be one. This is a
+    // discipline, not a missing capability.
+    if (
+      looksLikeCaptcha({ label, name: desc.name, id: desc.fieldId, containerText: desc.ariaLabel })
+    ) {
+      return {
+        fieldId: desc.fieldId,
+        label,
+        status: "needs-answer",
+        value: "",
+        source: "none",
+        required,
+        captcha: true,
       };
     }
 
@@ -318,6 +341,8 @@ function deriveReason(
   canonical: CanonicalField | null,
   profile: FillProfile | null,
 ): string {
+  if (item.captcha === true) return CAPTCHA_REASON;
+
   if (desc.type === "file") {
     const suffix = canonical ? ` (classified '${canonical}')` : "";
     return `file input${suffix} → always manual upload, left needs-answer`;

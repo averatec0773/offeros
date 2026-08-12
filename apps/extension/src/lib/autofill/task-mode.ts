@@ -1,4 +1,5 @@
 import {
+  CAPTCHA_REASON,
   isCoverLetterLabel,
   type FieldDescriptor,
   type FieldTrace,
@@ -357,6 +358,8 @@ export function handoverList(
     .filter((item) => {
       if (satisfied.has(item.fieldId)) return false;
       const report = reportById.get(item.fieldId);
+      // A CAPTCHA is always the user's, whatever any report says about it.
+      if (item.captcha === true) return true;
       if (report?.outcome === "needs-user" || report?.outcome === "failed") return true;
       if (report?.outcome === "filled") return false;
       // An unrecognised field reports as `skipped`, which the report vocabulary
@@ -368,6 +371,6 @@ export function handoverList(
     .map((item) => ({
       fieldId: item.fieldId,
       label: item.label,
-      reason: reportById.get(item.fieldId)?.reason ?? "",
+      reason: item.captcha === true ? CAPTCHA_REASON : (reportById.get(item.fieldId)?.reason ?? ""),
     }));
 }

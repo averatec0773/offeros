@@ -306,11 +306,46 @@ function currentValueOf(el: HTMLElement, type: string): string {
   return typeof v === "string" ? v : "";
 }
 
+/**
+ * Parts of a widget are not questions.
+ *
+ * A composite control — a country-code picker, a typeahead, any dropdown with a
+ * filter — is built out of inputs, and scanning them as fields turns one
+ * question into three: the control itself, its search box, and whatever
+ * transient row the popup happened to be showing. On a real form this produced
+ * "Search country with dial code" listed as something the applicant had been
+ * asked.
+ *
+ * Two shapes are recognised, both by role rather than by any site's markup: an
+ * input living inside a listbox/option/menu container, and a search box sitting
+ * next to one.
+ */
+function isInsideComposite(el: HTMLElement): boolean {
+  return el.closest('[role="listbox"], [role="option"], [role="menu"], [role="menuitem"]') !== null;
+}
+
+/** A filter box for the popup beside it, rather than a field of its own. */
+function isWidgetSearchBox(el: HTMLElement): boolean {
+  const hint = `${el.getAttribute("placeholder") ?? ""} ${el.getAttribute("aria-label") ?? ""}`;
+  if (!/\bsearch\b|\bfilter\b|type to (search|filter)/i.test(hint)) return false;
+  // Only when it actually belongs to a popup: a page's own "Search jobs" box is
+  // not a form field either, but it is not this function's business.
+  const scope = el.closest(
+    '[class*="dropdown"], [class*="select"], [class*="combo"], [role="combobox"]',
+  );
+  if (scope) return true;
+  const doc = el.ownerDocument;
+  const near = el.parentElement?.parentElement ?? doc.body;
+  return near?.querySelector('[role="listbox"], [role="option"]') !== null;
+}
+
 function isScannable(el: HTMLElement): boolean {
   if (el.getAttribute("name") === "g-recaptcha-response") return false;
   if (el.closest('[aria-hidden="true"]')) return false;
   const style = el.ownerDocument.defaultView?.getComputedStyle(el);
   if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+  // A widget's own machinery, not a question the applicant was asked.
+  if (isInsideComposite(el) || isWidgetSearchBox(el)) return false;
   return true;
 }
 
