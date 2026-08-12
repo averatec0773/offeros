@@ -50,6 +50,18 @@ const SOURCE_NOTE: Record<string, string> = {
   manual: "You pasted this in.",
 };
 
+/**
+ * A description that is only the page's link-preview blurb.
+ *
+ * Some postings do not exist until a browser runs the page: a server fetching
+ * them gets a sentence written for a link preview and nothing else. That
+ * sentence is better than an empty card, but it is not the job description, and
+ * saying which is the difference between a useful record and a misleading one.
+ * The way out is the browser panel, which is standing where the text exists.
+ */
+const SUMMARY_NOTE =
+  "This is only the page's summary — the full posting is written by JavaScript, so a server cannot see it. Open the job page with the OfferOS panel and press \u201cSave this page\u2019s description\u201d.";
+
 export function JdCard({
   jobInfo,
   jdText,
@@ -261,8 +273,15 @@ export function JdCard({
             {truncated && "…"}
           </p>
 
-          {jdSource && SOURCE_NOTE[jdSource] && (
-            <p className="mt-2 text-caption text-muted-foreground">{SOURCE_NOTE[jdSource]}</p>
+          {jdSource === "page-summary" ? (
+            <p className="mt-2 rounded-xl border border-border bg-muted/40 p-2.5 text-caption leading-relaxed text-foreground">
+              {SUMMARY_NOTE}
+            </p>
+          ) : (
+            jdSource &&
+            SOURCE_NOTE[jdSource] && (
+              <p className="mt-2 text-caption text-muted-foreground">{SOURCE_NOTE[jdSource]}</p>
+            )
           )}
 
           {lines.length > COLLAPSED_LINES && (

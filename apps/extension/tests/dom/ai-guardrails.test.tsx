@@ -110,6 +110,7 @@ const api = (): FillApi => ({
     ok: true as const,
     value: { resolutions: [], considered: 0, classified: 0 },
   })),
+  saveJdFromPage: vi.fn(async () => ({ ok: true as const, value: {} })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
     ok: true,
     value: [],

@@ -56,6 +56,8 @@ export interface FillApi {
       contextText?: string;
     }[],
   ) => Promise<ApiResult<{ resolutions: AiResolution[]; considered: number; classified: number }>>;
+  /** Store this page's rendered description against the application. */
+  saveJdFromPage: (applicationId: string, jdText: string) => Promise<ApiResult<unknown>>;
   findApplicationsByJobUrl: (jobUrl: string) => Promise<ApiResult<ApplicationSummary[]>>;
   createTaskFromJd: (input: {
     jobTitle: string;

@@ -33,19 +33,40 @@ import type { ReconQuestion } from "../services/recon/types";
  */
 
 /** Where a piece of information came from. Ordered: later beats earlier. */
-export const EVIDENCE_SOURCES = ["url", "page", "vendor-api", "browser", "manual"] as const;
+export const EVIDENCE_SOURCES = [
+  "url",
+  "page-summary",
+  "page",
+  "vendor-api",
+  "browser",
+  "manual",
+] as const;
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
 
 /** How much a source is trusted when two of them disagree. */
 export const SOURCE_RANK: Record<EvidenceSource, number> = {
   url: 1,
-  page: 2,
-  "vendor-api": 3,
+  /**
+   * A page's own one-paragraph blurb — `og:description` and friends.
+   *
+   * Ranked below the rendered body on purpose. It used to share the page rank,
+   * and since equal ranks keep whichever arrived first and the meta collector
+   * runs before the body collector, a 150-character summary beat a complete
+   * description every time. That is how a job description became a sentence.
+   */
+  "page-summary": 2,
+  page: 3,
+  "vendor-api": 4,
   // The rendered DOM beats a server-side guess: it is what the applicant sees.
-  browser: 4,
+  browser: 5,
   // Nothing outranks a person telling us directly.
-  manual: 5,
+  manual: 6,
 };
+
+/** True when a description came from a blurb rather than the posting itself. */
+export function isSummarySource(source: string | undefined): boolean {
+  return source === "page-summary";
+}
 
 /** What we try to learn about a posting. Every field optional, always: a field
  *  we did not find is absent, never an empty string pretending to be a value. */

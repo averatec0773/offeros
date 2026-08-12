@@ -153,12 +153,41 @@ export function fromMetaTags(html: string): Evidence | null {
   const fields: JobFields = {};
   const title = meta("og:title") || str(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]);
   if (title) fields.title = htmlToText(title);
-  const description = meta("og:description") || meta("description");
-  if (description) fields.jdText = htmlToText(description);
   const site = meta("og:site_name");
   if (site) fields.company = htmlToText(site);
 
   return Object.keys(fields).length > 0 ? { source: "page", fields } : null;
+}
+
+/** Below this a blurb is a tagline, not even a summary of the job. */
+const MIN_SUMMARY_CHARS = 80;
+
+/**
+ * The page's own one-paragraph blurb, as a description of last resort.
+ *
+ * Deliberately separate evidence from the title and company above, and
+ * deliberately ranked below the rendered body: `og:description` is a sentence
+ * written for a link preview, and it used to win against a complete
+ * description purely because the meta collector runs first and equal ranks
+ * keep whoever arrived first. Kept at all because on a page built entirely in
+ * the browser it is the only thing a server can see — but labelled, so the UI
+ * can say so and point at the panel, which CAN read the rendered page.
+ */
+export function fromMetaSummary(html: string): Evidence | null {
+  const meta = (property: string): string => {
+    const pattern = new RegExp(
+      `<meta[^>]+(?:property|name)=["']${property}["'][^>]*content=["']([^"']*)["']`,
+      "i",
+    );
+    const alternate = new RegExp(
+      `<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${property}["']`,
+      "i",
+    );
+    return str(pattern.exec(html)?.[1] ?? alternate.exec(html)?.[1] ?? "");
+  };
+  const description = htmlToText(meta("og:description") || meta("description"));
+  if (description.length < MIN_SUMMARY_CHARS) return null;
+  return { source: "page-summary", fields: { jdText: description } };
 }
 
 /** How much rendered prose is worth treating as a description. Below this it
@@ -185,7 +214,11 @@ export function fromRenderedText(html: string): Evidence | null {
 
 /** Every generic reading of one page, best first. */
 export function readPage(html: string): Evidence[] {
-  return [fromJsonLd(html), fromMetaTags(html), fromRenderedText(html)].filter(
-    (e): e is Evidence => e !== null,
-  );
+  return [
+    fromJsonLd(html),
+    fromMetaTags(html),
+    fromRenderedText(html),
+    // Last, and ranked lowest: only reached when nothing above had a body.
+    fromMetaSummary(html),
+  ].filter((e): e is Evidence => e !== null);
 }

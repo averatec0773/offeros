@@ -301,6 +301,25 @@ export function classifyFields(
   );
 }
 
+/**
+ * Send this page's rendered description to OfferOS.
+ *
+ * The server can only see what a server can fetch; on a page built in the
+ * browser that is a link-preview blurb. The panel is standing in the browser
+ * and can read what the applicant reads.
+ */
+export function saveJdFromPage(
+  applicationId: string,
+  jdText: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<unknown>> {
+  return call<unknown>(
+    `/applications/${applicationId}/jd-from-page`,
+    json("POST", { jdText }),
+    fetchImpl,
+  );
+}
+
 /** The full answer bank (`GET /answers`) — used to dedup an accepted AI answer against
  *  an existing entry before deciding create vs. update. */
 export function listAnswers(fetchImpl: typeof fetch = fetch): Promise<ApiResult<AnswerEntry[]>> {

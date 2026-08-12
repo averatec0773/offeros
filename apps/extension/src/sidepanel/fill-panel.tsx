@@ -237,6 +237,9 @@ export function FillPanel({
    *  — throwing away work done on a real page would be worse — but two panels
    *  writing the same record silently is worse still. */
   const [supersededBy, setSuperseded] = useState(false);
+  /** Sending this page's rendered description to OfferOS. */
+  const [jdBusy, setJdBusy] = useState(false);
+  const [jdNote, setJdNote] = useState<string | null>(null);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
   // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
   // the caption never claims an unsaved edit was saved.
@@ -1364,6 +1367,44 @@ export function FillPanel({
     }
   };
 
+  /**
+   * Send the description as the browser sees it.
+   *
+   * A server fetching a page built in JavaScript gets a link-preview blurb —
+   * on a real posting, 150 characters where the description is thousands,
+   * because the text does not exist until a browser runs the page. The panel is
+   * standing in that browser. This is the ladder's browser rung, which was
+   * always reserved and never wired.
+   */
+  const sendJdFromPage = async () => {
+    const b = bundleRef.current;
+    if (!b || jdBusy) return;
+    setJdBusy(true);
+    setJdNote(null);
+    try {
+      let captured: CaptureJdResponse;
+      try {
+        captured = await capture();
+      } catch {
+        setJdNote("Couldn't read this page — reload it and try again.");
+        return;
+      }
+      const text = captured.jd.trim();
+      if (text.length < 200) {
+        setJdNote("This page doesn't have enough text to be the description.");
+        return;
+      }
+      const saved = await api.saveJdFromPage(b.applicationId, text);
+      setJdNote(
+        saved.ok
+          ? `Saved the description from this page (${text.length.toLocaleString()} characters).`
+          : (saved.error ?? "Couldn't save it — try again."),
+      );
+    } finally {
+      setJdBusy(false);
+    }
+  };
+
   const onFill = async () => {
     if (pendingRef.current || done || !scanResult.ok || !bundleRef.current) return;
     // Fields the page already holds are skipped inside taskFillPage — the one
@@ -1598,6 +1639,22 @@ export function FillPanel({
                   ? "Read it again"
                   : "Have AI read this form"}
             </button>
+          </div>
+        )}
+        {/* The description, from the page the user is actually looking at. The
+            server can only fetch; on a page built in the browser that returns a
+            blurb. This is the only place standing in the right browser. */}
+        {bundle && (
+          <div className="mb-2 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+            <button
+              type="button"
+              onClick={() => void sendJdFromPage()}
+              disabled={jdBusy}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 text-caption font-semibold text-text-primary transition-[color,transform] duration-fast ease-out-strong hover:bg-bg-base active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
+            >
+              {jdBusy ? "Reading the page…" : "Save this page's description"}
+            </button>
+            {jdNote && <p className="mt-1.5 text-caption text-text-secondary">{jdNote}</p>}
           </div>
         )}
         {plan.length > 0 && <CoverageBar coverage={fillCoverage(plan, satisfiedByPage)} />}

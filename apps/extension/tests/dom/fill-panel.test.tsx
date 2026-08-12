@@ -135,6 +135,7 @@ const emptyApi = (): FillApi => ({
     ok: true as const,
     value: { resolutions: [], considered: 0, classified: 0 },
   })),
+  saveJdFromPage: vi.fn(async () => ({ ok: true as const, value: {} })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
     ok: true,
     value: [],
@@ -1212,6 +1213,67 @@ describe("FillPanel", () => {
       });
       expect(screen.queryByText(/permission is required/i)).toBeNull();
       expect(screen.queryByText(/screenshot/i)).toBeNull();
+    });
+  });
+
+  /**
+   * Sending the page's own description to OfferOS.
+   *
+   * A server fetching a posting written in JavaScript gets a link-preview
+   * blurb. The panel is standing in the browser where the real text exists —
+   * this is the ladder's browser rung, reserved from the start and never wired.
+   */
+  describe("the description as the browser sees it", () => {
+    const claimedApi = (over: Partial<FillApi> = {}): FillApi => ({
+      ...emptyApi(),
+      getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+        ok: true,
+        value: [ticket],
+      })),
+      claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+      ...over,
+    });
+
+    const longJd = "We are hiring an engineer to own the ingestion pipeline. ".repeat(8);
+
+    it("captures the rendered page and stores it against the application", async () => {
+      const api = claimedApi();
+      renderPanel({ api, capture: vi.fn(async () => ({ ...captureOk, jd: longJd })) });
+      await screen.findByText("Engineer · Acme");
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: /Save this page's description/ }));
+      });
+
+      expect(api.saveJdFromPage).toHaveBeenCalledWith("a1", longJd.trim());
+      expect(await screen.findByText(/Saved the description from this page/)).toBeInTheDocument();
+    });
+
+    it("refuses a page with almost no text rather than storing furniture", async () => {
+      const api = claimedApi();
+      renderPanel({ api, capture: vi.fn(async () => ({ ...captureOk, jd: "Careers | Acme" })) });
+      await screen.findByText("Engineer · Acme");
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: /Save this page's description/ }));
+      });
+
+      expect(api.saveJdFromPage).not.toHaveBeenCalled();
+      expect(await screen.findByText(/doesn't have enough text/)).toBeInTheDocument();
+    });
+
+    it("shows a refusal from the server instead of looking like it worked", async () => {
+      const api = claimedApi({
+        saveJdFromPage: vi.fn(async () => ({ ok: false as const, error: "nope" })),
+      });
+      renderPanel({ api, capture: vi.fn(async () => ({ ...captureOk, jd: longJd })) });
+      await screen.findByText("Engineer · Acme");
+
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: /Save this page's description/ }));
+      });
+
+      expect(await screen.findByText("nope")).toBeInTheDocument();
     });
   });
 
