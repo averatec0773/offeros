@@ -21,6 +21,7 @@ export { normalizeQuestion, matchAnswer } from "./answer-match";
 export {
   isTransientText,
   isUsableLabel,
+  looksLikeHumanLabel,
   looksLikeCaptcha,
   looksLikeIdentifier,
   CAPTCHA_REASON,

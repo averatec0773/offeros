@@ -2,6 +2,7 @@ import {
   matchOption,
   matchOptionValue,
   isUsableLabel,
+  looksLikeHumanLabel,
   type FieldDescriptor,
   type FieldMeta,
 } from "@offeros/autofill";
@@ -91,17 +92,46 @@ function documentHasLayout(doc: Document): boolean {
  * platform's prefix is what makes this general: it is the same trick everywhere,
  * only the prefix changes.
  */
-function labelByIdConvention(el: HTMLElement, id: string): Element | null {
+function labelByIdConvention(el: HTMLElement, key: string): Element | null {
   const doc = el.ownerDocument;
   for (const candidate of Array.from(doc.querySelectorAll("label[id]"))) {
     const labelId = candidate.getAttribute("id") ?? "";
-    if (labelId === id) continue;
+    if (labelId === key) continue;
     const related =
-      (labelId.endsWith(id) && /label/i.test(labelId.slice(0, labelId.length - id.length))) ||
-      (labelId.startsWith(id) && /label/i.test(labelId.slice(id.length)));
+      (labelId.endsWith(key) && /label/i.test(labelId.slice(0, labelId.length - key.length))) ||
+      (labelId.startsWith(key) && /label/i.test(labelId.slice(key.length)));
     if (related && isVisible(candidate)) return candidate;
   }
   return null;
+}
+
+/**
+ * A label carried as a component's own property.
+ *
+ * Component frameworks put the human name of a control in an attribute on the
+ * wrapper that renders it — `cx-prop-label`, `data-label`, `lt-prop-label`. The
+ * pattern is "an attribute whose NAME contains label", which is what this
+ * matches; no framework's spelling is hard-coded, because the spelling is the
+ * only part that differs between them.
+ *
+ * Held to a stricter bar than visible text (`looksLikeHumanLabel`): an
+ * attribute value has not been through a designer, so it is as likely to hold a
+ * template expression or an id as a question.
+ */
+function labelFromAncestorProp(el: HTMLElement, budget: number): string {
+  let node: Element | null = el;
+  for (let depth = 0; depth <= budget && node; depth += 1, node = node.parentElement) {
+    // Same guard the row rung uses: a container holding several controls
+    // describes all of them, so its label belongs to none in particular.
+    if (depth > 0 && node.querySelectorAll("input, select, textarea").length > 2) break;
+    for (const attr of Array.from(node.attributes)) {
+      if (!/label/i.test(attr.name)) continue;
+      // aria-labelledby holds ids, not text — it has its own rung above.
+      if (/labelledby/i.test(attr.name)) continue;
+      if (looksLikeHumanLabel(attr.value)) return attr.value.trim();
+    }
+  }
+  return "";
 }
 
 /**
@@ -113,9 +143,9 @@ function labelByIdConvention(el: HTMLElement, id: string): Element | null {
  * wrapping, and no aria. Two containers are worth searching: one whose class
  * names the field (frameworks do this), and the ordinary "row" wrapper.
  */
-function labelInSameRow(el: HTMLElement, id: string): Element | null {
+function labelInSameRow(el: HTMLElement, key: string): Element | null {
   const containers: (Element | null)[] = [];
-  if (id) containers.push(el.closest(`[class*="${CSS.escape(id)}"]`));
+  if (key) containers.push(el.closest(`[class*="${CSS.escape(key)}"]`));
   containers.push(el.closest("[class*=row], [class*=Row], [class*=field], [class*=Field]"));
   containers.push(el.parentElement);
   for (const container of containers) {
@@ -148,8 +178,29 @@ function precedingSiblingLabel(el: HTMLElement): Element | null {
  * one rule is the whole fix: the chain used to take the first non-empty string
  * it found, which on a form with no `for` attributes meant the field's own id.
  */
+/**
+ * How this field is identified on the page.
+ *
+ * Usually its `id`. But a component framework can leave the visible `<input>`
+ * with an EMPTY id and put the identity in `name` — the id belongs to the
+ * wrapper that rendered it, and to a hidden template twin. Every convention
+ * that names a label after its field then keys off the name instead, so the
+ * ladder has to look there too. `for` is excluded on purpose: the HTML spec
+ * says `for` matches an id and nothing else.
+ */
+function identityKey(el: HTMLElement): string {
+  const id = el.getAttribute("id") ?? "";
+  if (id !== "") return id;
+  return el.getAttribute("name") ?? "";
+}
+
+/** How far up the tree the label hunt is allowed to walk. Raised from four
+ *  after a real form put its row container one level beyond the old budget. */
+const ANCESTOR_BUDGET = 6;
+
 function labelInfo(el: HTMLElement): { text: string; required: boolean } {
   const id = el.getAttribute("id") ?? "";
+  const key = identityKey(el);
   const doc = el.ownerDocument;
   const accept = (
     node: Element | null,
@@ -186,12 +237,18 @@ function labelInfo(el: HTMLElement): { text: string; required: boolean } {
     if (hit) return hit;
   }
 
-  // 3. An id convention, then 4. the same row, then 5. a sibling just before.
-  if (id) {
-    const hit = accept(labelByIdConvention(el, id));
+  // 3. A naming convention between the label's id and this field's identity.
+  if (key) {
+    const hit = accept(labelByIdConvention(el, key));
     if (hit) return hit;
   }
-  const row = accept(labelInSameRow(el, id));
+
+  // 4. A component's own label property, on this element or an ancestor.
+  const prop = labelFromAncestorProp(el, ANCESTOR_BUDGET);
+  if (prop) return { text: prop, required: /\*/.test(prop) };
+
+  // 5. The same row, then 6. a sibling just before.
+  const row = accept(labelInSameRow(el, key));
   if (row) return row;
   const sibling = accept(precedingSiblingLabel(el));
   if (sibling) return sibling;
@@ -213,7 +270,7 @@ function labelInfo(el: HTMLElement): { text: string; required: boolean } {
  */
 function contextTextFor(el: HTMLElement): string {
   let node: Element | null = el.parentElement;
-  for (let depth = 0; depth < 4 && node; depth += 1, node = node.parentElement) {
+  for (let depth = 0; depth < ANCESTOR_BUDGET && node; depth += 1, node = node.parentElement) {
     // A container with several controls describes all of them and none of them.
     if (node.querySelectorAll("input, select, textarea").length > 2) break;
     const text = textWithoutControls(node);
@@ -362,6 +419,12 @@ function isWidgetSearchBox(el: HTMLElement): boolean {
 function isScannable(el: HTMLElement): boolean {
   if (el.getAttribute("name") === "g-recaptcha-response") return false;
   if (el.closest('[aria-hidden="true"]')) return false;
+  // A <template>'s contents are inert markup waiting to be cloned, and a
+  // component framework's own template twin is the same thing by another name.
+  // Both carry a full copy of every field — ids, names and all — so scanning
+  // them lists every question twice and lets the copy nobody can see win the
+  // label lookup.
+  if (el.closest('template, [is="component"]')) return false;
   const style = el.ownerDocument.defaultView?.getComputedStyle(el);
   if (style && (style.display === "none" || style.visibility === "hidden")) return false;
   // A widget's own machinery, not a question the applicant was asked.
@@ -380,7 +443,7 @@ function precedingTitle(
   excludeTexts: string[],
 ): { text: string; required: boolean } | null {
   let node: HTMLElement | null = first.closest("label")?.parentElement ?? first.parentElement;
-  for (let depth = 0; depth < 4 && node; depth += 1, node = node.parentElement) {
+  for (let depth = 0; depth < ANCESTOR_BUDGET && node; depth += 1, node = node.parentElement) {
     for (const child of Array.from(node.children)) {
       if (child.contains(first)) break; // only content that precedes the options
       const text = (child.textContent ?? "").replace(/\s+/g, " ").trim();

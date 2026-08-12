@@ -122,6 +122,28 @@ export function isUsableLabel(text: string | null | undefined): boolean {
 }
 
 /**
+ * A stricter bar than `isUsableLabel`, for text that arrives as an attribute
+ * value rather than as visible content.
+ *
+ * A component's own props are a rich source of labels — `cx-prop-label`,
+ * `data-label`, `lt-prop-label` — and also a rich source of things that are not
+ * labels at all: template expressions, ids, booleans, JSON. Visible text has
+ * already been through a designer; an attribute value has not. So on top of
+ * every rule `isUsableLabel` applies, this one also requires the value to read
+ * like something written for a person: at least one letter, and none of the
+ * punctuation that means it is markup or code.
+ */
+export function looksLikeHumanLabel(text: string | null | undefined): boolean {
+  if (!isUsableLabel(text)) return false;
+  const t = (text as string).trim();
+  if (!/[A-Za-z]/.test(t)) return false;
+  // Template expressions and code, not prose: {{x}}, ${x}, <b>, a();
+  if (/[{}<>$`|]/.test(t)) return false;
+  if (/\b(true|false|null|undefined)\b/i.test(t)) return false;
+  return true;
+}
+
+/**
  * A field that is a CAPTCHA, and therefore permanently the user's.
  *
  * This is a discipline, not a limitation. OfferOS could not read one of these

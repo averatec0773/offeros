@@ -162,3 +162,118 @@ describe("what is not a question", () => {
     expect(labels()).toEqual([""]);
   });
 });
+
+/**
+ * The second survey of the same form, after the first fix did not take.
+ *
+ * The ladder shipped, and on the real page it still produced nothing. Three
+ * DOM facts explained why, and every one of them is a shape other component
+ * frameworks share:
+ *
+ *   F1. the visible `<input>` has an EMPTY id. The identity is in `name`; the
+ *       id belongs to the wrapper that rendered it, and to a hidden template
+ *       twin carrying a full copy of the field.
+ *   F2. the conventions all key off that name — `crc-label-<name>` on the
+ *       label, `crc-<name>` in the row container's class — and the wrapper
+ *       carries the human name outright in a component property.
+ *   F3. the row container sits one level further up than the walk allowed.
+ *
+ * The ids and names below imitate the real shapes; the labels are synthetic.
+ */
+describe("a component framework that puts identity in name, not id", () => {
+  it("finds a convention label keyed on the field's name", () => {
+    // F1 + F2: id="" on the input, so every id-keyed rung had nothing to key on.
+    document.body.innerHTML = `<main><form>
+      <label id="crc-label-rec-form_682152000000063542">Current Employer</label>
+      <div class="crc-rec-form_682152000000063542">
+        <input id="" name="rec-form_682152000000063542" />
+      </div>
+    </form></main>`;
+    expect(labels()).toEqual(["Current Employer"]);
+  });
+
+  it("finds a row container whose class carries the field's name", () => {
+    document.body.innerHTML = `<main><form>
+      <div class="crc-rec-form_682152000000063550 row">
+        <label class="crm-from-label">Notice Period *</label>
+        <input id="" name="rec-form_682152000000063550" />
+      </div>
+    </form></main>`;
+    expect(labels()).toEqual(["Notice Period *"]);
+  });
+
+  it("reads a label the wrapper carries as a component property", () => {
+    // The name is right there in an attribute, and no <label> element exists.
+    document.body.innerHTML = `<main><form>
+      <div cx-prop-label="Highest Qualification">
+        <div class="wrapper"><input id="" name="rec-form_9100" /></div>
+      </div>
+    </form></main>`;
+    expect(labels()).toEqual(["Highest Qualification"]);
+  });
+
+  it("accepts any framework's spelling of that attribute", () => {
+    // The pattern is "attribute whose NAME contains label" — the spelling is
+    // the only part that differs between frameworks.
+    for (const attr of ["data-label", "lt-prop-label", "ui-label"]) {
+      document.body.innerHTML = `<main><form>
+        <div ${attr}="Portfolio Link"><input id="" name="rec-form_9200" /></div>
+      </form></main>`;
+      expect(labels(), attr).toEqual(["Portfolio Link"]);
+    }
+  });
+
+  it("refuses an attribute value that is not something a person would read", () => {
+    // Component props hold ids, booleans and template expressions as often as
+    // they hold names.
+    for (const value of ["{{field.label}}", "rec-form_9300", "true", "12345", "<b>x</b>"]) {
+      document.body.innerHTML = `<main><form>
+        <div cx-prop-label="${value}"><input id="" name="rec-form_9300" /></div>
+      </form></main>`;
+      expect(labels(), value).toEqual([""]);
+    }
+  });
+
+  it("reaches a row container one level deeper than the old budget allowed", () => {
+    // F3: the real page nested the input this far below its row.
+    document.body.innerHTML = `<main><form>
+      <div class="crc-rec-form_682152000000063999 row">
+        <label class="crm-from-label">Reason for leaving</label>
+        <div><div><div><div><div><input id="" name="rec-form_682152000000063999" /></div></div></div></div></div>
+      </div>
+    </form></main>`;
+    expect(labels()).toEqual(["Reason for leaving"]);
+  });
+});
+
+describe("the framework's hidden template twin", () => {
+  it("is not scanned, so the field is listed once and reads its real label", () => {
+    // Both copies carry the same name; the template comes first in document
+    // order, which is why the visible one's label kept going unread.
+    document.body.innerHTML = `<main><form>
+      <template is="component">
+        <div class="crc-rec-form_777"><input id="" name="rec-form_777" /></div>
+      </template>
+      <div class="crc-rec-form_777 row">
+        <label class="crm-from-label">Expected Salary</label>
+        <input id="" name="rec-form_777" />
+      </div>
+    </form></main>`;
+    const found = scan();
+    expect(found).toHaveLength(1);
+    expect(found[0]!.label).toBe("Expected Salary");
+  });
+
+  it("ignores a component twin that is not a <template> element", () => {
+    document.body.innerHTML = `<main><form>
+      <div is="component"><input id="" name="rec-form_888" /></div>
+      <div class="crc-rec-form_888 row">
+        <label class="crm-from-label">Availability</label>
+        <input id="" name="rec-form_888" />
+      </div>
+    </form></main>`;
+    const found = scan();
+    expect(found).toHaveLength(1);
+    expect(found[0]!.label).toBe("Availability");
+  });
+});
