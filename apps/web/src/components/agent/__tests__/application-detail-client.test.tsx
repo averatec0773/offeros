@@ -248,8 +248,11 @@ describe("the form", () => {
         ],
       }),
     });
-    expect(screen.getByText("Email")).toBeTruthy();
+    // The summary is unasked; the field-by-field detail is one click in.
+    expect(screen.getByText(/1 of 1 fillable fields filled/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Re-fill/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Field by field/i }));
+    expect(screen.getByText("Email")).toBeTruthy();
   });
 
   it("keeps the missing-fields card and its three resolutions", async () => {

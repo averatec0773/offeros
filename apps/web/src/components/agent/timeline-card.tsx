@@ -48,6 +48,16 @@ function describeEvent(event: ApplicationEvent): string {
       return "Marked as submitted";
     case "style-distilled":
       return "Style preferences updated";
+    case "evidence-captured": {
+      const label = typeof payload.label === "string" ? payload.label : "a field";
+      return `Screenshot kept: ${label}`;
+    }
+    case "job-checked": {
+      const detail = typeof payload.detail === "string" ? payload.detail : "";
+      return detail || "Checked the posting";
+    }
+    case "jd-analyzed":
+      return "Read the job description";
     default:
       return event.kind;
   }
@@ -67,6 +77,10 @@ function exportEvents(applicationId: string, events: ApplicationEvent[]) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/** How much history is worth showing unasked. A record should say what just
+ *  happened; the rest is one click away. */
+const RECENT = 3;
+
 export function TimelineCard({
   applicationId,
   events,
@@ -74,8 +88,9 @@ export function TimelineCard({
   applicationId: string;
   events: ApplicationEvent[];
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [showAll, setShowAll] = useState(false);
   const ordered = [...events].sort((a, b) => b.at - a.at);
+  const shown = showAll ? ordered : ordered.slice(0, RECENT);
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
@@ -90,24 +105,17 @@ export function TimelineCard({
             <Download className="size-4" />
             Export JSON
           </button>
-          <button
-            type="button"
-            onClick={() => setExpanded((e) => !e)}
-            className="inline-flex items-center rounded-full bg-muted px-3 py-1.5 text-caption font-medium text-muted-foreground transition-colors hover:bg-secondary"
-          >
-            {expanded ? "Hide" : "Show"}
-          </button>
         </div>
       </div>
 
-      {expanded &&
-        (ordered.length === 0 ? (
-          <p className="mt-3 text-caption text-muted-foreground">
-            No history yet — events are recorded from now on.
-          </p>
-        ) : (
+      {ordered.length === 0 ? (
+        <p className="mt-3 text-caption text-muted-foreground">
+          No history yet — events are recorded from now on.
+        </p>
+      ) : (
+        <>
           <ul className="mt-3 space-y-2">
-            {ordered.map((event) => (
+            {shown.map((event) => (
               <li key={event.id} className="flex items-baseline justify-between gap-3 text-body">
                 <span className="min-w-0 break-words text-foreground">{describeEvent(event)}</span>
                 <span className="shrink-0 text-caption text-muted-foreground">
@@ -116,7 +124,18 @@ export function TimelineCard({
               </li>
             ))}
           </ul>
-        ))}
+          {ordered.length > RECENT && (
+            <button
+              type="button"
+              onClick={() => setShowAll((value) => !value)}
+              aria-expanded={showAll}
+              className="mt-2 text-caption font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {showAll ? "Show less" : `Show all ${ordered.length}`}
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }

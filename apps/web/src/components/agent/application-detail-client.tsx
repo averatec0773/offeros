@@ -22,11 +22,10 @@ import { extensionPresent, openFillTabViaExtension } from "@/lib/extension-bridg
 import { subscribeToAgentEvents } from "@/lib/agent-events";
 import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
-import { ActionRequiredCard } from "./action-required-card";
 import { ArtifactViewer } from "./artifact-viewer";
 import { ConnectProviderNote } from "./connect-provider-note";
-import { FillReportCard } from "./fill-report-card";
 import { FitCard } from "./fit-card";
+import { FormCard } from "./form-card";
 import { JdCard } from "./jd-card";
 import { RequirementsCard } from "./requirements-card";
 import { TimelineCard } from "./timeline-card";
@@ -117,7 +116,6 @@ export function ApplicationDetailClient({
 
   const resumeArtifact = artifacts.find((a) => a.kind === "resume") ?? null;
   const coverLetterArtifact = artifacts.find((a) => a.kind === "cover-letter") ?? null;
-  const actionRequired = task?.applicationInfo?.status === 2 ? task.applicationInfo : null;
 
   useEffect(() => {
     let active = true;
@@ -439,58 +437,15 @@ export function ApplicationDetailClient({
             saving={savingJd}
           />
 
-          {actionRequired && (
-            <ActionRequiredCard
-              applicationInfo={actionRequired}
-              onReFill={handleOpenAndFill}
-              onFixed={() => handleFillResolve("fixed")}
-              onApplied={() => handleFillResolve("applied-manually")}
-            />
-          )}
-
-          <section className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-body font-semibold text-foreground">The form</h2>
-                <p className="mt-0.5 text-caption text-muted-foreground">
-                  {task && task.fieldReports.length > 0
-                    ? "Filled by the browser panel. Every field it touched is below."
-                    : "Open the application and the browser panel fills it from your profile."}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleOpenAndFill}
-                disabled={busy}
-                className="shrink-0 rounded-full bg-primary px-3.5 py-1.5 text-caption font-semibold text-primary-foreground press hover:bg-primary/85 disabled:opacity-50"
-              >
-                {task && task.fieldReports.length > 0 ? "Re-fill" : "Open & fill"}
-              </button>
-            </div>
-            {ticketCreated && (
-              <p className="mt-2 text-caption text-muted-foreground">
-                Ticket created — the Side Panel will pick it up on the ATS page.
-              </p>
-            )}
-          </section>
-
-          {task && task.fieldReports.length > 0 && <FillReportCard reports={task.fieldReports} />}
-
-          {initialIncidents.length > 0 && (
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="text-body font-semibold text-foreground">What went wrong here</h2>
-              <ul className="mt-2 space-y-1.5">
-                {initialIncidents.map((incident) => (
-                  <li key={incident.id} className="text-caption text-muted-foreground">
-                    <span className="font-medium text-foreground">{incident.triggerId}</span> —{" "}
-                    {incident.summary}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <EvidenceCard events={events} />
+          <FormCard
+            task={task}
+            incidents={initialIncidents}
+            busy={busy}
+            ticketCreated={ticketCreated}
+            onOpenAndFill={() => void handleOpenAndFill()}
+            onFixed={() => void handleFillResolve("fixed")}
+            onApplied={() => void handleFillResolve("applied-manually")}
+          />
 
           <TimelineCard applicationId={application.id} events={events} />
         </div>
@@ -696,36 +651,6 @@ function MaterialCard({
         {approved && <span className="text-caption text-success">Accepted</span>}
       </div>
     </div>
-  );
-}
-
-/** Screenshots the extension took of fields that went wrong. Listed rather
- *  than rendered: the files are on disk beside the database, and serving them
- *  over HTTP is a door this page does not need to open. */
-function EvidenceCard({ events }: { events: ApplicationEvent[] }) {
-  const shots = events.filter((e) => e.kind === "evidence-captured");
-  if (shots.length === 0) return null;
-  return (
-    <section className="rounded-2xl border border-border bg-card p-4">
-      <h2 className="text-body font-semibold text-foreground">Evidence</h2>
-      <p className="mt-0.5 text-caption text-muted-foreground">
-        {shots.length} screenshot{shots.length === 1 ? "" : "s"} of fields that needed attention,
-        stored beside your database.
-      </p>
-      <ul className="mt-2 space-y-1">
-        {shots.map((shot) => {
-          const payload = (shot.payload ?? {}) as { label?: unknown; file?: unknown };
-          const label = typeof payload.label === "string" ? payload.label : "field";
-          const file = typeof payload.file === "string" ? payload.file.split("/").pop() : "";
-          return (
-            <li key={shot.id} className="text-caption text-muted-foreground">
-              <span className="text-foreground">{label}</span>
-              {file ? ` — ${file}` : ""}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }
 

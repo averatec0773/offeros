@@ -49,6 +49,8 @@ const ALL_KINDS: ApplicationEvent[] = [
 describe("TimelineCard", () => {
   it("renders the exact human label for every event kind", () => {
     render(<TimelineCard applicationId="app-1" events={ALL_KINDS} />);
+    // Only the newest few show unasked; the labels are what is under test.
+    fireEvent.click(screen.getByRole("button", { name: /Show all/i }));
 
     expect(screen.getByText("Started")).toBeTruthy();
     expect(screen.getByText("Completed: Tailor resume")).toBeTruthy();
@@ -59,8 +61,21 @@ describe("TimelineCard", () => {
     expect(screen.getByText("Style preferences updated")).toBeTruthy();
   });
 
-  it("renders events reverse-chronologically (most recent first)", () => {
+  it("shows only the newest few unasked, newest first", () => {
     render(<TimelineCard applicationId="app-1" events={ALL_KINDS} />);
+
+    // A record should say what just happened; seven lines of history is not
+    // that, and it pushed everything below it off the screen.
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(
+      within(screen.getAllByRole("listitem")[0]!).getByText("Style preferences updated"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Started")).toBeNull();
+  });
+
+  it("shows the whole history on request, oldest last", () => {
+    render(<TimelineCard applicationId="app-1" events={ALL_KINDS} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show all 7" }));
 
     const items = screen.getAllByRole("listitem");
     expect(items).toHaveLength(7);
@@ -73,15 +88,32 @@ describe("TimelineCard", () => {
     expect(screen.getByText("No history yet — events are recorded from now on.")).toBeTruthy();
   });
 
-  it("toggles the event list via the header's show/hide control", () => {
+  it("folds the history back up again", () => {
     render(<TimelineCard applicationId="app-1" events={ALL_KINDS} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Show all 7" }));
     expect(screen.getByText("Started")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /hide/i }));
-    expect(screen.queryByText("Started")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /show/i }));
-    expect(screen.getByText("Started")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    expect(screen.queryByText("Started")).toBeNull();
+  });
+
+  it("reads an evidence screenshot as an event, so it needs no card of its own", () => {
+    render(
+      <TimelineCard
+        applicationId="app-1"
+        events={[
+          {
+            id: "e-shot",
+            applicationId: "app-1",
+            kind: "evidence-captured",
+            at: 9,
+            payload: { label: "Why this company?", file: "/tmp/a.png" },
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("Screenshot kept: Why this company?")).toBeTruthy();
   });
 
   it("exports the raw event list as JSON with the applicationId in the filename", () => {
