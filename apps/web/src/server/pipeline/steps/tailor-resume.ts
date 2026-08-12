@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   buildResumeHeader,
+  defaultArtifactName,
   serializeResume,
   type PipelineTask,
   type Artifact,
@@ -53,6 +54,10 @@ export async function run(ctx: PipelineContext, task: PipelineTask): Promise<voi
         id: randomUUID(),
         taskId: ctx.taskId,
         kind: "resume",
+        // Named at birth, from the company it was tailored for. Revisions
+        // append versions to this artifact, so the name is set once and only
+        // the user changes it after that.
+        name: defaultArtifactName("resume", application.jobInfo.companyName, now),
         versions: [newVersion],
         currentVersionId: versionId,
         createdAt: now,

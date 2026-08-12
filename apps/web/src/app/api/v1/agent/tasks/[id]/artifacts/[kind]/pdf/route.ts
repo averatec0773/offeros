@@ -1,38 +1,15 @@
-import { ARTIFACT_KINDS, type ArtifactKind, type JobInfo } from "@offeros/core";
+import { ARTIFACT_KINDS, type ArtifactKind } from "@offeros/core";
 import { getDb } from "@/server/db/client";
 import { getPipelineTask } from "@/server/repositories/pipeline-task-repo";
-import { getApplication } from "@/server/repositories/application-repo";
 import { getArtifact } from "@/server/repositories/artifact-repo";
 import { exportArtifactPdf } from "@/server/services/export-service";
+import { nameOf } from "@/server/services/document-service";
 import { badRequest, handle, notFound } from "@/server/http/envelope";
+import { attachmentDisposition } from "@/server/http/content-disposition";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string; kind: string }> };
-
-const KIND_LABEL: Record<ArtifactKind, string> = {
-  resume: "Resume",
-  "cover-letter": "Cover_Letter",
-};
-
-/** Collapse to filesystem-safe ASCII words; empty → undefined. */
-function slug(value: string | undefined): string | undefined {
-  const cleaned = (value ?? "")
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "_");
-  return cleaned === "" ? undefined : cleaned;
-}
-
-/** `Company_Position_Cover_Letter_YYYY-MM-DD.pdf`, mirroring the manual convention. */
-function buildFilename(kind: ArtifactKind, job: JobInfo | undefined): string {
-  const date = new Date().toISOString().slice(0, 10);
-  const parts = [slug(job?.companyName), slug(job?.jobTitle), KIND_LABEL[kind], date].filter(
-    (p): p is string => Boolean(p),
-  );
-  return `${parts.join("_")}.pdf`;
-}
 
 /** Stream a rendered PDF for a task artifact; errors are enveloped JSON. */
 export async function GET(_request: Request, ctx: Ctx) {
@@ -44,9 +21,9 @@ export async function GET(_request: Request, ctx: Ctx) {
     const artifactKind = kind as ArtifactKind;
 
     const db = getDb();
-    const task = getPipelineTask(db, id);
-    if (!task) return notFound("agent task");
-    if (!getArtifact(db, id, artifactKind)) return notFound(`${kind} artifact`);
+    if (!getPipelineTask(db, id)) return notFound("agent task");
+    const artifact = getArtifact(db, id, artifactKind);
+    if (!artifact) return notFound(`${kind} artifact`);
 
     const result = await exportArtifactPdf(db, id, artifactKind);
     if (!result.ok) {
@@ -54,11 +31,12 @@ export async function GET(_request: Request, ctx: Ctx) {
       return badRequest(message);
     }
 
-    const job = getApplication(db, task.applicationId)?.jobInfo;
-    const filename = buildFilename(artifactKind, job);
+    // The download is named what the user calls the document — the default
+    // ("cover_Acme_2026-08-12") when they have not renamed it. Files that
+    // arrive on disk with a name nobody recognises are the reason names exist.
     const headers: Record<string, string> = {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="${filename}"`,
+      "content-disposition": attachmentDisposition(`${nameOf(db, artifact)}.pdf`),
       "content-length": String(result.pdf.byteLength),
     };
     // Surface a non-fatal render remark (e.g. the builtin-fallback reason).

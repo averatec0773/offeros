@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PipelineTask, Artifact } from "@offeros/core";
+import { defaultArtifactName, type PipelineTask, type Artifact } from "@offeros/core";
 import type { CoverLetterInput, CoverLetterOutput } from "@offeros/llm";
 import type { PipelineContext } from "../types";
 import { buildGroundingFacts } from "./grounding";
@@ -57,6 +57,8 @@ export async function run(ctx: PipelineContext, task: PipelineTask): Promise<voi
         id: randomUUID(),
         taskId: ctx.taskId,
         kind: "cover-letter",
+        // Named at birth, from the company it was written for.
+        name: defaultArtifactName("cover-letter", application.jobInfo.companyName, now),
         versions: [newVersion],
         currentVersionId: versionId,
         createdAt: now,

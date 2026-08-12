@@ -19,11 +19,15 @@ const { createApplication } = await import("@/server/repositories/application-re
 const { createPipelineTask } = await import("@/server/repositories/pipeline-task-repo");
 const { upsertArtifact } = await import("@/server/repositories/artifact-repo");
 const { GET } = await import("../agent/tasks/[id]/artifacts/[kind]/pdf/route");
+const { PATCH } = await import("../agent/tasks/[id]/artifacts/[kind]/route");
 
 const PDF = Buffer.from("%PDF-1.4 route test\n%%EOF\n");
 
+/** 2026-08-12, so the date inside a document's name is fixed. */
+const AUG_12 = Date.UTC(2026, 7, 12, 6, 30);
+
 function artifact(taskId: string, kind: Artifact["kind"]): Artifact {
-  const now = Date.now();
+  const now = AUG_12;
   return {
     id: `${taskId}-${kind}`,
     taskId,
@@ -58,9 +62,10 @@ describe("GET artifact pdf route", () => {
     const res = await GET(req(), ctx(taskId, "cover-letter"));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/pdf");
+    // The file is named what the document is called — the derived default
+    // here, since this artifact was stored without a name.
     const disposition = res.headers.get("content-disposition") ?? "";
-    expect(disposition).toContain("Evolver_AI_GenAI_Engineer_Cover_Letter_");
-    expect(disposition).toMatch(/\d{4}-\d{2}-\d{2}\.pdf/);
+    expect(disposition).toContain('filename="cover_EvolverAI_2026-08-12.pdf"');
     const bytes = Buffer.from(await res.arrayBuffer());
     expect(bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
@@ -115,5 +120,49 @@ describe("GET artifact pdf route", () => {
     expect(body.success).toBe(false);
     expect(body.errorMsg).toContain("pdflatex exited with code 1");
     expect(body.errorMsg).toContain("Undefined control sequence");
+  });
+});
+
+describe("PATCH artifact route (rename)", () => {
+  const body = (name: unknown) =>
+    new Request("http://localhost", { method: "PATCH", body: JSON.stringify({ name }) });
+
+  it("renames the document, and the download follows the new name", async () => {
+    const taskId = seed("Evolver AI");
+    const renamed = await PATCH(body("  the one that worked  "), ctx(taskId, "cover-letter"));
+    expect(renamed.status).toBe(200);
+    expect((await renamed.json()).result).toEqual({ name: "the one that worked" });
+
+    exportMock.mockResolvedValue({ ok: true, pdf: PDF });
+    const download = await GET(req(), ctx(taskId, "cover-letter"));
+    const disposition = download.headers.get("content-disposition") ?? "";
+    expect(disposition).toContain('filename="the one that worked.pdf"');
+  });
+
+  it("keeps a non-ASCII name intact in the download header", async () => {
+    // The ASCII fallback plus the RFC 5987 form — a name in Chinese must not
+    // arrive as "download" or as mojibake.
+    const taskId = seed("字节跳动");
+    await PATCH(body("字节跳动_求职信"), ctx(taskId, "cover-letter"));
+    exportMock.mockResolvedValue({ ok: true, pdf: PDF });
+    const download = await GET(req(), ctx(taskId, "cover-letter"));
+    const disposition = download.headers.get("content-disposition") ?? "";
+    expect(disposition).toContain("filename*=UTF-8''");
+    expect(decodeURIComponent(disposition.split("filename*=UTF-8''")[1]!)).toBe(
+      "字节跳动_求职信.pdf",
+    );
+  });
+
+  it("400s an empty name, a too-long name, and an unknown kind", async () => {
+    const taskId = seed();
+    expect((await PATCH(body("   "), ctx(taskId, "cover-letter"))).status).toBe(400);
+    expect((await PATCH(body("x".repeat(200)), ctx(taskId, "cover-letter"))).status).toBe(400);
+    expect((await PATCH(body("fine"), ctx(taskId, "transcript"))).status).toBe(400);
+  });
+
+  it("404s a document that does not exist", async () => {
+    const taskId = seed();
+    // The task exists; a résumé for it does not.
+    expect((await PATCH(body("fine"), ctx(taskId, "resume"))).status).toBe(404);
   });
 });
