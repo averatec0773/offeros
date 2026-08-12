@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
+import type { Application } from "@offeros/core";
 import { api } from "@/lib/api-client";
 
 /**
@@ -22,13 +23,13 @@ export function AddJobDialog() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<Application | null>(null);
 
   function close() {
     setOpen(false);
     setUrl("");
     setError(null);
-    setNote(null);
+    setDuplicate(null);
   }
 
   async function submit() {
@@ -36,11 +37,17 @@ export function AddJobDialog() {
     if (!trimmed || busy) return;
     setBusy(true);
     setError(null);
-    setNote(null);
+    setDuplicate(null);
     try {
       const result = await api.applications.create(trimmed);
       if (result.duplicate) {
-        setNote("You are already tracking this posting — opening it.");
+        // Stop, and say so. Navigating straight through was the confusing half
+        // of a real incident: the user saw an application open and assumed it
+        // was the one they had just added, when it was one they saved weeks
+        // ago. Nothing was created, and nothing said so.
+        setDuplicate(result.application);
+        setBusy(false);
+        return;
       }
       router.push(`/applications/${result.application.id}`);
     } catch (err) {
@@ -115,7 +122,39 @@ export function AddJobDialog() {
           </button>
         </form>
 
-        {note && <p className="mt-2 text-caption text-muted-foreground">{note}</p>}
+        {duplicate && (
+          <div className="mt-3 rounded-xl bg-warn-bg p-3">
+            <p className="text-body font-semibold text-foreground">
+              You are already tracking this job
+            </p>
+            <p className="mt-1 text-caption text-foreground/80">
+              Nothing new was added. This link points at{" "}
+              <span className="font-medium">
+                {duplicate.jobInfo.jobTitle} at {duplicate.jobInfo.companyName}
+              </span>
+              , which is already on your list.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => router.push(`/applications/${duplicate.id}`)}
+                className="rounded-full bg-primary px-3.5 py-1.5 text-caption font-semibold text-primary-foreground press hover:bg-primary/85"
+              >
+                Open it
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDuplicate(null);
+                  setUrl("");
+                }}
+                className="rounded-full border border-border px-3.5 py-1.5 text-caption font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                Add a different link
+              </button>
+            </div>
+          </div>
+        )}
         {error && <p className="mt-2 text-caption text-destructive">{error}</p>}
       </div>
     </div>

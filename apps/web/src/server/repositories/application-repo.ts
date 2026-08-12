@@ -8,6 +8,7 @@ import {
 } from "@offeros/core";
 import type { Db } from "../db/client";
 import { applications } from "../db/schema";
+import { isSameJobUrl } from "../job-url";
 
 type Row = typeof applications.$inferSelect;
 
@@ -30,25 +31,13 @@ export function listApplications(db: Db): Application[] {
   return db.select().from(applications).orderBy(desc(applications.updatedAt)).all().map(toDomain);
 }
 
-/** `origin + pathname` — drops query string and hash so tracking params
- *  (`?gh_src=…`) and a trailing `#` don't defeat the dedup match. Falls back
- *  to the raw string on an unparsable URL, so a malformed applyLink still
- *  compares (exactly, as before) instead of throwing. */
-function normalizeJobUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return u.origin + u.pathname.replace(/\/$/, "");
-  } catch {
-    return url;
-  }
-}
-
-/** Dedup lookup for "Add this job": applications tracking the same job URL
- *  (jobInfo.applyLink), compared with query string/hash normalized away. */
+/** Dedup lookup for "Add this job": applications tracking the same posting.
+ *  Sameness is decided by `isSameJobUrl` — job identity where a link carries
+ *  one, otherwise a normalisation that strips only known tracking parameters.
+ *  See job-url.ts for why dropping the whole query string was wrong. */
 export function listApplicationsByJobUrl(db: Db, jobUrl: string): Application[] {
-  const target = normalizeJobUrl(jobUrl);
   return listApplications(db).filter(
-    (a) => a.jobInfo.applyLink !== undefined && normalizeJobUrl(a.jobInfo.applyLink) === target,
+    (a) => a.jobInfo.applyLink !== undefined && isSameJobUrl(a.jobInfo.applyLink, jobUrl),
   );
 }
 

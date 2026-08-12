@@ -1,4 +1,7 @@
 import { questionKey, toControl, type FieldDescriptor, type FieldMeta } from "@offeros/autofill";
+// One parser, shared with the dedup path: a link this can read is a link the
+// "already added?" check can identify, and the two must never disagree.
+import { parseGreenhouseUrl } from "../../job-url";
 import type { AtsRecon, ReconQuestion, ReconVerdict } from "./types";
 
 /**
@@ -14,38 +17,6 @@ import type { AtsRecon, ReconQuestion, ReconVerdict } from "./types";
  * Nothing here calls a model. Every judgement below is a string comparison
  * against markup Greenhouse itself emits.
  */
-
-/** boards.greenhouse.io/acme/jobs/12345 → { token: "acme", jobId: "12345" } */
-export function parseGreenhouseUrl(rawUrl: string): { token: string; jobId: string } | null {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return null;
-  }
-  const host = url.hostname.toLowerCase();
-  if (!host.endsWith("greenhouse.io")) return null;
-
-  // The embed form carries both ids in the query string instead of the path:
-  // /embed/job_app?for=acme&token=12345
-  if (url.pathname.includes("/embed/job_app")) {
-    const token = url.searchParams.get("for");
-    const jobId = url.searchParams.get("token");
-    return token && jobId && /^\d+$/.test(jobId) ? { token, jobId } : null;
-  }
-
-  const parts = url.pathname.split("/").filter(Boolean);
-  const jobsAt = parts.indexOf("jobs");
-  if (jobsAt === -1) return null;
-  const jobId = parts[jobsAt + 1];
-  if (!jobId || !/^\d+$/.test(jobId)) return null;
-
-  // Shared board: /{token}/jobs/{id}. Company subdomain (acme.greenhouse.io):
-  // the board token is the subdomain and the path starts at /jobs.
-  const token = jobsAt > 0 ? parts[jobsAt - 1] : host.split(".")[0];
-  if (!token || token === "boards" || token === "job-boards") return null;
-  return { token, jobId };
-}
 
 /** The shape of the board API's answer, narrowed to what we read. */
 interface BoardJob {
@@ -160,6 +131,8 @@ export function parseGreenhouseJob(payload: unknown): GreenhouseJob | null {
     questions,
   };
 }
+
+export { parseGreenhouseUrl };
 
 export const GREENHOUSE_API = "https://boards-api.greenhouse.io";
 

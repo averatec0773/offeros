@@ -171,6 +171,18 @@ is involved in any of it; every figure is a count.
   silent no-op with nothing to explain it. The panel now opens on any page: on
   an application form it drives the fill, and everywhere else it shows what is
   waiting on you and opens the web app.
+- **Different jobs counted as the same job.** Adding a posting by link
+  compared URLs with the whole query string thrown away, on the assumption it
+  only ever held tracking parameters. Some job boards put the posting's
+  identity there — their embedded application form has an identical path for
+  every job — so every such link looked like the same job. Pasting a new one
+  reported it as already tracked and opened an unrelated application saved
+  earlier, while nothing was created. Only known tracking parameters are
+  stripped now, everything else is kept and compared in a stable order, and
+  where a board link carries a readable job identity that is compared instead —
+  so the same posting is still recognised across both of its link shapes. When
+  a link genuinely is already tracked, the dialog now says so and names the job
+  rather than silently navigating away.
 - **Wrong-tenant claims.** The extension could claim a fill ticket belonging to
   a different posting when two tabs looked alike; tickets are now bound to a
   tab explicitly.

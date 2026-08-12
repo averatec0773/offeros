@@ -98,3 +98,38 @@ describe("POST /api/v1/applications", () => {
     expect((await post(42)).status).toBe(400);
   });
 });
+
+describe("the duplicate regression", () => {
+  /** A board's embedded application form puts the job's identity in the query
+   *  string; the path is identical for every posting on the board. */
+  const embed = (board: string, id: string) =>
+    `https://job-boards.greenhouse.io/embed/job_app?for=${board}&token=${id}`;
+
+  it("adding a second job on the same board creates a second application", async () => {
+    const first = await (await post(embed("acme", "1234567"))).json();
+    const second = await (await post(embed("acme", "7654321"))).json();
+
+    expect(first.result.duplicate).toBe(false);
+    // This was the bug: every embed link normalised to the same string, so the
+    // second job was reported as a duplicate and never created.
+    expect(second.result.duplicate).toBe(false);
+    expect(second.result.application.id).not.toBe(first.result.application.id);
+  });
+
+  it("still recognises the same job pasted twice, tracking parameters and all", async () => {
+    const clean = embed("globex", "5550001");
+    const first = await (await post(clean)).json();
+    const again = await (await post(`${clean}&utm_source=x&gh_src=y`)).json();
+
+    expect(again.result.duplicate).toBe(true);
+    expect(again.result.application.id).toBe(first.result.application.id);
+  });
+
+  it("recognises the same posting in its other link shape", async () => {
+    const first = await (await post("https://boards.greenhouse.io/initech/jobs/9990001")).json();
+    const again = await (await post(embed("initech", "9990001"))).json();
+
+    expect(again.result.duplicate).toBe(true);
+    expect(again.result.application.id).toBe(first.result.application.id);
+  });
+});
