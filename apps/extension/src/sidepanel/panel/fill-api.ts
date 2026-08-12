@@ -53,6 +53,7 @@ export interface FillApi {
       options?: string[];
       currentStatus: string;
       required?: boolean;
+      contextText?: string;
     }[],
   ) => Promise<ApiResult<{ resolutions: AiResolution[]; considered: number; classified: number }>>;
   findApplicationsByJobUrl: (jobUrl: string) => Promise<ApiResult<ApplicationSummary[]>>;

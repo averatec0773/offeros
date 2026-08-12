@@ -203,6 +203,25 @@ function labelInfo(el: HTMLElement): { text: string; required: boolean } {
   return { text: "", required: false };
 }
 
+/**
+ * The words a person sees around a field the page never named.
+ *
+ * Collected only when every rung of the label chain came up empty, because a
+ * label is better than its surroundings and there is no reason to carry both.
+ * Walks up until there is enough text to be worth reading, then stops — the
+ * whole form's text would tell the classifier nothing about THIS field.
+ */
+function contextTextFor(el: HTMLElement): string {
+  let node: Element | null = el.parentElement;
+  for (let depth = 0; depth < 4 && node; depth += 1, node = node.parentElement) {
+    // A container with several controls describes all of them and none of them.
+    if (node.querySelectorAll("input, select, textarea").length > 2) break;
+    const text = textWithoutControls(node);
+    if (text.length >= 3) return text.slice(0, 200);
+  }
+  return "";
+}
+
 /** Last resort: the placeholder. Worse than a heading, better than an id. */
 function placeholderLabel(el: HTMLElement): string {
   const text = (el.getAttribute("placeholder") ?? "").replace(/\s+/g, " ").trim();
@@ -282,6 +301,7 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
     // The label association is authoritative for these; drop the aria-label.
     ariaLabel: type === "listbox" ? "" : (el.getAttribute("aria-label") ?? ""),
     required: isRequired(el, label) || titleRequired,
+    ...(label === "" ? { contextText: contextTextFor(el) } : {}),
     ...(ariaGroup.length > 0 ? { options: ariaGroup.map(ariaOptionLabel).filter(Boolean) } : {}),
     currentValue:
       ariaGroup.length > 0

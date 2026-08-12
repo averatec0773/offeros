@@ -361,3 +361,119 @@ describe("what happens to the mappings that came back", () => {
     expect(await screen.findByText("No AI provider connected")).toBeTruthy();
   });
 });
+
+/**
+ * The whole chain, on the form that motivated all of it.
+ *
+ * A page that associates no label with any field, renders each field twice, and
+ * fills its dropdowns with states rather than options. Before this work the
+ * panel showed the user `rec-form_682152000000063542` and `-None-`, and the
+ * classifier — handed those — placed 0 of 4. Here the label chain reads what a
+ * person reads, and the one field it genuinely cannot name goes to the model
+ * with the words around it instead of with its id.
+ */
+describe("a form with no usable labels, end to end", () => {
+  const messyScan: ScanResponse = {
+    ok: true,
+    atsId: "generic",
+    url: "https://ats.example.com/apply",
+    company: "Example Systems",
+    title: "Engineer",
+    descriptors: [],
+  };
+
+  it("reads the rows the page laid out, and only asks about what is left", async () => {
+    // Built by the real scanner from real markup rather than hand-written
+    // descriptors: the point is what scanFields makes of this DOM.
+    document.body.innerHTML = `<main><form>
+      <div class="crm-row">
+        <label class="crm-from-label">First Name *</label>
+        <input id="rec-form_682152000000063542" name="rec-form_682152000000063542" />
+      </div>
+      <div class="crm-row">
+        <label class="crm-from-label">Email *</label>
+        <input id="rec-form_682152000000063550" type="email" />
+      </div>
+      <div class="crm-row">
+        <span class="hint">Preferred pronoun</span>
+        <input id="rec-form_682152000000063999" />
+      </div>
+    </form></main>`;
+    const { scanFields } = await import("../../src/lib/autofill/dom-fill");
+    const { GENERIC_RECIPE } = await import("../../src/lib/autofill/recipes");
+    const found = scanFields(document.body, GENERIC_RECIPE).map((f) => f.descriptor);
+
+    // Two of the three now carry the question the page actually shows.
+    expect(found.map((d) => d.label)).toEqual([
+      "First Name *",
+      "Email *",
+      // Not a <label> element, so the row rung passes; the preceding-title
+      // heuristic still reads it, which is what that rung is for.
+      "Preferred pronoun",
+    ]);
+    // And not one of them is an id.
+    expect(found.every((d) => !d.label.includes("rec-form_"))).toBe(true);
+  });
+
+  it("sends the surrounding words, not the id, for a field nothing could name", async () => {
+    document.body.innerHTML = `<main><form>
+      <div class="crm-row">
+        <input id="rec-form_682152000000063542" name="rec-form_682152000000063542" />
+        <span>Highest degree obtained</span>
+      </div>
+    </form></main>`;
+    const { scanFields } = await import("../../src/lib/autofill/dom-fill");
+    const { GENERIC_RECIPE } = await import("../../src/lib/autofill/recipes");
+    const [field] = scanFields(document.body, GENERIC_RECIPE);
+
+    expect(field!.descriptor.label).toBe("");
+    // This is the string that reaches the classifier in place of the id.
+    expect(field!.descriptor.contextText).toContain("Highest degree obtained");
+  });
+
+  it("the panel forwards that text with the field", async () => {
+    const used = api({
+      classifyFields: vi.fn(async () => ({
+        ok: true as const,
+        value: { resolutions: [], considered: 1, classified: 0 },
+      })),
+    });
+    const messy: ScanResponse = {
+      ...messyScan,
+      descriptors: [
+        {
+          fieldId: "rec-form_682152000000063542",
+          label: "",
+          name: "rec-form_682152000000063542",
+          autocomplete: "",
+          type: "text",
+          placeholder: "",
+          ariaLabel: "",
+          required: true,
+          contextText: "First Name *",
+        },
+      ],
+    };
+    render(
+      <FillPanel
+        scan={async () => messy}
+        fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+        capture={vi.fn(async () => captureOk)}
+        attachFile={vi.fn(async () => ({ ok: true }))}
+        api={used}
+        rescanNonce={0}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+        tabUrl="https://ats.example.com/apply"
+      />,
+    );
+    await screen.findByText("Ingenieur · Acme");
+    await act(async () => {
+      await userEvent.click(await screen.findByRole("button", { name: /Have AI read this form/ }));
+    });
+    const [, fields] = (used.classifyFields as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0] as [string, { contextText?: string }[]];
+    expect(fields[0]!.contextText).toBe("First Name *");
+  });
+});

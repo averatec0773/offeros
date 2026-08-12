@@ -1332,6 +1332,9 @@ export function FillPanel({
             options: d?.options,
             currentStatus: i.status,
             required: i.required,
+            // Only present when the page never named this field — which is
+            // exactly when an id alone would tell the model nothing.
+            ...(d?.contextText ? { contextText: d.contextText } : {}),
           };
         });
       if (fields.length === 0) {

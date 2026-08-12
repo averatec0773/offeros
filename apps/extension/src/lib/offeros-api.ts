@@ -290,6 +290,7 @@ export function classifyFields(
     options?: string[];
     currentStatus: string;
     required?: boolean;
+    contextText?: string;
   }[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApiResult<{ resolutions: AiResolution[]; considered: number; classified: number }>> {

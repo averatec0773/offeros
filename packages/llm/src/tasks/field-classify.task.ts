@@ -39,6 +39,17 @@ export interface ClassifyFieldInput {
   /** What the deterministic engine already concluded — "unknown" or "needs-answer". */
   currentStatus: string;
   required?: boolean;
+  /**
+   * The visible text around this field, when the label chain came up empty.
+   *
+   * A form that associates no label with any field leaves the engine with the
+   * field's own id and nothing else — and asking a model what
+   * `rec-form_682152000000063542` means is asking it to invent something. The
+   * text a person reads standing in front of that field is right there in the
+   * container; this carries it. Optional, and absent whenever a real label was
+   * found, because a label is better than its surroundings.
+   */
+  contextText?: string;
 }
 
 export interface FieldClassifyInput {
@@ -87,6 +98,8 @@ const DEFAULT_SYSTEM = [
   '  "generate"    — an open-ended question that needs a written answer (motivation, experience, "why this company"). No target.',
   '  "cannot-map"  — you cannot tell what this field is asking for, or it asks for something not in either list. No target.',
   "",
+  'Some fields have no usable label — the page never gave them one, so what you see is an internal id. Those carry "text near this field": the words a person reads standing in front of that control. Use it. A field whose id is meaningless but whose nearby text says "First Name *" is a first-name field.',
+  "",
   'HONESTY (hard constraint): "cannot-map" is a correct and useful answer. A wrong mapping puts the wrong information on a real job application, which is worse for the applicant than a field left blank for them to fill in. When the label is ambiguous, uninformative (e.g. "Field 3"), or asks for something outside the two lists, answer "cannot-map". Do not stretch a field to fit a target that is merely close.',
   "",
   'TARGETS MUST BE EXACT (hard constraint): a "canonical" target must be one of the canonical field names given to you, character for character; an "answer" target must be one of the known questions, character for character. Never invent a target name, never reword one, never abbreviate one.',
@@ -129,6 +142,9 @@ function describeField(f: ClassifyFieldInput): string {
     f.options?.length
       ? `  options: ${f.options.map((o) => `"${neutralizeFenceTokens(o)}"`).join(", ")}`
       : "",
+    // Scraped page text like everything else here: neutralized, and inside the
+    // same fence as the rest of the field block.
+    f.contextText ? `  text near this field: "${neutralizeFenceTokens(f.contextText)}"` : "",
     `  engine verdict so far: ${neutralizeFenceTokens(f.currentStatus)}`,
   ];
   return parts.filter((p) => p !== "").join("\n");

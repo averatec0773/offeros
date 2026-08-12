@@ -31,6 +31,10 @@ const bodySchema = z.object({
         options: z.array(z.string()).max(60).optional(),
         currentStatus: z.string(),
         required: z.boolean().optional(),
+        /** Visible text near a field the label chain could not name. Capped
+         *  here because it is scraped page text going into a prompt: the fence
+         *  handles what it says, this handles how much of it there is. */
+        contextText: z.string().max(400).optional(),
       }),
     )
     .min(1)

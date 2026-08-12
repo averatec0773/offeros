@@ -15,6 +15,17 @@ export interface FieldDescriptor {
    *  the checked option labels). Lets the panel distinguish "we filled this
    *  earlier and it's still there" from "the page reloaded and it's gone". */
   currentValue?: string;
+  /**
+   * The visible text around this field, collected ONLY when the label chain
+   * found nothing.
+   *
+   * A form that never associates a label with a field leaves the engine holding
+   * the field's own id. The words a person reads standing in front of that
+   * control are right there in the container, and this carries them — to the
+   * panel's own display, and to the AI classifier, which was previously handed
+   * an id and asked what it meant.
+   */
+  contextText?: string;
 }
 
 export type CanonicalField =
