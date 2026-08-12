@@ -7,12 +7,16 @@ import type { ResumeSummary } from "@offeros/core";
 import { extractPdfText } from "@offeros/pdf";
 import { api } from "@/lib/api-client";
 import { ensurePdfWorker } from "@/lib/pdf-worker";
-import { inputClass } from "./fields";
+import { inputClass } from "@/components/profile/fields";
 
 /**
- * Résumé management: upload (PDF only, sent as base64), set-primary, delete.
- * Self-contained: fetches and persists directly against `api.resumes`,
- * independent of the Profile document.
+ * The base résumés: upload (PDF only, sent as base64), rename, set-primary,
+ * delete. Self-contained — it fetches and persists directly against
+ * `api.resumes`, independent of the Profile document, which is why moving it
+ * from the Profile page to Documents was a change of address and nothing else.
+ *
+ * These are the files the user WROTE. The tailored ones OfferOS generates live
+ * on the Generated tab; onboarding still uploads the first one here.
  */
 export function ResumesSection() {
   const [resumes, setResumes] = useState<ResumeSummary[] | null>(null);

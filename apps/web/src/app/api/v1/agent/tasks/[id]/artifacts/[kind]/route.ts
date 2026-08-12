@@ -1,7 +1,7 @@
 import { ARTIFACT_KINDS, type ArtifactKind } from "@offeros/core";
 import { getDb } from "@/server/db/client";
 import { getArtifact } from "@/server/repositories/artifact-repo";
-import { DocumentError, renameDocument } from "@/server/services/document-service";
+import { DocumentError, deleteDocument, renameDocument } from "@/server/services/document-service";
 import { badRequest, handle, notFound, ok } from "@/server/http/envelope";
 
 export const runtime = "nodejs";
@@ -34,5 +34,24 @@ export async function PATCH(request: Request, ctx: Ctx) {
       if (error instanceof DocumentError) return badRequest(error.message);
       throw error;
     }
+  });
+}
+
+/**
+ * Delete one generated document.
+ *
+ * Reports what it did rather than 204-ing, because deleting a tailored résumé
+ * can move the application's attachment preference with it — and the user
+ * should be told that happened, not left to discover it at the next fill.
+ */
+export async function DELETE(_request: Request, ctx: Ctx) {
+  return handle(async () => {
+    const { id, kind } = await ctx.params;
+    if (!(ARTIFACT_KINDS as readonly string[]).includes(kind)) {
+      return badRequest(`unknown artifact kind: ${kind}`);
+    }
+    const db = getDb();
+    if (!getArtifact(db, id, kind as ArtifactKind)) return notFound(`${kind} artifact`);
+    return ok(deleteDocument(db, id, kind as ArtifactKind));
   });
 }

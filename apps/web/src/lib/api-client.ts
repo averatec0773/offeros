@@ -245,6 +245,21 @@ export const api = {
       request<AnswerEntry>(`/answers/${id}`, json("PUT", patch)),
     remove: (id: string) => request<{ id: string }>(`/answers/${id}`, { method: "DELETE" }),
   },
+  /** Generated documents (tailored résumés, cover letters). Keyed by the task
+   *  that produced them plus the kind — the same pair the workbench and the PDF
+   *  download already use. */
+  documents: {
+    rename: (taskId: string, kind: string, name: string) =>
+      request<{ name: string }>(
+        `/agent/tasks/${taskId}/artifacts/${kind}`,
+        json("PATCH", { name }),
+      ),
+    remove: (taskId: string, kind: string) =>
+      request<{ name: string; note?: string; attachmentSwitchedToOriginal: boolean }>(
+        `/agent/tasks/${taskId}/artifacts/${kind}`,
+        { method: "DELETE" },
+      ),
+  },
   templates: {
     list: () => request<Template[]>("/templates"),
     save: (input: {

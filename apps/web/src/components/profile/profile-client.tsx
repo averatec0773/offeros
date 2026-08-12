@@ -11,7 +11,7 @@ import { ExperienceList } from "./experience-list";
 import { SkillsEditor } from "./skills-editor";
 import { AnswersEditor } from "./answers-editor";
 import { EeoEditor } from "./eeo-editor";
-import { ResumesSection } from "./resumes-section";
+import { ResumesSection } from "@/components/documents/resumes-section";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 
 const SECTIONS: SectionNavItem[] = [

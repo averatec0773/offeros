@@ -8,7 +8,7 @@ const LINKS = [
   { href: "/", label: "Applications" },
   { href: "/agent", label: "Agent" },
   { href: "/profile", label: "Profile" },
-  { href: "/templates", label: "Templates" },
+  { href: "/documents", label: "Documents" },
   { href: "/settings/ai", label: "Settings" },
 ];
 

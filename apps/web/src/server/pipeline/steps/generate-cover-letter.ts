@@ -10,7 +10,7 @@ import { buildGroundingFacts } from "./grounding";
  * the `cover-letter` artifact's v1. Gated by `shouldRun` (in steps/index.ts):
  * skipped when the requirement is `none` or the user skipped it.
  *
- * When the user has a default `cover-letter` template (Settings > Templates),
+ * When the user has a default `cover-letter` template (Documents > Templates),
  * its `scaffoldHints` (salutation/closing/paragraph-count description) are
  * passed through as `templateHints`, which the task prepends to the prompt as
  * a labeled constraint block. With no default template, `templateHints` is

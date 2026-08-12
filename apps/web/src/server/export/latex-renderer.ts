@@ -107,7 +107,7 @@ export async function renderLatex(
         ok: false,
         error:
           "The cover-letter template is missing its body markers. " +
-          "Restore them in /templates before exporting.",
+          "Restore them in Documents → Templates before exporting.",
       };
     }
     throw error;

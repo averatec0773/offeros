@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { artifactSchema, type Artifact, type ArtifactKind } from "@offeros/core";
 import type { Db } from "../db/client";
 import { artifacts } from "../db/schema";
@@ -19,6 +19,32 @@ export function listArtifacts(db: Db, taskId: string): Artifact[] {
     .where(eq(artifacts.taskId, taskId))
     .all()
     .map((row) => artifactSchema.parse(row.doc));
+}
+
+/**
+ * Every artifact, newest change first — the Documents page's view, where the
+ * question is "what have I generated" rather than "what does this task have".
+ */
+export function listAllArtifacts(db: Db): Artifact[] {
+  return db
+    .select()
+    .from(artifacts)
+    .orderBy(desc(artifacts.updatedAt))
+    .all()
+    .map((row) => artifactSchema.parse(row.doc));
+}
+
+/** Remove one artifact. Returns whether a row was there to remove, so a caller
+ *  can tell "deleted" from "already gone" without a second read. */
+export function deleteArtifact(db: Db, taskId: string, kind: ArtifactKind): boolean {
+  const row = db
+    .select()
+    .from(artifacts)
+    .where(and(eq(artifacts.taskId, taskId), eq(artifacts.kind, kind)))
+    .get();
+  if (!row) return false;
+  db.delete(artifacts).where(eq(artifacts.id, row.id)).run();
+  return true;
 }
 
 /** Upserts keyed by artifact id. */
