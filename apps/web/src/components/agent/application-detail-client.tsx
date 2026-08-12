@@ -28,6 +28,7 @@ import { FitCard } from "./fit-card";
 import { FormCard } from "./form-card";
 import { JdCard } from "./jd-card";
 import { RequirementsCard } from "./requirements-card";
+import { SpendChip } from "./spend-chip";
 import { TimelineCard } from "./timeline-card";
 import { TweakInput } from "./tweak-input";
 import { VersionDiff } from "./version-diff";
@@ -610,14 +611,14 @@ function MaterialCard({
             ? "Reorders and re-emphasises your own résumé for this posting."
             : "Grounded in this posting and your résumé."}
         </p>
-        <button
-          type="button"
+        <SpendChip
           onClick={onGenerate}
-          disabled={generating}
-          className="mt-3 rounded-full bg-primary px-3.5 py-1.5 text-caption font-semibold text-primary-foreground press hover:bg-primary/85 disabled:opacity-50"
-        >
-          {generating ? "Generating…" : "Generate"}
-        </button>
+          label="Generate"
+          busyLabel="Generating…"
+          busy={generating}
+          variant="primary"
+          className="mt-3"
+        />
       </section>
     );
   }
@@ -626,13 +627,7 @@ function MaterialCard({
     <div className="space-y-2">
       <ArtifactViewer artifact={artifact} />
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onTweak}
-          className="rounded-full border border-border px-3.5 py-1.5 text-caption font-semibold text-foreground transition-colors hover:bg-muted"
-        >
-          Change something
-        </button>
+        <SpendChip onClick={onTweak} label="Change something" />
         <button
           type="button"
           onClick={onApprove}
@@ -640,14 +635,13 @@ function MaterialCard({
         >
           Accept
         </button>
-        <button
-          type="button"
+        <SpendChip
           onClick={onGenerate}
-          disabled={generating}
-          className="rounded-full px-3 py-1.5 text-caption text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
-        >
-          {generating ? "Generating…" : "Start over"}
-        </button>
+          label="Start over"
+          busyLabel="Generating…"
+          busy={generating}
+          variant="quiet"
+        />
         {approved && <span className="text-caption text-success">Accepted</span>}
       </div>
     </div>

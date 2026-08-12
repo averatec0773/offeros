@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, FileText, Search } from "lucide-react";
 import type { RequirementsSummary } from "@/server/services/requirements-service";
+import { SpendChip } from "./spend-chip";
 
 /**
  * What this form will ask, and how much of it is already answered.
@@ -121,13 +122,7 @@ export function RequirementsCard({
                 This form has a cover-letter field.
               </span>
               {!hasCoverLetter && onWriteCoverLetter && (
-                <button
-                  type="button"
-                  onClick={onWriteCoverLetter}
-                  className="rounded-full border border-border px-3 py-1 text-caption font-semibold text-foreground transition-colors hover:bg-muted"
-                >
-                  Write one
-                </button>
+                <SpendChip onClick={onWriteCoverLetter} label="Write one" className="py-1" />
               )}
             </div>
           )}

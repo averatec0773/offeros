@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ArtifactVersion } from "@offeros/core";
 import type { LineDiff } from "@/lib/diff";
 import { api } from "@/lib/api-client";
+import { SpendMark, SPEND_TITLE } from "./spend-chip";
 
 export function TweakInput({
   taskId,
@@ -64,8 +65,10 @@ export function TweakInput({
           type="button"
           onClick={submit}
           disabled={pending || !instruction.trim()}
-          className="inline-flex items-center rounded-full bg-primary px-3.5 py-1.5 text-caption font-semibold text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50"
+          title={SPEND_TITLE}
+          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-caption font-semibold text-primary-foreground transition-colors hover:bg-primary/85 disabled:opacity-50"
         >
+          <SpendMark />
           {pending ? "Applying…" : "Apply Tweak"}
         </button>
       </div>

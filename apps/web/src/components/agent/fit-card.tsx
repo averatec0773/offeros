@@ -3,6 +3,7 @@
 import type { FitAnalysis } from "@offeros/core";
 import { MatchScoreRing } from "./match-score-ring";
 import { ConnectProviderNote } from "./connect-provider-note";
+import { SpendChip } from "./spend-chip";
 
 function SubScoreBar({ label, value }: { label: string; value: number }) {
   const pct = Math.max(0, Math.min(100, value));
@@ -39,14 +40,13 @@ export function FitCard({
           <h3 className="text-body font-semibold text-foreground">{fit.label || "Fit score"}</h3>
           <p className="text-caption text-muted-foreground">Applicant ↔ job fit</p>
         </div>
-        <button
-          type="button"
-          onClick={onRecompute}
-          disabled={busy}
-          className="inline-flex shrink-0 items-center rounded-full bg-card px-3 py-1.5 text-caption font-semibold text-foreground ring-1 ring-inset ring-border transition-colors hover:bg-muted disabled:opacity-60"
-        >
-          {busy ? "Recomputing…" : "Recompute"}
-        </button>
+        <SpendChip
+          onClick={() => onRecompute?.()}
+          label="Recompute"
+          busyLabel="Recomputing…"
+          busy={busy}
+          className="bg-card ring-1 ring-inset ring-border"
+        />
       </div>
 
       {llmError && <ConnectProviderNote message="Connect your AI provider to start" />}
