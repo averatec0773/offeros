@@ -179,7 +179,14 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     let decision: Decision;
     try {
       decision = await chooseNext({
-        context: buildContext(tools, findings, args.subject, args.history, args.currentApplication),
+        context: buildContext({
+          tools,
+          findings,
+          steps,
+          subject: args.subject,
+          history: args.history,
+          currentApplication: args.currentApplication,
+        }),
         question: args.question,
         runLlm: args.runLlm,
       });
@@ -201,6 +208,10 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       // model can restate a stale fact from the history window as if it were
       // current. Nudge one look for a fact-shaped question; small talk answers
       // straight through on the retry.
+      //
+      // (The other reliability risk — answering as if the work this turn already
+      // did had not happened — is handled in `buildContext`, which states the
+      // completed changes to every decision including this one.)
       if (!nudgedToLook && steps.length === 0 && findings.length === 0) {
         nudgedToLook = true;
         mistakes++;
@@ -294,23 +305,73 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   // read the answer (15/17 fields) and then threw it on the floor. One more
   // model call, tools off, synthesizes a real answer from the findings; the
   // ranOutOfSteps flag still tells the UI the loop was truncated.
+  //
+  // The completed changes are stated SEPARATELY from the findings, by the
+  // harness, and they are stated twice (system + prompt). The incident that
+  // bought this: a turn where refine_artifact failed with "there is no résumé
+  // yet", tailor_resume then succeeded, and the forced answer told the user
+  // there was nothing to fine-tune and offered to generate one — picking the
+  // stale failure out of a flat list of findings and dropping the write the
+  // user had just paid for. Findings are a log; what changed is a fact, and a
+  // fact the model must not be free to omit.
+  const done = completedActions(steps);
   try {
     const answer = await args.runLlm({
       system:
-        "You are the OfferOS agent. Your research budget for this question is spent. Answer the user's question NOW using only the findings below — synthesized, concrete, in the user's language. If the findings genuinely cannot answer it, say specifically what is known and what one thing you would look at next.",
-      userPrompt: `Findings, in the order gathered:\n${findings.join("\n\n")}\n\nThe user asked:\n${args.question}`,
+        "You are the OfferOS agent. Your research budget for this question is spent. Answer the user's question NOW using only the findings below — synthesized, concrete, in the user's language. If the findings genuinely cannot answer it, say specifically what is known and what one thing you would look at next." +
+        (done.length > 0
+          ? " Some of the findings are earlier failures that LATER steps have already fixed — read them in order, and never report a stale failure as the outcome. Anything listed under WHAT YOU ALREADY DID is done: report it, do not offer to do it."
+          : ""),
+      userPrompt: [
+        renderCompletedActions(steps),
+        `Findings, in the order gathered:\n${findings.join("\n\n")}`,
+        `The user asked:\n${args.question}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     });
     if (answer.trim() !== "") return { answer: answer.trim(), steps, ranOutOfSteps: true };
   } catch {
     // The synthesis call failing must not lose what was gathered.
   }
+  // Last resort: no model. The changes still lead, for the same reason — a
+  // fallback that buries a completed generation in a tool dump is the same
+  // omission written by hand.
   return {
     answer:
+      (done.length > 0
+        ? `I did complete this:\n${done.map((s) => `- ${s.summary}`).join("\n")}\n\n`
+        : "") +
       "I ran out of steps before I could answer that. Here is what I found so far:\n" +
       steps.map((s) => `- ${s.tool}: ${s.summary}`).join("\n"),
     steps,
     ranOutOfSteps: true,
   };
+}
+
+/**
+ * The steps this turn that actually CHANGED something — a successful DO tool.
+ *
+ * `acted` is set by the loop itself from the acting registry plus a verified
+ * ok, so this is the harness's own record of world-changes, not anything the
+ * model asserted about its work.
+ */
+function completedActions(steps: AgentStep[]): AgentStep[] {
+  return steps.filter((s) => s.acted);
+}
+
+/**
+ * What the turn already did, as a block the model is told it may not contradict.
+ *
+ * Empty string when nothing changed — an honest "I only looked" needs no
+ * preamble, and a block that fires on every turn would be noise the model
+ * learns to skim.
+ */
+function renderCompletedActions(steps: AgentStep[]): string {
+  const done = completedActions(steps);
+  if (done.length === 0) return "";
+  const lines = done.map((s) => `- ${s.tool}: ${s.summary}`).join("\n");
+  return `WHAT YOU ALREADY DID this turn (the harness recorded these; each one changed the user's records and cost them money):\n${lines}\n\nYour answer MUST tell the user about these, in plain words, and lead with them. Do not say the thing does not exist, do not say you could not do it, and do not ask whether they want it done — it is done. Report the result and offer the next step from there.`;
 }
 
 /** JSON.stringify with object keys sorted at every depth, so logically equal
@@ -340,13 +401,19 @@ function applicationIdIn(input: unknown): string | null {
  * than everything up front. What it has already fetched stays, because
  * dropping it would make the loop re-fetch and pay twice.
  */
-function buildContext(
-  tools: Record<string, Tool<never, unknown>>,
-  findings: string[],
-  subject?: string,
-  history?: { role: "user" | "assistant"; content: string }[],
-  currentApplication?: RunTurnArgs["currentApplication"],
-): string {
+function buildContext(args: {
+  tools: Record<string, Tool<never, unknown>>;
+  findings: string[];
+  /** The real tool runs so far — read for the changes among them, which are
+   *  stated separately from the findings (see renderCompletedActions). The
+   *  normal answer path needs this as much as the forced one: a model that can
+   *  forget its own write under a step budget can forget it without one. */
+  steps: AgentStep[];
+  subject?: string;
+  history?: { role: "user" | "assistant"; content: string }[];
+  currentApplication?: RunTurnArgs["currentApplication"];
+}): string {
+  const { tools, findings, steps, subject, history, currentApplication } = args;
   const scope = subject
     ? `You are looking at one application: ${subject}. Every tool you call is already scoped to it, so "this one" means this application — never ask the user which job they mean.`
     : `You are looking at ALL of the user's applications. Start with list_applications to get their ids, then pass {"applicationId":"<id>"} to any tool that is about one job. Answer about the whole set unless the user names one.`;
@@ -370,7 +437,12 @@ function buildContext(
     findings.length === 0
       ? "You have not looked at anything yet."
       : `What you have found so far:\n${findings.join("\n\n")}`;
-  return [scope, current, past, menu, found].filter(Boolean).join("\n\n");
+  // AFTER the findings, deliberately: it is the last thing the model reads
+  // before choosing, and it outranks anything a finding says about the same
+  // work — an early failure ("there is no résumé to revise") is history the
+  // moment a later step makes it false.
+  const done = renderCompletedActions(steps);
+  return [scope, current, past, menu, found, done].filter(Boolean).join("\n\n");
 }
 
 /**

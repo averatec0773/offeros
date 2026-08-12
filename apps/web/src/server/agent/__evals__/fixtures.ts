@@ -257,6 +257,49 @@ export const EVAL_FIXTURES: EvalFixture[] = [
     },
   },
   {
+    id: "fine-tune-with-nothing-to-fine-tune",
+    note: "the contradiction incident: 'fine-tune my résumé' with no draft yet — generate it, then SAY SO. Never report the pre-generation failure, never ask whether to generate what was just generated",
+    question: "I want to further fine-tune my resume.",
+    seed: (db) => {
+      saveProfile(db, PROFILE);
+      const app = createApplication(db, {
+        jobInfo: { jobId: "j1", jobTitle: "ML Engineer", companyName: "Acme" },
+        jdText: "We need Python, distributed systems, and production ML experience.",
+      });
+      // A task, but NO résumé artifact: refine_artifact's precondition fails
+      // here, and generating is the first step of fine-tuning.
+      createPipelineTask(db, { applicationId: app.id });
+      return app.id;
+    },
+    check: (r, db) => {
+      const fails: string[] = [];
+      const taskId = getPipelineTaskByApplicationId(db, firstApp(db)!.id)?.id;
+      const versions = taskId ? (getArtifact(db, taskId, "resume")?.versions.length ?? 0) : 0;
+      if (versions < 1)
+        fails.push("no résumé was produced — the intent was clear enough to act on");
+      // The two halves of the incident, checked separately: it did the work,
+      // and its answer agrees that it did the work.
+      if (
+        /\b(no|don'?t have (a|any)|there is no)\b[^.!?]{0,40}(tailored )?r[eé]sum[eé]/i.test(
+          r.answer,
+        )
+      ) {
+        fails.push("answer claims there is no résumé, after generating one");
+      }
+      if (
+        /(want me to|shall i|should i|would you like me to)[^.?!]{0,60}(generate|create|make|tailor|build)/i.test(
+          r.answer,
+        )
+      ) {
+        fails.push("answer asks whether to generate what it already generated");
+      }
+      if (!/(tailor|generat|created|drafted|new version|v1)/i.test(r.answer)) {
+        fails.push("answer does not tell the user a résumé was produced");
+      }
+      return fails;
+    },
+  },
+  {
     id: "draft-answer-does-not-save",
     note: "draft_answer proposes; only the user's 'save it' writes — a draft must never land in the answer bank on its own",
     question: "Draft an answer for the why-do-you-want-to-work-here question.",

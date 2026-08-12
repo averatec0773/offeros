@@ -621,6 +621,169 @@ describe("recoverable mistakes are capped separately from the step budget", () =
   });
 });
 
+describe("a forced finish must report what the turn actually did", () => {
+  /**
+   * The incident: the user asked to fine-tune their résumé. refine_artifact
+   * failed first ("there is no tailored résumé to revise yet"), tailor_resume
+   * then SUCCEEDED, the step budget ran out, and the forced answer told the
+   * user there was no résumé to fine-tune and offered to generate one. It
+   * picked a stale failure out of a flat findings list and dropped the write
+   * the user had just paid for. So the harness — not the model — states the
+   * completed changes.
+   */
+  const failingRefine: Tool<never, unknown> = {
+    id: "refine_artifact",
+    description: "revises",
+    run: async () => ({
+      ok: false,
+      summary: "there is no tailored résumé to revise yet",
+      failure: { kind: "precondition", reason: "no resume artifact — generate one first" },
+    }),
+    verify: async () => null,
+  };
+  const succeedingTailor: Tool<never, unknown> = {
+    id: "tailor_resume",
+    description: "generates",
+    run: async () => ({ ok: true, summary: "tailored résumé v1" }),
+    verify: async () => null,
+  };
+
+  /** Runs the failed-then-succeeded trajectory into the step budget, and hands
+   *  back what the forced-finish call was asked. */
+  async function forcedFinish(runLlm: RunTurnArgs["runLlm"]) {
+    const chooseNext = script(
+      { kind: "use-tool", tool: "refine_artifact", reason: "revise the résumé" },
+      { kind: "use-tool", tool: "tailor_resume", reason: "no draft exists, make one" },
+    );
+    const out = await runTurn({
+      ctx,
+      question: "I want to further fine-tune my resume",
+      runLlm,
+      chooseNext,
+      tools: { refine_artifact: failingRefine, tailor_resume: succeedingTailor },
+      actingToolIds: new Set(["refine_artifact", "tailor_resume"]),
+      maxSteps: 2,
+    });
+    return { out, chooseNext };
+  }
+
+  it("states the successful write in the final prompt, above the findings", async () => {
+    const calls: { system: string; userPrompt: string }[] = [];
+    const { out } = await forcedFinish(async (a) => {
+      calls.push({ system: a.system, userPrompt: a.userPrompt });
+      return "I generated a tailored résumé (v1) for this job.";
+    });
+
+    expect(out.ranOutOfSteps).toBe(true);
+    expect(out.answer).toBe("I generated a tailored résumé (v1) for this job.");
+    const { system, userPrompt } = calls[0]!;
+    // The write is stated by the harness, named, and not optional to mention.
+    expect(userPrompt).toContain("WHAT YOU ALREADY DID");
+    expect(userPrompt).toContain("tailor_resume: tailored résumé v1");
+    expect(userPrompt).toMatch(/answer MUST tell the user about these/);
+    expect(userPrompt).toContain("do not ask whether they want it done");
+    // It leads: the model reads what happened before the log of what failed.
+    expect(userPrompt.indexOf("WHAT YOU ALREADY DID")).toBeLessThan(
+      userPrompt.indexOf("Findings, in the order gathered"),
+    );
+    // The failure that started the incident is still there, as history.
+    expect(userPrompt).toContain("no resume artifact");
+    // And the system side says the earlier failure may already be stale.
+    expect(system).toContain("stale failure");
+  });
+
+  it("says nothing about changes when the turn only looked", async () => {
+    const calls: { system: string; userPrompt: string }[] = [];
+    const chooseNext = script(
+      { kind: "use-tool", tool: "look", reason: "1", input: { q: "one" } },
+      { kind: "use-tool", tool: "look", reason: "2", input: { q: "two" } },
+    );
+    const look: Tool<{ q: string }, unknown> = {
+      id: "look",
+      description: "look",
+      parse: (i) => i as { q: string },
+      run: async (_c, i) => ({ ok: true, summary: `read ${i.q}` }),
+      verify: async () => null,
+    };
+    await runTurn({
+      ctx,
+      question: "what is going on?",
+      runLlm: async (a) => {
+        calls.push({ system: a.system, userPrompt: a.userPrompt });
+        return "Here is what I found.";
+      },
+      chooseNext,
+      tools: { look: look as never },
+      actingToolIds: new Set(),
+      maxSteps: 2,
+    });
+    expect(calls[0]!.userPrompt).not.toContain("WHAT YOU ALREADY DID");
+    expect(calls[0]!.system).not.toContain("stale failure");
+  });
+
+  it("a failed write is not reported as done", async () => {
+    const calls: string[] = [];
+    const chooseNext = script(
+      { kind: "use-tool", tool: "refine_artifact", reason: "revise" },
+      { kind: "use-tool", tool: "refine_artifact", reason: "revise the letter", input: { k: 1 } },
+    );
+    await runTurn({
+      ctx,
+      question: "fine-tune it",
+      runLlm: async (a) => {
+        calls.push(a.userPrompt);
+        return "Nothing landed.";
+      },
+      chooseNext,
+      tools: { refine_artifact: failingRefine },
+      actingToolIds: new Set(["refine_artifact"]),
+      maxSteps: 2,
+    });
+    expect(calls[0]!).not.toContain("WHAT YOU ALREADY DID");
+  });
+
+  it("keeps the change in front of the user even when the synthesis call fails", async () => {
+    const { out } = await forcedFinish(async () => {
+      throw new Error("provider 500");
+    });
+    // No model to write the answer, so the harness writes one — and it leads
+    // with what happened rather than burying it in a tool dump.
+    expect(out.answer).toContain("I did complete this");
+    expect(out.answer).toContain("tailored résumé v1");
+    expect(out.answer.indexOf("tailored résumé v1")).toBeLessThan(
+      out.answer.indexOf("ran out of steps"),
+    );
+  });
+
+  it("states the change to a NORMAL finish too, so an unforced answer cannot omit it", async () => {
+    // Same omission, no step limit: the model decides to answer right after a
+    // successful write. The statement rides in the decision context.
+    const seen: string[] = [];
+    const chooseNext = vi.fn(async (a: { context: string }) => {
+      seen.push(a.context);
+      return seen.length === 1
+        ? ({ kind: "use-tool", tool: "tailor_resume", reason: "make one" } as Decision)
+        : ({ kind: "answer", text: "Done — v1 is ready." } as Decision);
+    }) as unknown as ChooseNext;
+    const out = await runTurn({
+      ctx,
+      question: "fine-tune my resume",
+      runLlm: noLlm,
+      chooseNext,
+      tools: { tailor_resume: succeedingTailor },
+      actingToolIds: new Set(["tailor_resume"]),
+    });
+    expect(out.ranOutOfSteps).toBe(false);
+    // Before the write there was nothing to state; after it, there is.
+    expect(seen[0]!).not.toContain("WHAT YOU ALREADY DID");
+    expect(seen[1]!).toContain("tailor_resume: tailored résumé v1");
+    // It sits after the findings — the last word on what is true now.
+    expect(seen[1]!.indexOf("WHAT YOU ALREADY DID")).toBeGreaterThan(
+      seen[1]!.indexOf("What you have found so far"),
+    );
+  });
+});
+
 describe("current-application injection", () => {
   /** Captures the context string the loop hands the decider. */
   function capturing(seen: string[]) {
