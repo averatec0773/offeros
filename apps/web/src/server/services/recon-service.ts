@@ -5,6 +5,7 @@ import { recordShapes } from "../repositories/form-memory-repo";
 import { cacheLogo } from "./logo-service";
 import { greenhouseRecon } from "./recon/greenhouse";
 import type { AtsRecon, ProbeResult, ReconQuestion, ReconVerdict } from "./recon/types";
+import { safeFetchText } from "../net/safe-fetch";
 
 export type { ReconVerdict, ReconQuestion } from "./recon/types";
 
@@ -76,6 +77,9 @@ const describe: Record<ReconVerdict, string> = {
 
 export interface ReconDeps {
   fetchImpl?: typeof fetch;
+  /** Injected alongside fetch: the host guard has to resolve names, and a test
+   *  must be able to say what a name resolves to without touching DNS. */
+  resolve?: (hostname: string) => Promise<string[]>;
   now?: () => number;
 }
 
@@ -109,7 +113,7 @@ export async function reconApplication(
   // Fire-and-forget, from the host we are already talking to. It must never
   // affect the verdict, so it is not awaited and its failure is silent — the
   // letter avatar is the floor, not a fallback.
-  void cacheLogo(applicationId, url, fetchImpl).catch(() => false);
+  void cacheLogo(applicationId, url, fetchImpl, deps.resolve).catch(() => false);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -131,7 +135,24 @@ export async function reconApplication(
 
     // Everything else: fetch the page and read the status code, the final URL
     // and — only for a platform whose closed-page wording we know — the text.
-    const response = await fetchImpl(url, { redirect: "follow", signal: controller.signal });
+    // Through the shared guard, which re-checks the host on every redirect
+    // hop: a board's own link 301s to the employer's domain, so the host we
+    // end up talking to is routinely not the one we were given.
+    const page = await safeFetchText(url, {
+      fetchImpl,
+      ...(deps.resolve ? { resolve: deps.resolve } : {}),
+      timeoutMs: TIMEOUT_MS,
+      signal: controller.signal,
+    });
+    if (!page.ok) {
+      return finish(db, applicationId, {
+        verdict: "unknown",
+        detail: `Could not read the posting — ${page.reason}.`,
+        ...(platform ? { vendor: platform.vendor } : {}),
+        at: now(),
+      });
+    }
+    const response = { status: page.status, url: page.finalUrl };
     if (response.status === 404 || response.status === 410) {
       return finish(db, applicationId, {
         verdict: "closed",
@@ -140,7 +161,7 @@ export async function reconApplication(
         at: now(),
       });
     }
-    if (!response.ok) {
+    if (response.status >= 400) {
       return finish(db, applicationId, {
         verdict: "unknown",
         detail: `The site answered HTTP ${response.status}, which does not tell us either way.`,
@@ -157,8 +178,7 @@ export async function reconApplication(
       });
     }
     if (platform) {
-      const html = await response.text().catch(() => "");
-      if (platform.closedMarker(html)) {
+      if (platform.closedMarker(page.text)) {
         return finish(db, applicationId, {
           verdict: "closed",
           detail: describe.closed,

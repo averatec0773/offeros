@@ -15,12 +15,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const publicDns = async () => ["93.184.216.34"];
+
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
 function respond(bytes: Uint8Array, ok = true): Response {
   return {
     ok,
     status: ok ? 200 : 404,
+    headers: new Headers(),
     arrayBuffer: async () =>
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
   } as unknown as Response;
@@ -30,7 +33,12 @@ describe("cacheLogo", () => {
   it("fetches the favicon from the EMPLOYER's own host, never a logo service", async () => {
     const { cacheLogo } = await import("../logo-service");
     const fetchImpl = vi.fn(async (_url: string, _init?: unknown) => respond(PNG));
-    const stored = await cacheLogo("app-1", "https://boards.acme.com/jobs/1", fetchImpl as never);
+    const stored = await cacheLogo(
+      "app-1",
+      "https://boards.acme.com/jobs/1",
+      fetchImpl as never,
+      publicDns,
+    );
 
     expect(stored).toBe(true);
     const url = String(fetchImpl.mock.calls[0]![0]);
@@ -49,9 +57,9 @@ describe("cacheLogo", () => {
   it("refuses an id that is not id-shaped", async () => {
     const { cacheLogo, getLogo } = await import("../logo-service");
     const fetchImpl = vi.fn(async () => respond(PNG));
-    expect(await cacheLogo("../../etc/passwd", "https://acme.com/x", fetchImpl as never)).toBe(
-      false,
-    );
+    expect(
+      await cacheLogo("../../etc/passwd", "https://acme.com/x", fetchImpl as never, publicDns),
+    ).toBe(false);
     expect(getLogo("../../etc/passwd")).toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
@@ -87,7 +95,9 @@ describe("cacheLogo", () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("ECONNREFUSED");
     });
-    expect(await cacheLogo("app-5", "https://acme.com/x", fetchImpl as never)).toBe(false);
+    expect(await cacheLogo("app-5", "https://acme.com/x", fetchImpl as never, publicDns)).toBe(
+      false,
+    );
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -96,14 +106,18 @@ describe("cacheLogo", () => {
     mkdirSync(logosDir(), { recursive: true });
     writeFileSync(join(logosDir(), "app-6.png"), PNG);
     const fetchImpl = vi.fn(async () => respond(PNG));
-    expect(await cacheLogo("app-6", "https://acme.com/x", fetchImpl as never)).toBe(true);
+    expect(await cacheLogo("app-6", "https://acme.com/x", fetchImpl as never, publicDns)).toBe(
+      true,
+    );
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("ignores a URL that is not http(s)", async () => {
     const { cacheLogo } = await import("../logo-service");
     const fetchImpl = vi.fn(async () => respond(PNG));
-    expect(await cacheLogo("app-7", "file:///etc/passwd", fetchImpl as never)).toBe(false);
+    expect(await cacheLogo("app-7", "file:///etc/passwd", fetchImpl as never, publicDns)).toBe(
+      false,
+    );
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

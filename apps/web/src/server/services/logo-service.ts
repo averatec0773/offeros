@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { defaultDbPath } from "../db/client";
+import { safeFetch } from "../net/safe-fetch";
 
 /**
  * A company logo, fetched once and kept on this machine.
@@ -109,6 +110,10 @@ export async function cacheLogo(
   applicationId: string,
   pageUrl: string,
   fetchImpl: typeof fetch = fetch,
+  /** Injected alongside fetch so a test can decide what a host resolves to;
+   *  the guard has to resolve names, or a public name pointing at 127.0.0.1
+   *  would sail through. */
+  resolve?: (hostname: string) => Promise<string[]>,
 ): Promise<boolean> {
   if (!SAFE_ID.test(applicationId)) return false;
   if (getLogo(applicationId)) return true; // already have one; do not re-fetch
@@ -122,24 +127,27 @@ export async function cacheLogo(
     return false;
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const response = await fetchImpl(`${origin}/favicon.ico`, { signal: controller.signal });
-    if (!response.ok) return false;
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength === 0 || buffer.byteLength > MAX_BYTES) return false;
-    const bytes = new Uint8Array(buffer);
-    const kind = sniff(bytes);
-    if (!kind) return false;
+  // Through the shared guard: an employer's host is still a host a link chose
+  // for us, and a favicon fetch is as good a way into the local network as any.
+  const result = await safeFetch(`${origin}/favicon.ico`, {
+    fetchImpl,
+    ...(resolve ? { resolve } : {}),
+    timeoutMs: TIMEOUT_MS,
+    maxBytes: MAX_BYTES,
+  });
+  if (!result.ok) return false;
+  if (result.response.status >= 400) return false;
+  const bytes = result.bytes;
+  if (bytes.length === 0) return false;
+  const kind = sniff(bytes);
+  if (!kind) return false;
 
+  try {
     const dir = logosDir();
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     writeFileSync(join(dir, `${applicationId}.${kind.ext}`), bytes, { mode: 0o600 });
     return true;
   } catch {
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }

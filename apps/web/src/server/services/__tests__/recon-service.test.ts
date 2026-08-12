@@ -47,15 +47,22 @@ const seed = (applyLink?: string, jdText?: string) =>
 /** A response fixture, standing in for one fetch. */
 const respond = (
   body: unknown,
-  init: { status?: number; url?: string; text?: string } = {},
+  init: { status?: number; url?: string; text?: string; location?: string } = {},
 ): Response =>
   ({
     ok: (init.status ?? 200) < 400,
     status: init.status ?? 200,
     url: init.url ?? "",
+    headers: new Headers(init.location ? { location: init.location } : {}),
     json: async () => body,
     text: async () => init.text ?? JSON.stringify(body),
+    arrayBuffer: async () =>
+      new TextEncoder().encode(init.text ?? JSON.stringify(body)).buffer as ArrayBuffer,
   }) as unknown as Response;
+
+/** Everything in these tests is a public host as far as the guard is
+ *  concerned; the guard's own refusals are covered in safe-fetch.test.ts. */
+const publicDns = async () => ["93.184.216.34"];
 
 const GH_JOB = {
   id: 4321,
@@ -155,6 +162,7 @@ describe("verdicts", () => {
   it("open: the board API still has the posting", async () => {
     const id = seed("https://boards.greenhouse.io/acme/jobs/4321");
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
     });
     expect(result!.verdict).toBe("open");
@@ -166,6 +174,7 @@ describe("verdicts", () => {
   it("closed: the board API 404s, which is how Greenhouse says a job is gone", async () => {
     const id = seed("https://boards.greenhouse.io/acme/jobs/4321");
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () => respond(null, { status: 404 })) as unknown as typeof fetch,
     });
     expect(result!.verdict).toBe("closed");
@@ -181,24 +190,47 @@ describe("verdicts", () => {
         : respond(null, { text: "<h1>This job is no longer available</h1>" }),
     );
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     expect(result!.verdict).toBe("closed");
   });
 
   it("suspected-closed: the posting now redirects to the board index", async () => {
+    // A real redirect, followed hop by hop — the old fixture faked the final
+    // URL on a 200, which stopped being how this works once every hop got its
+    // own host check.
     const id = seed("https://jobs.example.com/careers/jobs/4321");
+    const fetchImpl = vi.fn(async (url: string) =>
+      String(url).endsWith("/jobs/4321")
+        ? respond(null, { status: 301, location: "https://jobs.example.com/careers" })
+        : respond(null, { text: "<h1>All openings</h1>" }),
+    );
     const result = await reconApplication(db, id, {
-      fetchImpl: vi.fn(async () =>
-        respond(null, { url: "https://jobs.example.com/careers" }),
-      ) as unknown as typeof fetch,
+      resolve: publicDns,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     expect(result!.verdict).toBe("suspected-closed");
+  });
+
+  it("unknown: a link that resolves into the local network is refused, honestly", async () => {
+    // The guard's job, seen from here: no verdict is invented, and the reason
+    // is reported rather than swallowed.
+    const id = seed("https://internal.example/jobs/1");
+    const fetchImpl = vi.fn();
+    const result = await reconApplication(db, id, {
+      resolve: async () => ["127.0.0.1"],
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(result!.verdict).toBe("unknown");
+    expect(result!.detail).toMatch(/private address/);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("unknown: a network failure is reported, never guessed at", async () => {
     const id = seed("https://jobs.example.com/careers/jobs/4321");
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () => {
         throw new Error("ECONNREFUSED");
       }) as unknown as typeof fetch,
@@ -211,6 +243,7 @@ describe("verdicts", () => {
     // The classic false positive: a login wall serving a friendly 200.
     const id = seed("https://careers.example.com/login?redirect=/job/4321");
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () =>
         respond(null, { text: "<h1>Sign in to continue</h1>" }),
       ) as unknown as typeof fetch,
@@ -222,6 +255,7 @@ describe("verdicts", () => {
     const id = seed();
     const fetchImpl = vi.fn();
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     expect(result!.verdict).toBe("unknown");
@@ -235,6 +269,7 @@ describe("verdicts", () => {
   it("writes the verdict onto the application's timeline", async () => {
     const id = seed("https://boards.greenhouse.io/acme/jobs/4321");
     await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
     });
     const checked = listEvents(db, id).filter((e) => e.kind === "job-checked");
@@ -246,6 +281,7 @@ describe("verdicts", () => {
 describe("prescan storage", () => {
   const run = (id: string) =>
     reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
     });
 
@@ -321,6 +357,7 @@ describe("job description backfill", () => {
   it("fills an empty jdText from the posting, as text", async () => {
     const id = seed("https://boards.greenhouse.io/acme/jobs/4321");
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
     });
     expect(result!.jdBackfilled).toBe(true);
@@ -330,6 +367,7 @@ describe("job description backfill", () => {
   it("never replaces a description we already had", async () => {
     const id = seed("https://boards.greenhouse.io/acme/jobs/4321", "captured from the real page");
     const result = await reconApplication(db, id, {
+      resolve: publicDns,
       fetchImpl: vi.fn(async () => respond(GH_JOB)) as unknown as typeof fetch,
     });
     expect(result!.jdBackfilled).toBeUndefined();
