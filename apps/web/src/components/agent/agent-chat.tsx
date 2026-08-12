@@ -204,7 +204,12 @@ export function AgentChat({
               {turn.answer && (
                 <p className="whitespace-pre-wrap text-body-sm text-foreground">{turn.answer}</p>
               )}
-              {turn.incomplete && (
+              {/* Only when the turn came back empty-handed. A turn that ran out
+                  of steps AFTER producing something is not a failed turn, and
+                  telling the user to "ask something narrower" next to a résumé
+                  it just wrote reads as an apology for the work — the real
+                  incident this fixes. The work is the account of the turn. */}
+              {turn.incomplete && !producedSomething(turn.steps) && (
                 <p className="text-caption text-warning">
                   Stopped at the step limit — ask something narrower and it will get further.
                 </p>
@@ -268,15 +273,54 @@ export function AgentChat({
  * step stays on the list: "I looked and there was nothing there" is information,
  * and hiding it would make the answer look better-founded than it is.
  */
-/** Steps whose output lives in a workspace — a produced artifact the user
- *  will want to OPEN, not just hear about. The link is the fix for a real
- *  report: "the agent tailored my résumé and I had no idea where it went". */
-const ARTIFACT_STEPS = new Set(["tailor_resume", "generate_cover_letter"]);
+/** Steps whose output is a document the user will want to OPEN, not just hear
+ *  about. The link is the fix for a real report: "the agent tailored my résumé
+ *  and I had no idea where it went". */
+const ARTIFACT_STEPS = new Set(["tailor_resume", "generate_cover_letter", "refine_artifact"]);
 
 /** Collapse the tool trail once it is longer than this — one glance says
  *  "the agent worked", the disclosure says exactly what it did. A single
  *  step stays inline; two or more fold. */
 const COLLAPSE_FROM = 2;
+
+/** Did this turn actually change something? `acted` is the server's own record
+ *  of a verified world-change, not a guess from the tool name. */
+function producedSomething(steps?: AgentStep[]): boolean {
+  return (steps ?? []).some((s) => s.acted);
+}
+
+/**
+ * What a change reads as when it is the HEADLINE rather than a row in a trail.
+ *
+ * The collapsed bar used to say "6 steps · 1 did · 3 failed", which describes
+ * the machine's effort and not the user's outcome — and next to an answer that
+ * had lost track of the same work, it was the only place a produced résumé was
+ * mentioned at all. Counts still exist; they moved into the disclosure, where
+ * someone asking "what did it actually run" will look.
+ */
+const DONE_PHRASE: Record<string, string> = {
+  tailor_resume: "Generated a tailored résumé",
+  generate_cover_letter: "Wrote a cover letter",
+  refine_artifact: "Revised the draft",
+  save_answer: "Saved your answer",
+  delete_answer: "Removed a saved answer",
+  update_application: "Updated this application",
+  update_profile: "Updated your profile",
+  draft_answer: "Drafted an answer",
+  compute_fit: "Scored the fit",
+  open_fill: "Opened a fill for the browser panel",
+  mark_submitted: "Marked it as submitted",
+  check_gate: "Checked what it is waiting on",
+};
+
+function donePhrase(step: AgentStep): string {
+  if (step.tool === "refine_artifact" && step.artifactKind) {
+    return step.artifactKind === "resume" ? "Revised your résumé" : "Revised your cover letter";
+  }
+  // Falling back to the tool's own summary keeps a new tool honest rather than
+  // silent: an unmapped id shows what happened, in the tool's words.
+  return DONE_PHRASE[step.tool] ?? step.summary;
+}
 
 function StepList({
   steps,
@@ -286,7 +330,7 @@ function StepList({
   fallbackApplicationId?: string;
 }) {
   const [open, setOpen] = useState(steps.length < COLLAPSE_FROM);
-  const did = steps.filter((s) => s.acted).length;
+  const done = steps.filter((s) => s.acted);
   const failed = steps.filter((s) => !s.ok).length;
 
   if (!open) {
@@ -298,9 +342,17 @@ function StepList({
         className="flex w-fit items-center gap-1.5 rounded-xl bg-bg-base px-2.5 py-1.5 text-caption text-muted-foreground transition-colors hover:bg-muted"
       >
         <span aria-hidden>▸</span>
-        {steps.length} steps
-        {did > 0 && <span className="font-semibold text-primary">· {did} did</span>}
-        {failed > 0 && <span className="text-warning">· {failed} failed</span>}
+        {done.length > 0 ? (
+          // What came of the turn, in the user's terms. The failures along the
+          // way are not hidden — they are one click away, and the answer above
+          // is where they get explained.
+          <span className="font-semibold text-foreground">{done.map(donePhrase).join(" · ")}</span>
+        ) : (
+          <>
+            {steps.length} steps
+            {failed > 0 && <span className="text-warning">· {failed} failed</span>}
+          </>
+        )}
       </button>
     );
   }
@@ -316,12 +368,25 @@ function StepList({
             className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground"
           >
             <span aria-hidden>▾</span> hide steps
+            {/* The tally belongs to the detail, not to the headline. */}
+            <span>
+              · {steps.length} steps
+              {done.length > 0 && ` · ${done.length} did`}
+              {failed > 0 && ` · ${failed} failed`}
+            </span>
           </button>
         </li>
       )}
       {steps.map((step, i) => {
         const workspaceId = step.applicationId ?? fallbackApplicationId;
         const linkToWorkspace = step.ok && ARTIFACT_STEPS.has(step.tool) && workspaceId;
+        // A step that produced a document links to THAT document's workbench —
+        // the place it can be read, diffed and exported. Pointing at the
+        // application page instead left the user to go hunting for the thing
+        // they were just told about. Older persisted steps carry no kind (the
+        // tools only started reporting it later), so those keep the link they
+        // shipped with rather than guessing a document.
+        const docKind = step.artifactKind;
         return (
           // Two clean lines per step: WHO on the first, WHAT on the second.
           // The old single-line flow wrapped summaries mid-phrase and floated
@@ -344,10 +409,14 @@ function StepList({
                 )}
                 {linkToWorkspace && (
                   <a
-                    href={`/applications/${workspaceId}`}
+                    href={
+                      docKind
+                        ? `/applications/${workspaceId}/doc/${docKind}`
+                        : `/applications/${workspaceId}`
+                    }
                     className="font-semibold text-primary hover:underline"
                   >
-                    open this application →
+                    {docKind ? "open in the workbench →" : "open this application →"}
                   </a>
                 )}
               </div>

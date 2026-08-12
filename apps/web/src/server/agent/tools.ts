@@ -67,6 +67,9 @@ function noTaskContext<T>(): ToolObservation<T> {
 
 /** What a generation step produced, and what was there before it ran. */
 interface ArtifactRun {
+  /** Which document this was. Reported so a caller can link to it without
+   *  keeping its own tool-id-to-document table. */
+  kind: "resume" | "cover-letter";
   versionsBefore: number;
   versionsAfter: number;
   currentVersionId: string | null;
@@ -95,6 +98,7 @@ async function runArtifactStep(
       ok: false,
       summary: `no new ${noun} was produced`,
       result: {
+        kind,
         versionsBefore,
         versionsAfter,
         currentVersionId: after?.currentVersionId ?? null,
@@ -108,7 +112,7 @@ async function runArtifactStep(
   return {
     ok: true,
     summary: `${noun} v${versionsAfter}`,
-    result: { versionsBefore, versionsAfter, currentVersionId: after.currentVersionId },
+    result: { kind, versionsBefore, versionsAfter, currentVersionId: after.currentVersionId },
   };
 }
 
@@ -156,7 +160,7 @@ export const coverLetterTool: Tool<void, ArtifactRun> = {
  *  tweak the workspace uses; the new version is read back with read_artifact. */
 export const refineArtifactTool: Tool<
   { kind: "resume" | "cover-letter"; instruction: string },
-  ArtifactRun & { kind: string }
+  ArtifactRun
 > = {
   id: "refine_artifact",
   description:
@@ -174,7 +178,7 @@ export const refineArtifactTool: Tool<
   },
   run: async (ctx, input) => {
     const taskId = ctx.taskId;
-    if (!taskId) return noTaskContext<ArtifactRun & { kind: string }>();
+    if (!taskId) return noTaskContext<ArtifactRun>();
     const noun = input.kind === "resume" ? "tailored résumé" : "cover letter";
     const before = getArtifact(ctx.db, taskId, input.kind);
     if (!before) {
@@ -217,7 +221,7 @@ export const refineArtifactTool: Tool<
   },
   // The durable check: a NEW version exists beyond what was there before.
   verify: async (ctx, input, result) => {
-    const run = result as (ArtifactRun & { kind: string }) | undefined;
+    const run = result as ArtifactRun | undefined;
     if (!run || !ctx.taskId) return false;
     const artifact = getArtifact(ctx.db, ctx.taskId, input.kind);
     return !!artifact && artifact.versions.length > run.versionsBefore;

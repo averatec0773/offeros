@@ -41,6 +41,11 @@ export interface AgentStep {
    *  A step whose output cannot be found is an output that may as well not
    *  exist; this field is the fix for exactly that report. */
   applicationId?: string;
+  /** Which document this step produced or revised, when it produced one. The
+   *  tools report it (they are the ones that know), so the UI can link straight
+   *  to that document's workbench instead of the application page — "it exists
+   *  somewhere in there" is not a destination. */
+  artifactKind?: "resume" | "cover-letter";
 }
 
 export interface TurnResult {
@@ -295,6 +300,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
       summary: observation.summary,
       acted: acting && observation.ok,
       applicationId: callCtx.applicationId,
+      ...(observation.ok ? artifactKindIn(observation.result) : {}),
     });
     findings.push(renderObservation(tool.id, observation));
   }
@@ -383,6 +389,20 @@ function stableStringify(value: unknown): string {
       Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
     );
   });
+}
+
+/**
+ * The document kind a tool result reports, if it reports one.
+ *
+ * Read off the RESULT rather than mapped from the tool id: the tool that made
+ * the document is the one that knows which it was (refine_artifact revises
+ * either), and a lookup table in the loop or in the UI would be a second place
+ * for that to drift.
+ */
+function artifactKindIn(result: unknown): { artifactKind?: "resume" | "cover-letter" } {
+  if (typeof result !== "object" || result === null) return {};
+  const kind = (result as { kind?: unknown }).kind;
+  return kind === "resume" || kind === "cover-letter" ? { artifactKind: kind } : {};
 }
 
 /** An application id the agent put in a tool's input, if it did. */
