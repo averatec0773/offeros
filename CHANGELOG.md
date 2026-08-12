@@ -1,216 +1,521 @@
 # Changelog
 
-Notable changes to OfferOS, newest first. The format follows
-[Keep a Changelog](https://keepachangelog.com/); versions follow
-[Semantic Versioning](https://semver.org/) once there is something to version.
+**What this file is:** the product history of OfferOS, written for someone who
+does not work on it. Each entry says what was wrong, what was done about it, and
+what actually changed as a result — stated in terms you could check yourself
+rather than in adjectives.
+
+Entries are grouped by the day the work landed, newest first, with
+[Keep a Changelog](https://keepachangelog.com/) categories inside each day.
+Versions will follow [Semantic Versioning](https://semver.org/) once there is
+something to version.
 
 OfferOS is pre-alpha and has never been released. Everything below is under
 **Unreleased** and describes what exists on `main`. There are no upgrade paths
 to honour yet and no published builds — expect the shape of things to move.
+Notable changes only; not every commit is an entry.
 
 ## [Unreleased]
 
+---
+
+## 2026-08-12
+
+### Fixed
+
+**A page's identity was a hash of the fields on it.** Every field report was
+tagged with the page it came from, so the app could accumulate results across a
+multi-page application. But the tag was built by joining every field id on the
+page — so adding one question, or the page rendering one fewer, produced a
+different tag for the same page. The two sides matched reports on that tag, so
+the second fill of a page appended a whole new set instead of replacing the old
+one. Field reports are now tagged with the page's actual identity — its address
+and its step in the wizard — and a completed fill replaces rather than merges,
+which also repairs records already polluted with no migration to run. On a real
+application carrying the old data, the report went from 26 rows with 10
+questions listed twice to 16 rows, one per question.
+
+**Pressing Done after reopening the panel failed in silence.** A completed fill
+moves the application to its submit gate. If the panel was then closed and
+reopened, it forgot that it had already reported, so Done looked clickable — and
+pressing it sent the report to an application that had moved on, which the app
+refused. The panel treated the refusal as nothing at all: no error, no change,
+no explanation. The panel now restores what it already reported, so Done is not
+offered twice; if a report is refused anyway, the reason appears under the
+button instead of vanishing. Replaying the same completed report is now accepted
+and lands the same state twice, which is safe because a completed report
+replaces.
+
+**A text field the page rejected was still reported as filled.** Every other
+write verified itself — a dropdown checked its selection landed, a combobox
+waited for the widget to echo the choice, a file upload re-read the attachment —
+but the most common write, plain text, set the value and reported success
+without ever looking again. A form that refuses programmatic input re-renders
+its own empty state, so the field the user saw as answered was blank and the
+report agreed it was answered. Text writes are now read back. Reformatting is
+not failure (a phone mask is the same answer), but a field that ends up empty or
+holding something else is reported as failed and carries the page's own reason,
+so it shows up in what needs you instead of at submit.
+
+**iCIMS dropdowns had no driver to answer them.** Supporting an application
+platform took agreement between four lists in four files. iCIMS was in three of
+them; the one that injects the dropdown driver was written by hand and missed
+it. The page loaded, the fields were found, and only the dropdowns silently
+failed — each one waiting out a two-and-a-half-second timeout and reporting an
+ordinary failure. There is now one list and all four derive from it, so the
+lists cannot disagree; a test names a real address per platform and makes each
+list prove it covers it.
+
+---
+
+## 2026-08-11
+
 ### Added
 
-**Autofill.** Fills Greenhouse, Lever, Ashby, iCIMS and Workday application
-forms from a profile you own. Field classification is a pure, DOM-free library
-(`packages/autofill`) so it can be tested without a browser; the extension only
-executes what that library decides. Handles multi-page wizards, React-select
-comboboxes, shadow DOM, radio and checkbox groups, and file uploads. Every
-field it fills carries a plain-language reason for the value it chose.
+**An application is a record, not a workflow.** Applying was a pipeline you
+stepped through, approving each stage. Each job now gets one page that says each
+thing once: the posting, one card for the form, the newest few timeline entries
+with the rest a click away, and the documents you have to send. Its state is
+yours to set — saved, applying, applied, interview, offer, rejected, archived.
+The generation still runs; it just no longer asks permission at each turn. Six
+approval gates became zero.
 
-**A workspace that owns the data.** The Next.js app holds applications,
-résumés, answers and generated documents in a local SQLite file under
-`~/.offeros`. The browser extension stores nothing; it asks the app for a
-ticket, fills the form, and reports back per field.
-
-**Résumé tailoring and cover letters.** Generate a tailored résumé or a cover
-letter for a specific posting, preview the rendered PDF, then attach it — the
-attach is a separate click, and the file is only reported as attached once its
-presence on the page is verified. LaTeX templates are supported; bring your own
-`.tex` and mark the body region, or use the built-in one.
-
-**Job analysis and fit.** Summarises a posting, lists gaps against your
-profile, and scores fit from deterministic skill overlap. The score is advisory
-and never blocks an application.
-
-**Answer bank with guardrails.** Reuses answers you have approved before. Three
-classes of question are refused for AI generation rather than answered:
-identity and demographics, questions with a factual right answer you alone know
-(work authorisation, sponsorship, citizenship, salary), and policy
-acknowledgements. Policy questions the app did fill are listed afterwards for
-you to check.
-
-**An application is a record, not a workflow.** Each job gets one page that
-says each thing once: the posting, one card for the form (the button before you
-fill, the count after, and anything needing you pinned on top, with the
-field-by-field detail and what went wrong folded away), the newest few timeline
-entries with the rest a click away, and everything you have to send (a tailored résumé and a cover
-letter — generate, revise, accept). Its state is yours to set: saved, applying,
-applied, interview, offer, rejected, archived. There are no steps to approve
-and nothing to start; the generation still runs, it just no longer asks
-permission at each turn.
-
-**The job description, in two layers that cost different things.** The posting
-itself is always there, collapsed to a dozen lines with the meta you care about
-(pay first), and the skills you already have are highlighted in the employer's
-own text — no upload, no wait, no call to your model, because your profile is
-already on your machine. The reading is the part that costs: one button, one
-call on your key, stored so you pay for it once, and shown as a peer tab so it
-never buries the source. With no description saved, two free ways to get one:
-paste it, or let the posting check fetch it.
-
-**One mark on everything that spends.** Every button that calls your AI
-provider carries the same glyph and the same tooltip; every button that does
-not carries neither. Checking a posting, filling a form, changing a status are
-unmarked because they are free. One glance says which of the things in front of
-you is the expensive one.
-
-**A workbench for each document.** A generated résumé or cover letter gets a
-page of its own: the document at full width, and beside it revise, what
-changed, the version history with the reason each version exists, Accept and
-PDF. It has a URL, so the back button and a link both behave. On the
-application itself the two documents shrink to two lines — state, version, when
-— because that is what a record should say.
+**The job description, in two layers that cost different things.** A posting you
+had saved showed you nothing until you paid for a reading. The description is
+now always there, collapsed to a dozen lines with the meta you care about (pay
+first), with the skills you already have highlighted in the employer's own text
+— no upload, no wait, and no call to your model, because your profile is already
+on your machine. The reading is the part that costs: one button, one call on
+your key, stored so you pay for it once, shown as a peer tab so it never buries
+the source.
 
 **The reading answers four questions.** Pay, sponsorship, remote policy and
-deadline come back as stated, explicitly ruled out, or not mentioned — and the
-third one is written out rather than left blank. A posting that never mentions
-sponsorship has not refused it, and reading silence as a "no" would talk you
-out of an application you should make. You can also give the reading a lens
-("focus on the pay"), and the page says which lens produced what you are
-looking at.
+deadline come back as stated, explicitly ruled out, or not mentioned — three
+outcomes, not two. A posting that never mentions sponsorship has not refused it,
+and reading silence as a "no" would talk you out of an application you should
+make. You can also give the reading a lens ("focus on the pay"), and the page
+says which lens produced what you are looking at.
 
-**Fairer scoring on degrees.** A requirement phrased as "Computer Science or a
-related field" is now read the inclusive way employers mean it, with your
-degree passed in as a fact rather than left in a paragraph to be found.
-Adjacent fields count; education is marked unmet only when a posting names a
-credential you plainly lack.
+**A workbench for each document.** A generated résumé or cover letter was a
+panel inside a larger page. Each now gets a page of its own: the document at
+full width, and beside it revise, what changed, the version history with the
+reason each version exists, Accept, and PDF. It has an address, so the back
+button and a link both behave. On the application itself the two documents
+shrink to two lines — state, version, when.
 
-**When things happened.** Added, posted, applied, last checked — on one line
-under the job title. The posting's own freshness wording is shown as written,
-a deadline is only ever one the posting stated, and anything not captured is
-simply absent rather than filled with a placeholder.
+**An agent you can ask about your search.** A conversational agent, on its own
+page and inside each application, answers questions about your applications in
+plain language — "which of these are stuck, and why?", "what got filled in
+here?" — by reading the real records and showing the steps that produced each
+answer. It works in a loop of small verified tool calls and can make gated
+changes (save an answer, update a status, tailor a résumé), at most two per
+turn, each verifying itself by re-reading what it wrote. It cannot mark an
+application submitted unless your own message says you submitted it — that check
+reads your words, not a model-set flag.
 
-**Company faces.** Letters on a colour derived from the company name — offline,
-instant, and the same colour for that company forever. When a posting is
-checked, its site's icon is fetched once and kept on your machine; pages read
-it locally, so browsing your own applications never calls an employer's server.
+**Job details from the employer's own careers page.** Adding a job worked only
+when the link was on a job board's own domain. Most postings are not: companies
+embed the board into their own careers page, and a board's own link often
+redirects there anyway. The platform behind a page is now recognised from the
+page itself, so pasting the link you actually have brings back the title, the
+location and the full description. Greenhouse, Lever and Ashby postings are read
+from each platform's own listing, whichever domain the link is on.
 
-**Job details from the employer's own careers page.** Adding a job used to
-work only when the link was on a job board's own domain. Most postings are not:
-companies embed the board into their own careers page, and a board's own link
-often redirects there anyway. OfferOS now recognises which platform is behind a
-page from the page itself, so pasting the link you actually have — the one on
-the company's site — brings back the title, the location and the full
-description. Greenhouse, Lever and Ashby postings are read from each platform's
-own listing, whether the link is theirs or the employer's.
-
-**It tells you where the description came from,** because the sources are not
-equally clean: a platform's own listing is what the employer wrote, while text
-pulled out of a page can drag in navigation. One line under the description
-says which. And when it cannot read a posting at all, it says that too, rather
-than saving a blank one — some pages are built entirely in your browser and
-simply are not visible to a server. Settings → Data can retry the ones that
-came up empty, and reports which worked and why the rest did not.
+**It says where the description came from.** The sources are not equally clean:
+a platform's own listing is what the employer wrote, while text pulled out of a
+page can drag in navigation. One line under the description says which. When a
+posting cannot be read at all it says so rather than saving a blank one — some
+pages are built entirely in your browser and are not visible to a server.
+Settings → Data can retry the ones that came up empty and reports which worked.
 
 **Job reconnaissance.** One click asks the posting two questions: are you still
 up, and what will your form ask? On Greenhouse the answer comes from the
 platform's own job-board API — every question, its type, and whether it is
-required — so the page can tell you "10 required questions, 8 already answered"
-and name the two it cannot. Entirely deterministic: status codes and the
-platform's own words, no model anywhere in it. When a site cannot be read it
-says "could not tell" rather than guessing, because a wrong "closed" costs you
-a job you could still have applied to.
+required — so the page can say how many required questions there are and how
+many you have already answered, and name the ones it cannot. Entirely
+deterministic: status codes and the platform's own words, no model anywhere in
+it. A site it cannot read gets "could not tell", because a wrong "closed" costs
+you a job you could still have applied to.
 
 **Add a job by pasting its link.** On a supported board the title, company and
 description come from the board. Anywhere else you get a minimal record with an
 editable title, because a guessed company name is worse than a blank one. The
 same posting twice opens the one you already have.
 
-**Bring your own model.** Anthropic or OpenAI, with your key. Keys are stored
-locally and never sent to the browser. System prompts are editable per task.
+**One mark on everything that spends.** Nothing distinguished the buttons that
+call your AI provider from the ones that do not. Every button that spends now
+carries the same glyph and the same tooltip; every button that does not carries
+neither. Checking a posting, filling a form and changing a status are unmarked
+because they are free.
+
+**When things happened.** Added, posted, applied, last checked — on one line
+under the job title. The posting's own freshness wording is shown as written, a
+deadline is only ever one the posting stated, and anything not captured is
+absent rather than filled with a placeholder.
+
+**Company faces.** Letters on a colour derived from the company name — offline,
+instant, and the same colour for that company forever. When a posting is
+checked, its site's icon is fetched once and kept on your machine, so browsing
+your own applications never calls an employer's server.
+
+**A downloadable backup.** Your data lives in one local file with no way to move
+it. Settings → Data now produces a portable backup you can download.
+
+### Changed
+
+**A wider shell, a roomier nav, and settings that stop jumping.** Switching
+settings tabs shifted the whole page, because the scrollbar appeared and
+disappeared with the content length. The gutter is now reserved, the shell is
+wider, and the navigation is larger; a small motion layer was added so state
+changes are visible rather than instantaneous.
+
+**Six settings tabs became two,** with templates separated out of settings
+entirely, so the thing you were looking for is not the eleventh item in a row.
+
+### Fixed
+
+**Different jobs counted as the same job.** Adding a posting by link compared
+addresses with the whole query string thrown away, on the assumption it only
+held tracking parameters. Some boards put the posting's identity there — their
+embedded form has an identical path for every job — so every such link looked
+like the same job: pasting a new one reported it as already tracked, opened an
+unrelated application saved earlier, and created nothing. Only known tracking
+parameters are stripped now; everything else is kept and compared in a stable
+order, and where a board link carries a readable job identity that is compared
+instead, so the same posting is still recognised across both of its link shapes.
+A link that genuinely is already tracked now names the job instead of silently
+navigating away.
+
+**A degree requirement was scored as a missing skill.** "Computer Science or a
+related field" was read literally, so an adjacent degree counted as unmet. The
+requirement is now read the inclusive way employers mean it, with your degree
+passed in as a fact rather than left in a paragraph to be found. Education is
+marked unmet only when a posting names a credential you plainly lack.
+
+**The main action was the one you could not see,** and the workbench header did
+not believe its own Accept click until a refresh. Both now match what is in
+front of you.
+
+**"Answer this field for me" saved a refusal.** When the agent declined a
+question it should not answer, the refusal text was saved into the answer bank
+as though it were the answer. It now saves an answer that can be matched, or
+saves nothing.
+
+**Recoverable mistakes no longer burn the agent's step budget** or clutter the
+trail it shows you, so a run that hit one retryable error still finishes.
+
+### Security
+
+**Every host we fetch is checked — including the ones we are redirected to.**
+Checking a posting fetches a page the user pasted. The address was validated
+once, before the request; a redirect could then land the request on a private
+address on your own network. Each hop is now re-checked against the same rules,
+so a redirect cannot reach anywhere the original address could not.
+
+**Résumé text is fenced before it reaches a model.** Text extracted from an
+uploaded résumé went into the parsing prompt unfenced, so a document containing
+instructions could speak to the model as though it were the app. Résumé text,
+cover-letter inputs and scraped page text are all fenced now, and extension
+origins are allowlisted rather than pattern-matched.
+
+**Long chat histories are capped on both sides.** Assistant messages were
+truncated when replayed into the context window but user messages were not, so a
+single pasted description could crowd out the conversation.
+
+---
+
+## 2026-08-10
+
+### Added
 
 **A verification lab for the fill engine.** Captured forms can be replayed
 offline through the exact same engine that fills live pages. Three synthetic
 test personas with deliberately distinguishable values prove every filled value
 came from the active profile — a value carrying another persona's material is
-flagged as cross-contamination automatically. Captures that lost information
-(a dropdown without its choices, a question without its text) are refused at
-the door instead of quietly replaying against a form that never existed. When
-a real fill leaves problems behind, the extension photographs those fields and
-stores the screenshots locally beside the database, so a later review can
-compare what the engine reported against what the page actually showed.
+flagged as cross-contamination automatically. Captures that lost information (a
+dropdown without its choices, a question without its text) are refused at the
+door instead of quietly replaying against a form that never existed. When a real
+fill leaves problems behind, the extension photographs those fields and stores
+the screenshots beside the database.
 
-**An agent you can ask about your search.** A conversational agent, on `/agent`
-and inside each application, answers questions about your applications in plain
-language — "which of these are stuck, and why?", "what got filled in here?",
-"what has happened with this one?" — by reading the real records (fill reports,
-decision traces, the application's own timeline, your saved answers, form
-memory) and showing the steps that produced each answer, not just the answer. It
-works in a loop of small verified tool calls: it can also make gated changes
-(save an answer, update an application's status, tailor a résumé), at most two
-per turn, each verifying itself by re-reading what it wrote. It cannot mark an
-application submitted unless your own message says you submitted it — that check
-reads your words, not a model-set flag, and no text scraped from a web page can
-talk past it.
+**A record of what the forms actually asked.** Each completed fill now stores
+the questions it met, identified by their content rather than by any
+page-specific id, so the same question on two different postings is recognised
+as one question. Fills that went genuinely wrong — a value the page refused, a
+required question never seen before, a question failing again on another
+application — are recorded separately from fills where a guard simply did its
+job. Every figure is a count; no model is involved.
 
-**A record of what the forms actually asked.** Each completed fill stores the
-questions it met, identified by their content rather than by any page-specific
-id, so the same question on two different postings is recognised as one
-question. Fills that went genuinely wrong — a value the page refused, a required
-question never seen before, a question failing again on another application, a
-new form that broadly did not fill — are recorded separately from fills where a
-guard simply did its job. The agent page shows how often each happens. No model
-is involved in any of it; every figure is a count.
+**Workday's button dropdowns can be seen and driven,** and the page watcher
+notices them appear, which is what made Workday applications fillable rather
+than half-filled.
 
-### Security and privacy
+**Conversation threads, and a write family for the agent.** The agent's history
+was one flat log; it now keeps threads, shows what it has in memory, and its
+write tools share one contract.
+
+### Fixed
+
+**Two systematic defects that ten live fills exposed,** plus three findings from
+the first wave of real-form review: answers now tolerate a question being
+reworded, failure counts are honest rather than optimistic, and the evidence
+kept is enough to diagnose from.
+
+**The fill report shows what went in, not just what did not.** A report that
+lists only problems reads as though nothing worked.
+
+**The submit gate reads the user's words, not the model's flag.** Marking an
+application submitted was a field the model could set. It now requires the
+user's own message to say so.
+
+**The agent stopped re-reading what it already knew.** Lists arrive
+pre-summarised, long tool trails fold, answers synthesize instead of
+enumerating, and the shape of the answer follows the shape of the question.
+
+**Evidence screenshots needed a permission they did not have.** Per-host
+permissions never satisfy the capture API, so every evidence capture failed
+silently.
+
+---
+
+## 2026-08-09
+
+### Added
+
+**A stable identity for a question,** derived from what the question says rather
+than from the page it appeared on — which is what lets the same question be
+recognised across two employers' forms.
+
+**The field report says why, not just what.** Each field now carries a
+plain-language reason for the value chosen, so a wrong answer can be argued with
+rather than only observed.
+
+**The page asks what its fields are instead of guessing,** and the extension
+knows which page of a multi-page application it is on.
+
+**A fill-quality number, and an honest one** — with failures grouped by cause
+rather than listed field by field, so ten symptoms of one problem read as one
+problem.
+
+**Ask about a job without leaving the list,** and the list says what happened
+rather than which internal step is next.
+
+### Fixed
+
+**The EEO section did not save itself,** and an EEO answer could not be taken
+back once given.
+
+**A same-page message did not need a network-sized timeout,** which is why some
+in-page operations appeared to hang before failing.
+
+---
+
+## 2026-08-08
+
+### Added
+
+**Three classes of question are refused for AI generation** rather than
+answered: identity and demographics, questions with a factual right answer you
+alone know (work authorisation, sponsorship, citizenship, salary), and policy
+acknowledgements. Policy questions the app did fill are listed afterwards for
+you to check.
+
+**The workspace commands the extension.** Fill tasks are bound to a tab
+explicitly rather than matched by address, so two similar tabs cannot claim each
+other's work.
+
+**An in-page overlay panel,** so the fill panel is reachable from the page
+itself and not only from the browser's side panel.
+
+**Self-recovery.** Landing on a posting's description instead of its form, or on
+a job-board index, is detected and navigated from, with a per-tab attempt budget
+so it cannot loop.
+
+**One-way doors get handles:** marking an application submitted can be undone,
+and an evidence check runs before the door closes.
+
+**Live events instead of polling,** so the workspace reflects what is happening
+as it happens.
+
+**Auto-submit, off by default, with the consequence stated** — recorded as a
+preference and deliberately not implemented.
+
+### Fixed
+
+**Twenty-seven defects from three independent audits** of the foundation, the
+console, the guards and the ledger — found by reading the code adversarially
+rather than by using it.
+
+**A field the page already holds is an answer.** The fill counted it as empty
+and overwrote it; it now counts it and leaves it alone.
+
+**The schema was applied to the file, not to the connection.** Database setup
+ran once when a connection opened, and the connection was cached for the life of
+the process — so a running app could serve new code over a connection that had
+never seen the new schema and fail with a missing table. The schema is now
+re-applied whenever the connection is older than the build.
+
+**The extension survives a browser restart,** via a startup sweep and a
+self-healing toolbar click.
+
+### Changed
+
+**The panel was split out of a two-thousand-line file,** the extension now
+shares the app's definitions instead of copying them, and two copies of the
+artifact lane became one.
+
+---
+
+## 2026-08-07
+
+### Added
+
+**Choice groups, per-signal classification, and real titles for label-less
+widgets** — the classification work that made radio groups, checkbox groups and
+unlabelled custom controls fillable at all.
+
+**One-click EEO defaults, keyword patterns, and AI choice answers,** so the
+questions that repeat on every application are answered once.
+
+**Deterministic field ids.** Ids were assigned by a counter that reset on every
+content-script reload, so the same name could point at a different field after a
+reload — and anything remembered about a field pointed at the wrong one. Ids are
+now derived from the field's own content.
+
+---
+
+## 2026-08-06
+
+### Added
+
+**Instant fill.** One click from the side panel fills the form from your
+profile, with no application record required first.
+
+**In-panel résumé tailoring and cover letters,** so tailoring, previewing and
+attaching all happen at the apply page rather than in another window.
+
+**Live per-field fill progress,** and scan probing that survives a page reload.
+
+**The extension auto-reloads when a fresh build lands,** which turned a
+manual reload cycle into about two seconds.
+
+### Fixed
+
+**Company and job id are derived from real page shapes** rather than from what
+the documentation implies they are.
+
+---
+
+## 2026-08-02
+
+### Added
+
+**Style memory.** Tweaks you make to generated documents are distilled into
+short notes about how you write — style only, never facts — and those notes
+ground later generation. Off is off, and the count of what it learned is honest.
+
+**An application event log,** with the timeline and a JSON export.
+
+---
+
+## 2026-08-01
+
+### Added
+
+**Files attach themselves, verified.** A tailored résumé or cover letter is
+attached to the form and then confirmed against the page; an attachment that did
+not land falls back to telling you to do it manually rather than reporting
+success.
+
+**One-click add-this-job from the side panel,** capturing the description from
+the page you are on.
+
+**Accepted AI answers persist to the answer bank,** deduplicated, so the second
+application asking the same question does not ask you again.
+
+### Security
+
+**Scraped description text is fenced as untrusted** in job analysis, résumé
+tailoring and fit analysis, so a posting cannot inject instructions into a
+prompt.
+
+---
+
+## 2026-07-27
+
+### Added
+
+**User-readable failure reasons are persisted,** and raw errors are no longer
+echoed on a server failure.
+
+### Security
+
+**Content scripts are https-only.** A scheme wildcard also matches plain HTTP,
+which would let a network attacker inject a page the fill engine then trusts.
+
+**Local storage is owner-only.** The database, its directory and stored résumés
+are created with permissions that exclude other users on the machine.
+
+---
+
+## 2026-07-26
+
+### Added
+
+**Bring your own model.** Anthropic or OpenAI, with your key, managed in the
+app. Keys are stored locally and never sent to the browser. System prompts are
+editable per task.
+
+**A structured résumé, rendered.** Tailoring works from the résumé you selected,
+the workspace shows its structure, and the PDF renderer takes it from there.
+
+### Fixed
+
+**Truthful provider states.** A missing key surfaced as a generic failure
+somewhere downstream; onboarding, the workspace banner and the queued label now
+each say plainly that no provider is connected.
+
+---
+
+## 2026-07-25
+
+### Added
+
+**Initial public release of OfferOS,** a local-first AI job-application copilot.
+
+**Autofill.** Fills Greenhouse, Lever, Ashby, iCIMS and Workday application
+forms from a profile you own. Field classification is a pure, browser-free
+library so it can be tested without a browser; the extension only executes what
+that library decides. Handles multi-page wizards, React-select comboboxes,
+shadow DOM, radio and checkbox groups, and file uploads.
+
+**A workspace that owns the data.** The app holds applications, résumés, answers
+and generated documents in a local SQLite file under `~/.offeros`. The browser
+extension stores nothing; it asks the app for a ticket, fills the form, and
+reports back per field.
+
+**Résumé tailoring and cover letters.** Generate a tailored résumé or a cover
+letter for a specific posting, preview the rendered PDF, then attach it — the
+attach is a separate click. LaTeX templates are supported; bring your own `.tex`
+and mark the body region, or use the built-in one.
+
+**Job analysis and fit.** Summarises a posting, lists gaps against your profile,
+and scores fit from deterministic skill overlap. The score is advisory and never
+blocks an application.
+
+---
+
+## Security and privacy, throughout
 
 - The local API refuses any request whose `Host` is not loopback, and checks
   `Origin` against an allowlist on every mutating request.
 - The database and its directory are created owner-only; résumés live beside it
   on disk, not in a cloud.
 - Text the app did not author — page text scraped from a posting, and the text
-  extracted from an uploaded résumé — is fenced before it reaches a model, so a
-  posting or a document cannot inject instructions into a prompt.
+  extracted from an uploaded résumé — is fenced before it reaches a model.
 - Nothing is submitted on your behalf. The submit step waits for you.
 
-### Notable fixes
-
-- **Schema changes now reach long-lived processes.** Database DDL ran once when
-  a connection was opened, and the connection was cached for the life of the
-  process — so a running app could serve new code over a connection that had
-  never seen the new schema, and fail with `no such table`. The schema is now
-  re-applied whenever the connection is older than the build, identified by a
-  fingerprint derived from the schema itself.
-- **A toolbar button that did nothing.** The extension's side panel was enabled
-  only on supported application forms, so clicking the icon anywhere else was a
-  silent no-op with nothing to explain it. The panel now opens on any page: on
-  an application form it drives the fill, and everywhere else it shows what is
-  waiting on you and opens the web app.
-- **Different jobs counted as the same job.** Adding a posting by link
-  compared URLs with the whole query string thrown away, on the assumption it
-  only ever held tracking parameters. Some job boards put the posting's
-  identity there — their embedded application form has an identical path for
-  every job — so every such link looked like the same job. Pasting a new one
-  reported it as already tracked and opened an unrelated application saved
-  earlier, while nothing was created. Only known tracking parameters are
-  stripped now, everything else is kept and compared in a stable order, and
-  where a board link carries a readable job identity that is compared instead —
-  so the same posting is still recognised across both of its link shapes. When
-  a link genuinely is already tracked, the dialog now says so and names the job
-  rather than silently navigating away.
-- **Wrong-tenant claims.** The extension could claim a fill ticket belonging to
-  a different posting when two tabs looked alike; tickets are now bound to a
-  tab explicitly.
-- **Silent false attachments.** A file upload that did not actually land could
-  be reported as filled. Attachment is verified against the page before it is
-  recorded.
-- **Recovery from the wrong page.** Landing on a posting's description instead
-  of its form, or on a job-board index, is detected and navigated from, with a
-  per-tab attempt budget so it cannot loop.
-
-### Known gaps
+## Known gaps
 
 - No released build. Run it from source.
 - The local app is started as a development server. That is fine for
