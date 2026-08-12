@@ -309,3 +309,54 @@ describe("what comes back", () => {
     expect(await screen.findByText("No AI provider connected")).toBeTruthy();
   });
 });
+
+/**
+ * Drafting one long answer at a time.
+ *
+ * A free-text question is the one kind worth its own button: it costs real
+ * minutes to write by hand, and the applicant usually has something specific
+ * they want emphasised. Their instruction is theirs, so it reaches the model
+ * without being fenced off as untrusted page text.
+ */
+describe("drafting one field", () => {
+  const runFill = async (used = api()) => mount(used);
+
+  it("offers a draft button beside a long-text question", async () => {
+    await runFill();
+    expect(await screen.findByText("Written answers")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Draft it/ })).toBeTruthy();
+  });
+
+  it("marks it as spending the applicant's own credit", async () => {
+    await runFill();
+    const btn = await screen.findByRole("button", { name: /Draft it/ });
+    expect(btn.getAttribute("title")).toContain("your own API key");
+  });
+
+  it("sends only that field, with the applicant's instruction", async () => {
+    const used = api();
+    await runFill(used);
+    const hint = await screen.findByRole("textbox", { name: /What should this answer emphasise/ });
+    await act(async () => {
+      await userEvent.type(hint, "emphasise my Docker experience");
+      await userEvent.click(screen.getByRole("button", { name: /Draft it/ }));
+    });
+    const [, body] = (used.analyzeFields as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0] as [string, { fields: { fieldId: string }[]; instruction?: string }];
+    expect(body.fields.map((f) => f.fieldId)).toEqual(["f1"]);
+    expect(body.instruction).toBe("emphasise my Docker experience");
+  });
+
+  it("gives a guarded question no AI button at all", async () => {
+    // "Only you can answer this" is the whole offer for these.
+    await runFill();
+    // The work-authorization question is not offered a draft anywhere.
+    const drafts = screen
+      .getAllByRole("listitem")
+      .filter((r) => within(r).queryByRole("button", { name: /Draft it/ }));
+    expect(drafts.length).toBeGreaterThan(0);
+    for (const row of drafts) {
+      expect(row.textContent).not.toContain("Are you legally authorized to work");
+    }
+  });
+});

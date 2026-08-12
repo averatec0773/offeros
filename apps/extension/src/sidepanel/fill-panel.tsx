@@ -240,6 +240,8 @@ export function FillPanel({
    * it an informed act rather than a leap of faith.
    */
   const [suggestions, setSuggestions] = useState<Map<string, AnalyzedField>>(new Map());
+  /** Per-field "emphasise this" text, typed by the applicant. */
+  const [draftHints, setDraftHints] = useState<Map<string, string>>(new Map());
   const aiAppliedRef = useRef<Set<string>>(new Set());
   /** Per-field refine: which row is open, what was typed, which row is running,
    *  and what went wrong on it. Keyed by fieldId so two rows never share state. */
@@ -358,6 +360,21 @@ export function FillPanel({
    * excluded here as well as server-side — offering to analyse something that
    * will always come back "yours to answer" wastes the applicant's money.
    */
+  /**
+   * A field worth offering a one-off draft for: a free-text box the applicant
+   * would otherwise write by hand. Guarded questions never qualify — they get
+   * no AI button at all, only the note that they are the applicant's.
+   */
+  const isDraftable = (fieldId: string): boolean => {
+    const item = plan.find((i) => i.fieldId === fieldId);
+    const desc = scanResult?.ok
+      ? scanResult.descriptors.find((d) => d.fieldId === fieldId)
+      : undefined;
+    if (!item || !desc || item.captcha === true) return false;
+    if (isAutoAnswerForbidden(guardSubject(item.label, desc))) return false;
+    return desc.type === "textarea" || item.generatable === true;
+  };
+
   const outstanding = (item: FillItem): boolean => {
     if (item.captcha === true) return false;
     if (item.status === "fillable") return false;
@@ -1356,6 +1373,10 @@ export function FillPanel({
   // engine gave up on. Shown next to the button so pressing it is an informed
   // choice about spending, not a guess.
   const unrecognised = plan.filter((i) => outstanding(i)).length;
+  /** Outstanding free-text questions — the ones worth a one-off draft. */
+  const draftable = plan.filter(
+    (i) => outstanding(i) && isDraftable(i.fieldId) && !suggestions.has(i.fieldId),
+  );
   // Built from the reports a run actually produced, not from the plan alone, so
   // a field the engine meant to fill and the page refused lands here too. Only
   // after a run: telling someone to fill six fields in before anything has been
@@ -1817,6 +1838,55 @@ export function FillPanel({
                   : `AI analyse the remaining ${unrecognised} field${unrecognised === 1 ? "" : "s"}`}
               </button>
             )}
+          </div>
+        )}
+
+        {/* Long-text questions, one at a time.
+            A free-text box is the one kind worth its own button: it costs real
+            minutes to write by hand, and the applicant usually has something
+            specific they want emphasised. Their instruction is theirs, so it
+            reaches the model unfenced. Guarded questions never appear here. */}
+        {bundle && draftable.length > 0 && (
+          <div className="mb-2 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+            <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+              Written answers
+            </p>
+            <ul className="space-y-2">
+              {draftable.map((item) => (
+                <li key={item.fieldId} className="space-y-1">
+                  {/* Plain text, not a button: the field rows below already
+                      offer the jump, and two controls with the same accessible
+                      name is a worse affordance than one. */}
+                  <p className="truncate text-caption text-text-primary">{item.label}</p>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={draftHints.get(item.fieldId) ?? ""}
+                      onChange={(e) =>
+                        setDraftHints((prev) => new Map(prev).set(item.fieldId, e.target.value))
+                      }
+                      aria-label={`What should this answer emphasise? ${item.label}`}
+                      placeholder="Optional: emphasise my Docker experience"
+                      className="min-w-0 flex-1 rounded-full border border-border-subtle bg-bg-base px-2.5 py-0.5 text-micro text-text-primary focus:outline-none focus:ring-1 focus:ring-brand"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void runAnalysis({
+                          onlyFieldId: item.fieldId,
+                          instruction: draftHints.get(item.fieldId)?.trim() || undefined,
+                        })
+                      }
+                      disabled={aiBusy || pending}
+                      title={SPEND_TITLE}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border-subtle px-2.5 py-0.5 text-micro font-semibold text-text-primary transition-colors hover:bg-bg-base disabled:opacity-50"
+                    >
+                      <SpendMark />
+                      Draft it
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
