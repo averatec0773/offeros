@@ -95,6 +95,13 @@ export const api = {
       }>,
     ) => request<Application>(`/applications/${id}`, json("PATCH", patch)),
     get: (id: string) => request<Application>(`/applications/${id}`),
+    /** "I submitted this." Closes the tickets, sets the date, finishes the
+     *  task and leaves an undoable record — `update({status:"applied"})` is
+     *  refused by the server precisely so this is the only way. */
+    markSubmitted: (id: string) =>
+      request<Application>(`/applications/${id}/submitted`, json("POST", {})),
+    undoSubmitted: (id: string) =>
+      request<Application>(`/applications/${id}/submitted`, { method: "DELETE" }),
     events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
     trace: (id: string) => request<TraceEntry[]>(`/applications/${id}/trace`),
     /** Track a job from its link. Returns the existing one, flagged, when the
@@ -157,7 +164,10 @@ export const api = {
     fillHandoff: (id: string) =>
       request<FillHandoff>(`/agent/tasks/${id}/fill/handoff`, json("POST", {})),
     fillResolve: (id: string, action: "fixed" | "applied-manually") =>
-      request<PipelineTask>(`/agent/tasks/${id}/fill/resolve`, json("POST", { action })),
+      request<PipelineTask>(
+        `/agent/tasks/${id}/fill/resolve`,
+        json("POST", { action, source: "web-card" }),
+      ),
     fillUndo: (id: string) =>
       request<PipelineTask>(`/agent/tasks/${id}/fill/undo`, json("POST", {})),
     /** Generate (or re-generate) the tailored résumé — the same targeted

@@ -62,23 +62,25 @@ describe("/api/v1/applications", () => {
     ).json();
     expect(got.result.jobInfo.companyName).toBe("Evolver");
 
+    // "applied" is deliberately not settable here — submission is five things,
+    // and this route does one of them. See submitted-route.test.ts.
     const patched = await (
       await appRoute.PATCH(
         new Request("http://localhost", {
           method: "PATCH",
-          body: JSON.stringify({ status: "applied" }),
+          body: JSON.stringify({ status: "interview" }),
         }),
         { params: Promise.resolve({ id }) },
       )
     ).json();
-    expect(patched.result.status).toBe("applied");
+    expect(patched.result.status).toBe("interview");
   });
 
   it("404s for a missing application id", async () => {
     const res = await appRoute.PATCH(
       new Request("http://localhost", {
         method: "PATCH",
-        body: JSON.stringify({ status: "applied" }),
+        body: JSON.stringify({ status: "interview" }),
       }),
       { params: Promise.resolve({ id: "missing" }) },
     );

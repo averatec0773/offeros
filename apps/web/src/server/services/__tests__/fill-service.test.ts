@@ -18,7 +18,7 @@ import {
 import { saveProfile } from "../../repositories/profile-repo";
 import { upsertArtifact } from "../../repositories/artifact-repo";
 import { saveJdAnalysis } from "../../repositories/jd-analysis-repo";
-import { getFillHandoff } from "../../repositories/fill-handoff-repo";
+import { getFillHandoff, listOpenFillHandoffs } from "../../repositories/fill-handoff-repo";
 import { listEvents } from "../../repositories/application-event-repo";
 import { uploadResume } from "../resume-service";
 import { answers, resumes } from "../../db/schema";
@@ -28,7 +28,9 @@ import {
   applyFillReport,
   resolveFill,
   completeSubmitted,
+  markSubmitted,
   undoSubmitted,
+  undoSubmittedForApplication,
   startInstantFill,
   ServiceError,
 } from "../fill-service";
@@ -967,5 +969,166 @@ describe("replaying Done after the panel reopens", () => {
     const bundle = claimHandoff(db, handoff.id);
     expect(bundle.taskParkedAtSubmit).toBe(true);
     void task;
+  });
+});
+
+/**
+ * Submitting an application is one act, so it is one function.
+ *
+ * There were four ways to say "I sent this" and they wrote three different
+ * states — the worst of them, the web status dropdown, wrote `applied` and
+ * nothing else: no date, no timeline entry, ticket still open, task still
+ * parked, and no way back because undo restores from an event that path never
+ * wrote. These tests hold that every door now produces the same five effects
+ * and that every door can be walked back through.
+ */
+describe("every way of saying 'I submitted this'", () => {
+  const effectsOf = (applicationId: string, taskId: string | null) => {
+    const app = getApplication(db, applicationId)!;
+    const task = taskId ? getPipelineTask(db, taskId) : null;
+    const events = listEvents(db, applicationId);
+    const marked = [...events].reverse().find((e) => e.kind === "marked-submitted");
+    return {
+      status: app.status,
+      hasAppliedAt: typeof app.appliedAt === "number" && app.appliedAt > 0,
+      taskStatus: task?.status ?? null,
+      openHandoffs: listOpenFillHandoffs(db).filter((h) => h.applicationId === applicationId)
+        .length,
+      hasEvent: marked !== undefined,
+      source: (marked?.payload as { source?: string } | undefined)?.source,
+      undoable: marked !== undefined,
+    };
+  };
+
+  it("the panel's I've-submitted button", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    createHandoffForTask(db, taskId);
+    resolveFill(db, taskId, "applied-manually", "panel");
+
+    const e = effectsOf(applicationId, taskId);
+    expect(e.status).toBe("applied");
+    expect(e.hasAppliedAt).toBe(true);
+    expect(e.taskStatus).toBe("done");
+    expect(e.openHandoffs).toBe(0);
+    expect(e.hasEvent).toBe(true);
+    expect(e.source).toBe("panel");
+  });
+
+  it("the web card's I've-applied button", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    createHandoffForTask(db, taskId);
+    resolveFill(db, taskId, "applied-manually", "web-card");
+
+    const e = effectsOf(applicationId, taskId);
+    expect(e.status).toBe("applied");
+    expect(e.hasAppliedAt).toBe(true);
+    expect(e.taskStatus).toBe("done");
+    expect(e.openHandoffs).toBe(0);
+    expect(e.source).toBe("web-card");
+  });
+
+  it("the web status dropdown — the one that used to write nothing but a status", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    createHandoffForTask(db, taskId);
+    markSubmitted(db, applicationId, "web-status");
+
+    const e = effectsOf(applicationId, taskId);
+    // Every one of these was wrong before: no date, task untouched, ticket
+    // still open, nothing on the timeline, and therefore no undo.
+    expect(e.status).toBe("applied");
+    expect(e.hasAppliedAt).toBe(true);
+    expect(e.taskStatus).toBe("done");
+    expect(e.openHandoffs).toBe(0);
+    expect(e.hasEvent).toBe(true);
+    expect(e.source).toBe("web-status");
+  });
+
+  it("the agent's mark_submitted — which used to leave the ticket open", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    createHandoffForTask(db, taskId);
+    updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    completeSubmitted(db, taskId);
+
+    const e = effectsOf(applicationId, taskId);
+    expect(e.status).toBe("applied");
+    expect(e.taskStatus).toBe("done");
+    // The defect: the ticket stayed open and the application kept showing up
+    // in the extension's "open to fill" list after it had been sent.
+    expect(e.openHandoffs).toBe(0);
+    expect(e.source).toBe("agent");
+  });
+
+  it("an application with no task at all is still a submission", () => {
+    // Added by link, filled by hand, never opened in the panel.
+    const app = createApplication(db, {
+      jobInfo: { jobId: "j9", jobTitle: "Analyst", companyName: "Initech" },
+    });
+    const task = markSubmitted(db, app.id, "web-status");
+    expect(task).toBeNull();
+    const e = effectsOf(app.id, null);
+    expect(e.status).toBe("applied");
+    expect(e.hasAppliedAt).toBe(true);
+    expect(e.hasEvent).toBe(true);
+  });
+
+  it("closes a ticket opened by an EARLIER task, not just the current one", () => {
+    // Submission is an application-level fact; a ticket left behind by an
+    // earlier run would keep the application in "open to fill" forever.
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    const stale = createHandoffForTask(db, taskId);
+    markSubmitted(db, applicationId, "web-status");
+    expect(getFillHandoff(db, stale.id)!.status).toBe("completed");
+  });
+
+  it("pressing it twice does not destroy the undo record", () => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    markSubmitted(db, applicationId, "web-status");
+    markSubmitted(db, applicationId, "web-status");
+    // A second press must not record prevApplicationStatus: "applied", which
+    // would make undo restore the application to "applied".
+    const marks = listEvents(db, applicationId).filter((e) => e.kind === "marked-submitted");
+    expect(marks).toHaveLength(1);
+    undoSubmitted(db, taskId);
+    expect(getApplication(db, applicationId)!.status).not.toBe("applied");
+  });
+});
+
+describe("taking a submission back, whichever door it came through", () => {
+  it.each(["panel", "web-card", "web-status", "agent"] as const)("%s is undoable", (source) => {
+    const { taskId, applicationId } = seedTaskAtFillForm();
+    createHandoffForTask(db, taskId);
+    if (source === "agent") {
+      updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+      completeSubmitted(db, taskId);
+    } else if (source === "web-status") {
+      markSubmitted(db, applicationId, "web-status");
+    } else {
+      resolveFill(db, taskId, "applied-manually", source);
+    }
+    expect(getApplication(db, applicationId)!.status).toBe("applied");
+
+    undoSubmitted(db, taskId);
+
+    const app = getApplication(db, applicationId)!;
+    expect(app.status).not.toBe("applied");
+    expect(app.appliedAt ?? null).toBeNull();
+    expect(getPipelineTask(db, taskId)!.status).toBe("awaiting_user");
+    expect(listEvents(db, applicationId).some((e) => e.kind === "submission-undone")).toBe(true);
+  });
+
+  it("undoes an application that never had a task", () => {
+    const app = createApplication(db, {
+      jobInfo: { jobId: "j9", jobTitle: "Analyst", companyName: "Initech" },
+    });
+    markSubmitted(db, app.id, "web-status");
+    undoSubmittedForApplication(db, app.id);
+    expect(getApplication(db, app.id)!.status).not.toBe("applied");
+  });
+
+  it("refuses to undo an application that was never marked here", () => {
+    const app = createApplication(db, {
+      jobInfo: { jobId: "j9", jobTitle: "Analyst", companyName: "Initech" },
+    });
+    expect(() => undoSubmittedForApplication(db, app.id)).toThrow(ServiceError);
   });
 });

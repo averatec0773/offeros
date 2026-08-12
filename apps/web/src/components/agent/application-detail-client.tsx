@@ -174,7 +174,20 @@ export function ApplicationDetailClient({
     const previous = status;
     setStatus(next as ApplicationStatus); // optimistic
     try {
-      await api.applications.update(application.id, { status: next as ApplicationStatus });
+      // "Applied" is not a status write, it is a submission: tickets close, the
+      // date is set, the task finishes, and the timeline records it so it can
+      // be taken back. Choosing it here goes through the same door the panel's
+      // "I've submitted" button uses. Moving OFF applied is the undo.
+      if (next === "applied") {
+        await api.applications.markSubmitted(application.id);
+      } else if (previous === "applied") {
+        await api.applications.undoSubmitted(application.id);
+        if (next !== "saved" && next !== "applying") {
+          await api.applications.update(application.id, { status: next as ApplicationStatus });
+        }
+      } else {
+        await api.applications.update(application.id, { status: next as ApplicationStatus });
+      }
       await refresh();
     } catch {
       setStatus(previous);

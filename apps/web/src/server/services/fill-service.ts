@@ -63,6 +63,17 @@ function closeOpenHandoffsForTask(db: Db, taskId: string): void {
   }
 }
 
+/** Every open ticket for an APPLICATION, whatever task opened it. Submission is
+ *  an application-level fact: a ticket left open by an earlier task would keep
+ *  the application in "open to fill" long after it was sent. */
+function closeOpenHandoffsForApplication(db: Db, applicationId: string): void {
+  for (const handoff of listOpenFillHandoffs(db)) {
+    if (handoff.applicationId === applicationId) {
+      updateFillHandoff(db, handoff.id, { status: "completed" });
+    }
+  }
+}
+
 function requireTask(db: Db, taskId: string): PipelineTask {
   const task = getPipelineTask(db, taskId);
   if (!task) throw new ServiceError(`agent task ${taskId} not found`);
@@ -574,6 +585,9 @@ export function resolveFill(
   db: Db,
   taskId: string,
   action: "fixed" | "applied-manually",
+  /** Which button was pressed — the panel's or the web card's. Recorded on the
+   *  event so the timeline can say where a submission came from. */
+  source: SubmissionSource = "panel",
 ): PipelineTask {
   const task = requireTask(db, taskId);
 
@@ -584,18 +598,7 @@ export function resolveFill(
     if (task.status !== "awaiting_user" || (stepKey !== "fill-form" && stepKey !== "submit")) {
       throw new ServiceError("task is not awaiting a fill resolution");
     }
-    closeOpenHandoffsForTask(db, taskId);
-    const prevApplicationStatus = getApplication(db, task.applicationId)?.status;
-    updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
-    const result = persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
-    // The payload is the undo contract: where to restore the task and the
-    // application if this turns out to be a mis-click.
-    appendEvent(db, {
-      applicationId: task.applicationId,
-      kind: "marked-submitted",
-      payload: { prevStep: task.step, prevApplicationStatus },
-    });
-    return result;
+    return markSubmitted(db, task.applicationId, source) ?? task;
   }
 
   // "fixed": only meaningful for an Action-Required task (status 2). The user
@@ -645,20 +648,68 @@ export function resolveFill(
  * The "mark submitted" terminal action. Valid only when the task waits at the
  * submit gate; finishes the task and marks the application applied.
  */
+/** Where a "I submitted this" came from. Recorded so the timeline can say. */
+export const SUBMISSION_SOURCES = ["panel", "web-card", "web-status", "agent"] as const;
+export type SubmissionSource = (typeof SUBMISSION_SOURCES)[number];
+
+/**
+ * Submitting an application is one act, so it is one function.
+ *
+ * There used to be four ways to say "I sent this" and they wrote three
+ * different states. The panel's button closed the ticket, set the status and
+ * the date, finished the task and left an undo record. The agent's tool did
+ * everything except close the ticket, so the application stayed in the
+ * extension's "open to fill" list after it was sent. And the web status
+ * dropdown wrote `status = "applied"` and nothing else: no date, no event, the
+ * task still parked at the fill gate, the ticket still open — and no way back,
+ * because undo restores from the event that path never wrote.
+ *
+ * All five things happen here or they do not happen:
+ *   1. every open ticket for the application is closed,
+ *   2. the application reads applied, with the date,
+ *   3. its task, if it has one, is finished,
+ *   4. a `marked-submitted` event records where this came from,
+ *   5. and that event carries what undo needs to put everything back.
+ *
+ * An application with no task is a legitimate case (added by link, filled by
+ * hand, never opened in the panel) — the other four still apply.
+ */
+export function markSubmitted(
+  db: Db,
+  applicationId: string,
+  source: SubmissionSource,
+): PipelineTask | null {
+  const application = getApplication(db, applicationId);
+  if (!application) throw new ServiceError(`application ${applicationId} not found`);
+  if (application.status === "applied") {
+    // Idempotent by design: two of these entry points are buttons a user can
+    // press twice, and the second press must not overwrite the first press's
+    // undo record with a `prevApplicationStatus` of "applied".
+    return getPipelineTaskByApplicationId(db, applicationId);
+  }
+
+  closeOpenHandoffsForApplication(db, applicationId);
+  const task = getPipelineTaskByApplicationId(db, applicationId);
+  updateApplication(db, applicationId, { status: "applied", appliedAt: Date.now() });
+  const result = task
+    ? persist(db, task.id, { status: "done", step: PIPELINE_STEPS.length })
+    : null;
+  // The payload is the undo contract: where to restore the task and the
+  // application if this turns out to be a mis-click.
+  appendEvent(db, {
+    applicationId,
+    kind: "marked-submitted",
+    payload: { source, prevStep: task?.step, prevApplicationStatus: application.status },
+  });
+  return result;
+}
+
 export function completeSubmitted(db: Db, taskId: string): PipelineTask {
   const task = requireTask(db, taskId);
   if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "submit") {
     throw new ServiceError("task is not at the submit gate");
   }
-  const prevApplicationStatus = getApplication(db, task.applicationId)?.status;
-  updateApplication(db, task.applicationId, { status: "applied", appliedAt: Date.now() });
-  const result = persist(db, taskId, { status: "done", step: PIPELINE_STEPS.length });
-  appendEvent(db, {
-    applicationId: task.applicationId,
-    kind: "marked-submitted",
-    payload: { prevStep: task.step, prevApplicationStatus },
-  });
-  return result;
+  return markSubmitted(db, task.applicationId, "agent") ?? task;
 }
 
 const UNDOABLE_APP_STATUSES = new Set(["saved", "applying"]);
@@ -676,10 +727,28 @@ export function undoSubmitted(db: Db, taskId: string): PipelineTask {
   if (task.status !== "done") {
     throw new ServiceError("task is not completed — nothing to undo");
   }
-  const lastMarked = [...listEvents(db, task.applicationId)]
+  const restored = undoSubmittedForApplication(db, task.applicationId);
+  return restored ?? task;
+}
+
+/**
+ * Undo by application, which is the level submission actually happens at.
+ *
+ * Every entry point now writes the same `marked-submitted` event, so every
+ * entry point is undoable — including the status dropdown, which used to write
+ * nothing to restore from and left the user with no way back. An application
+ * that never had a task is undone too; there is simply no task to restore.
+ */
+export function undoSubmittedForApplication(db: Db, applicationId: string): PipelineTask | null {
+  const application = getApplication(db, applicationId);
+  if (!application) throw new ServiceError(`application ${applicationId} not found`);
+  const lastMarked = [...listEvents(db, applicationId)]
     .reverse()
     .find((e) => e.kind === "marked-submitted");
-  const payload = (lastMarked?.payload ?? {}) as {
+  if (!lastMarked) {
+    throw new ServiceError("this application was not marked as submitted here");
+  }
+  const payload = (lastMarked.payload ?? {}) as {
     prevStep?: unknown;
     prevApplicationStatus?: unknown;
   };
@@ -694,9 +763,10 @@ export function undoSubmitted(db: Db, taskId: string): PipelineTask {
     UNDOABLE_APP_STATUSES.has(payload.prevApplicationStatus)
       ? (payload.prevApplicationStatus as "saved" | "applying")
       : "applying";
-  updateApplication(db, task.applicationId, { status: prevApplicationStatus, appliedAt: null });
-  const result = persist(db, taskId, { status: "awaiting_user", step: prevStep });
-  appendEvent(db, { applicationId: task.applicationId, kind: "submission-undone" });
+  updateApplication(db, applicationId, { status: prevApplicationStatus, appliedAt: null });
+  const task = getPipelineTaskByApplicationId(db, applicationId);
+  const result = task ? persist(db, task.id, { status: "awaiting_user", step: prevStep }) : null;
+  appendEvent(db, { applicationId, kind: "submission-undone" });
   return result;
 }
 
