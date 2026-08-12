@@ -211,3 +211,71 @@ describe("deriveApplicationInfo", () => {
     expect(info?.filledFields).toEqual(["f1"]);
   });
 });
+
+/**
+ * Counting the population the words describe.
+ *
+ * The Action-Required card says "N/M required fields filled". It used to be
+ * given every filled field over every control the engine met — on a real form,
+ * "23/73" when the truth was 17 of 24, because 73 counted 32 controls the
+ * engine had correctly left alone and 23 counted optional fields too.
+ */
+describe("required-field counts", () => {
+  const report = (over: Partial<FieldReport>): FieldReport => ({
+    fieldId: Math.random().toString(36).slice(2),
+    label: "Field",
+    classifiedType: "unknown",
+    status: "filled",
+    source: "personal",
+    reason: "",
+    outcome: "filled",
+    required: false,
+    ...over,
+  });
+
+  it("counts only required fields, filled and total", () => {
+    const info = deriveApplicationInfo([
+      report({ label: "Email", required: true, outcome: "filled" }),
+      report({ label: "Name", required: true, outcome: "filled" }),
+      report({ label: "Why us?", required: true, outcome: "needs-user" }),
+      report({ label: "Newsletter", required: false, outcome: "filled" }),
+      report({ label: "Decorative", required: false, outcome: "skipped" }),
+    ])!;
+
+    expect(info.requiredFields).toEqual(["Email", "Name", "Why us?"]);
+    expect(info.requiredFilledFields).toEqual(["Email", "Name"]);
+    // The old numbers, kept because other readers use them.
+    expect(info.filledFields).toHaveLength(3);
+    expect(info.totalFields).toHaveLength(5);
+  });
+
+  it("a form where the engine skipped most controls does not read as mostly unfilled", () => {
+    // The real shape: 24 required, 17 of them filled, and 32 skipped controls
+    // that were never the user's problem.
+    const reports = [
+      ...Array.from({ length: 17 }, (_, i) =>
+        report({ label: `req-${i}`, required: true, outcome: "filled" }),
+      ),
+      ...Array.from({ length: 7 }, (_, i) =>
+        report({ label: `open-${i}`, required: true, outcome: "needs-user" }),
+      ),
+      ...Array.from({ length: 32 }, (_, i) =>
+        report({ label: `skip-${i}`, required: false, outcome: "skipped" }),
+      ),
+      ...Array.from({ length: 17 }, (_, i) =>
+        report({ label: `opt-${i}`, required: false, outcome: "filled" }),
+      ),
+    ];
+    const info = deriveApplicationInfo(reports)!;
+    expect(info.requiredFilledFields).toHaveLength(17);
+    expect(info.requiredFields).toHaveLength(24);
+    expect(info.totalFields).toHaveLength(73);
+  });
+
+  it("says nothing is required when nothing is", () => {
+    const info = deriveApplicationInfo([report({ label: "Optional", outcome: "filled" })])!;
+    expect(info.requiredFields).toEqual([]);
+    expect(info.requiredFilledFields).toEqual([]);
+    expect(info.status).toBe(1);
+  });
+});

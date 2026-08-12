@@ -25,9 +25,19 @@ export function ActionRequiredCard({
   onApplied?: () => void;
 }) {
   const missing = applicationInfo.missingFields ?? [];
-  const total =
-    applicationInfo.totalFields?.length ?? applicationInfo.filledFields.length + missing.length;
-  const filled = applicationInfo.filledFields.length;
+  // Required fields, because that is what the sentence below says.
+  //
+  // This used to read `filledFields` over `totalFields` — every field the
+  // engine filled over every control it met, including the ones it correctly
+  // left alone. On a real form that produced "23/73 required fields filled"
+  // when the truth was 17 of 24: both numbers were about a different population
+  // than the words around them. Records written before the required counts
+  // existed fall back to what can be derived from the lists they do have.
+  const requiredTotal =
+    applicationInfo.requiredFields?.length ??
+    (applicationInfo.requiredFilledFields?.length ?? 0) + missing.length;
+  const requiredFilled =
+    applicationInfo.requiredFilledFields?.length ?? Math.max(requiredTotal - missing.length, 0);
 
   return (
     <div className="rounded-xl bg-warn-bg p-4">
@@ -44,7 +54,7 @@ export function ActionRequiredCard({
 
       <p className="mt-3 text-body text-foreground">
         <span className="font-semibold">
-          {filled}/{total} required fields filled
+          {requiredFilled}/{requiredTotal} required fields filled
         </span>
       </p>
       <p className="mt-1 text-body text-foreground/75">

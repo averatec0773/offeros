@@ -75,13 +75,30 @@ function fieldLabel(report: FieldReport): string {
   return report.label.trim() || report.fieldId;
 }
 
-/** Derive the Action-Required contract from reports. status 2 iff any required field has outcome needs-user/failed/skipped; else 1. filledFields = labels (fallback fieldId) with outcome "filled"; missingFields = labels of required non-filled; totalFields = all labels. Returns undefined for empty reports. */
+/**
+ * Derive the Action-Required contract from reports.
+ *
+ * `status` is 2 when any REQUIRED field is not filled, else 1.
+ *
+ * Four lists, and the distinction between them is the whole point. `totalFields`
+ * is every control the engine met — including the ones it correctly left alone,
+ * which on a real form was 32 of 73. `requiredFields` is the population a
+ * progress figure should actually be about: on that same form, 24. Reporting
+ * "23/73 required fields filled" was wrong twice over, since 23 counted every
+ * filled field rather than the required ones (17) and 73 counted every control
+ * rather than the required ones.
+ */
 export function deriveApplicationInfo(reports: FieldReport[]): ApplicationInfo | undefined {
   if (reports.length === 0) return undefined;
 
   const filledFields = reports.filter((r) => r.outcome === "filled").map(fieldLabel);
   const missingFields = reports.filter((r) => r.required && r.outcome !== "filled").map(fieldLabel);
   const totalFields = reports.map(fieldLabel);
+  const requiredReports = reports.filter((r) => r.required);
+  const requiredFields = requiredReports.map(fieldLabel);
+  const requiredFilledFields = requiredReports
+    .filter((r) => r.outcome === "filled")
+    .map(fieldLabel);
   const status = missingFields.length > 0 ? 2 : 1;
 
   return {
@@ -89,5 +106,7 @@ export function deriveApplicationInfo(reports: FieldReport[]): ApplicationInfo |
     filledFields,
     missingFields,
     totalFields,
+    requiredFields,
+    requiredFilledFields,
   };
 }

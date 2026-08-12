@@ -28,6 +28,17 @@ export const applicationInfoSchema = z.object({
   filledFields: z.array(z.string()).default([]),
   missingFields: z.array(z.string()).optional(),
   totalFields: z.array(z.string()).optional(),
+  /**
+   * The REQUIRED questions, and the ones of those already answered.
+   *
+   * `totalFields` is every control the engine met, including the ones it
+   * correctly left alone — on a real form, 32 skipped controls out of 73. The
+   * card that reports progress talks about required fields, so it needs the
+   * required population, not that one. Optional so records written before this
+   * still parse; the card falls back to counting the reports it has.
+   */
+  requiredFields: z.array(z.string()).optional(),
+  requiredFilledFields: z.array(z.string()).optional(),
 });
 
 export const pipelineTaskSchema = z.object({
