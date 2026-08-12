@@ -612,21 +612,44 @@ function fillSkillsViaDriver(
 export type FillValue = { fieldId: string; value: string } | { fieldId: string; values: string[] };
 
 /**
+ * What one write did. The object form carries a reason for the failures the
+ * page explains — a field that took the value and then dropped it says
+ * something a bare `"failed"` cannot, and form memory reads these.
+ */
+export type FillOutcome = "filled" | "failed" | { outcome: "failed"; reason: string };
+
+/**
+ * Did the page keep what we typed?
+ *
+ * An exact match is the easy case. The rest is a text field's ordinary right to
+ * reformat: a phone mask turning 5551234567 into (555) 123-4567, a date field
+ * re-punctuating, whitespace trimmed. Those are the same answer, so compare on
+ * the characters that carry meaning. What is left over — an empty field, or one
+ * holding something else entirely — is a write the form did not accept.
+ */
+export function textWriteLanded(want: string, got: string): boolean {
+  if (got === want) return true;
+  const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return squash(got) === squash(want);
+}
+
+/**
  * Fill the given values into the live page, returning the count of verified
  * writes plus a per-field outcome map for task mode's field reports. A field
  * appears in `outcomes` only when it was actually attempted: `"filled"` on a
- * verified write, `"failed"` when a combobox/skills driver declined it. Fields
- * skipped entirely (element gone, file input, empty skills list) are absent —
- * the caller reports them from the plan status instead.
+ * verified write, `"failed"` when a combobox/skills driver declined it or the
+ * page did not keep a text write. Fields skipped entirely (element gone, file
+ * input, empty skills list) are absent — the caller reports them from the plan
+ * status instead.
  */
 export async function applyFillDetailed(
   doc: Document,
   values: FillValue[],
   opts?: { comboTimeoutMs?: number; skillsTimeoutMs?: number },
-): Promise<{ filled: number; outcomes: Map<string, "filled" | "failed"> }> {
+): Promise<{ filled: number; outcomes: Map<string, FillOutcome> }> {
   const timeoutMs = opts?.comboTimeoutMs ?? 2500;
   const skillsTimeoutMs = opts?.skillsTimeoutMs ?? 15000;
-  const outcomes = new Map<string, "filled" | "failed">();
+  const outcomes = new Map<string, FillOutcome>();
   let filled = 0;
   for (const item of values) {
     // Skills: a multi-value tag field. Route the whole list to the driver loop.
@@ -722,7 +745,23 @@ export async function applyFillDetailed(
       }
       continue;
     }
+    // Every other path above verifies its write before claiming it. This one
+    // used to just report "filled" — so a React field that rejects a
+    // programmatic value and re-renders its own empty state was reported as
+    // answered, and the form arrived at submit with a blank required field that
+    // nothing downstream knew to flag.
     setControlledValue(el, value);
+    const got = el.value;
+    if (!textWriteLanded(value, got)) {
+      outcomes.set(fieldId, {
+        outcome: "failed",
+        reason:
+          got.trim() === ""
+            ? "The page cleared this field right after it was filled — type it in yourself."
+            : `The page changed this to "${got}" after it was filled — check it.`,
+      });
+      continue;
+    }
     highlight(el);
     filled++;
     outcomes.set(fieldId, "filled");

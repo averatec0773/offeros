@@ -431,6 +431,8 @@ export function FillPanel({
   // (file input, element gone) must never be treated as a successful write.
   const writeOne = async (fieldId: string, value: string): Promise<boolean> => {
     const r = await fill([{ fieldId, value }]);
+    // A failure may arrive as an object carrying the page's reason for it;
+    // only the literal "filled" counts as a write.
     return r.outcomes?.some(([id, o]) => id === fieldId && o === "filled") ?? false;
   };
 

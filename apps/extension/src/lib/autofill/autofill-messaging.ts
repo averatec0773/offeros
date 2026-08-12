@@ -1,7 +1,7 @@
 import type { WizardState } from "@offeros/autofill";
 import type { FieldDescriptor } from "@offeros/autofill";
 import type { AtsId } from "./recipes";
-import type { FillValue } from "./dom-fill";
+import type { FillOutcome, FillValue } from "./dom-fill";
 
 export type ScanResponse =
   | {
@@ -43,7 +43,7 @@ export interface FillResponse {
    * Encoded as entry tuples (not a Map) so it survives the JSON serialization that
    * runtime/tabs.sendMessage applies across the panel↔content boundary — a Map arrives as {}.
    */
-  outcomes?: [string, "filled" | "failed"][];
+  outcomes?: [string, FillOutcome][];
 }
 
 export interface CaptureJdResponse {

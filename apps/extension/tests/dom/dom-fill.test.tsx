@@ -609,3 +609,104 @@ describe("native <select> fill honesty", () => {
     expect(filled).toBe(0);
   });
 });
+
+describe("text fill honesty — the page gets the last word", () => {
+  const mountText = (attrs = "") => {
+    document.body.innerHTML = `<main><form>
+      <label for="t">Phone</label>
+      <input id="t" name="phone" ${attrs} />
+    </form></main>`;
+    return scanFields(document.body, recipe)[0]!.descriptor.fieldId;
+  };
+
+  /** A controlled React field that refuses programmatic writes: whatever is
+   *  assigned, its own state re-renders as empty on the next input event. */
+  const makeControlled = (el: HTMLInputElement) => {
+    el.addEventListener("input", () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(el, "");
+    });
+  };
+
+  it("reports failed when the page clears the field right after the write", async () => {
+    const fieldId = mountText();
+    makeControlled(document.getElementById("t") as HTMLInputElement);
+
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId, value: "555-0100" },
+    ]);
+
+    // This was the defect: the field is empty, the form will reject it at
+    // submit, and the report used to say "filled".
+    expect((document.getElementById("t") as HTMLInputElement).value).toBe("");
+    expect(filled).toBe(0);
+    const outcome = outcomes.get(fieldId);
+    expect(typeof outcome).toBe("object");
+    expect(outcome).toMatchObject({ outcome: "failed" });
+    // The reason has to reach the report, or the user sees a blank field with
+    // no idea why it stayed blank.
+    expect((outcome as { reason: string }).reason).toMatch(/cleared/i);
+  });
+
+  it("reports failed, quoting what the page put there instead", async () => {
+    const fieldId = mountText();
+    const el = document.getElementById("t") as HTMLInputElement;
+    el.addEventListener("input", () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(el, "unavailable");
+    });
+
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId, value: "555-0100" },
+    ]);
+
+    expect(filled).toBe(0);
+    expect((outcomes.get(fieldId) as { reason: string }).reason).toContain("unavailable");
+  });
+
+  it("accepts a field that reformats what it was given", async () => {
+    // A phone mask rewriting 5550100 as (555) 0100 is the same answer, not a
+    // rejected write — verification must not turn formatting into a failure.
+    const fieldId = mountText();
+    const el = document.getElementById("t") as HTMLInputElement;
+    el.addEventListener("input", () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(el, "(555) 01-00 ");
+    });
+
+    const { filled, outcomes } = await applyFillDetailed(document, [{ fieldId, value: "5550100" }]);
+
+    expect(filled).toBe(1);
+    expect(outcomes.get(fieldId)).toBe("filled");
+  });
+
+  it("still reports a plain accepted write as filled", async () => {
+    const fieldId = mountText();
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId, value: "555-0100" },
+    ]);
+    expect((document.getElementById("t") as HTMLInputElement).value).toBe("555-0100");
+    expect(filled).toBe(1);
+    expect(outcomes.get(fieldId)).toBe("filled");
+  });
+
+  it("reports failed when the page truncates the answer", async () => {
+    // Truncation is data loss the user must see — half a phone number is not
+    // the answer they gave. (maxlength alone would not do this: it constrains
+    // typing, not assignment. A mask handler does.)
+    const fieldId = mountText('maxlength="4"');
+    const el = document.getElementById("t") as HTMLInputElement;
+    el.addEventListener("input", () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(el, el.value.slice(0, 4));
+    });
+
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId, value: "555-0100" },
+    ]);
+
+    expect(el.value).toBe("555-");
+    expect(filled).toBe(0);
+    expect(outcomes.get(fieldId)).toMatchObject({ outcome: "failed" });
+  });
+});
