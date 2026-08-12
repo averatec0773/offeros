@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
 import { captureJd } from "../../src/lib/autofill/jd-capture";
+import { looksLikeCapturedCode } from "@offeros/core";
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -131,5 +132,106 @@ describe("what counts as the page's text", () => {
     const { text: jd } = captureJd(document, 10);
     expect(jd).toContain("Own the pipeline end to end");
     expect(jd).not.toContain("alert(1)");
+  });
+});
+
+/**
+ * A job description that was mostly the form talking about itself.
+ *
+ * A page carrying both a posting and its application form carries two kinds of
+ * text. On a real capture, more than half of a 4,800-character "description"
+ * was the second kind: a country dropdown's two hundred country names, an
+ * upload widget's "Drag and drop or browse / Max 5 MB / PDF, DOC, DOCX". All of
+ * it stored as what the employer wrote, and later handed to a model.
+ */
+describe("the form's own words are not the job description", () => {
+  const COUNTRIES = [
+    "Afghanistan (+93)",
+    "Albania (+355)",
+    "Algeria (+213)",
+    "Andorra (+376)",
+    "Angola (+244)",
+    "Argentina (+54)",
+    "Armenia (+374)",
+    "Australia (+61)",
+  ];
+
+  const pageWithForm = () => {
+    document.body.innerHTML = `<main>
+      <h1>Backend Engineer</h1>
+      <h2>About the role</h2>
+      <p>We are hiring a Backend Engineer to own our data ingestion pipeline and
+      help us move from nightly batches to streaming.</p>
+      <h2>What you will do</h2>
+      <ul>
+        <li>Design services in Go and TypeScript</li>
+        <li>Work with the platform team on delivery</li>
+        <li>Leave the code better than you found it</li>
+      </ul>
+      <form>
+        <label>Phone</label>
+        <select name="dial">
+          ${COUNTRIES.map((c) => `<option>${c}</option>`).join("")}
+        </select>
+        <div class="lyte-fileupload">
+          <span>Drag and drop or browse</span>
+          <span>Max 5 MB · PDF, DOC, DOCX</span>
+          <input type="file" name="resume_file" />
+        </div>
+        <textarea name="cover">Tell us why you are a good fit</textarea>
+        <button type="submit">Submit Application</button>
+      </form>
+    </main>`;
+  };
+
+  it("keeps the posting and drops every option", () => {
+    pageWithForm();
+    const { text } = captureJd(document, 10);
+    expect(text).toContain("data ingestion pipeline");
+    for (const country of COUNTRIES) {
+      expect(text, country).not.toContain(country);
+    }
+  });
+
+  it("drops an upload widget's instructions", () => {
+    pageWithForm();
+    const { text } = captureJd(document, 10);
+    expect(text).not.toContain("Drag and drop");
+    expect(text).not.toContain("Max 5 MB");
+    expect(text).not.toContain("PDF, DOC, DOCX");
+  });
+
+  it("drops the form's buttons and textareas", () => {
+    pageWithForm();
+    const { text } = captureJd(document, 10);
+    expect(text).not.toContain("Submit Application");
+    expect(text).not.toContain("Tell us why you are a good fit");
+  });
+
+  it("keeps the posting's own headings and list items", () => {
+    // The structure of a description is part of the description.
+    pageWithForm();
+    const { text } = captureJd(document, 10);
+    expect(text).toContain("About the role");
+    expect(text).toContain("What you will do");
+    expect(text).toContain("Design services in Go and TypeScript");
+    expect(text).toContain("Leave the code better than you found it");
+  });
+
+  it("leaves a page with no form completely alone", () => {
+    document.body.innerHTML = `<main>
+      <h1>Backend Engineer</h1>
+      <p>We are hiring a Backend Engineer to own our data ingestion pipeline.</p>
+      <ul><li>Go and TypeScript</li><li>Streaming systems</li></ul>
+    </main>`;
+    const { text } = captureJd(document, 10);
+    expect(text).toContain("data ingestion pipeline");
+    expect(text).toContain("Streaming systems");
+  });
+
+  it("what survives still reads as a posting, not as captured page furniture", () => {
+    pageWithForm();
+    const { text } = captureJd(document, 10);
+    expect(looksLikeCapturedCode(text)).toBe(false);
   });
 });

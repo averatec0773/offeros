@@ -21,10 +21,59 @@ export interface JdCaptureResult {
  */
 const NON_TEXT = "script, style, noscript, template, svg";
 
+/**
+ * The form's own words, which are not the employer's.
+ *
+ * A page that carries both a posting and its application form carries two kinds
+ * of text, and only one of them is a job description. A country dropdown alone
+ * contributes two hundred country names; an upload widget contributes "Drag and
+ * drop or browse", "Max 5 MB", "PDF, DOC, DOCX". On a real capture more than
+ * half of a 4,800-character "description" was that — the form describing
+ * itself, stored as what the employer wrote and later handed to a model.
+ *
+ * Everything here is a control or a control's own chrome, identified by what it
+ * IS rather than by which site it is on. Labels are deliberately NOT removed: a
+ * posting's own headings are often marked up as labels, and a form's labels are
+ * short enough to be harmless next to the two hundred country names that are
+ * not.
+ */
+const FORM_CHROME = [
+  "select",
+  "option",
+  "optgroup",
+  "datalist",
+  "input",
+  "textarea",
+  "button",
+  '[role="listbox"]',
+  '[role="option"]',
+  '[role="combobox"]',
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[type="file"]',
+  // Upload widgets wrap their instructions in a component rather than a label.
+  '[class*="fileupload" i]',
+  '[class*="file-upload" i]',
+  '[class*="dropzone" i]',
+  '[class*="uploader" i]',
+].join(", ");
+
 /** Visible-ish text of a node — what `innerText` means, without needing layout. */
 function readableText(node: ParentNode): string {
   const clone = (node as Element).cloneNode(true) as HTMLElement;
   for (const el of Array.from(clone.querySelectorAll(NON_TEXT))) el.remove();
+  return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Page text with the form's own words taken out.
+ *
+ * Used for the job description only. The scan reads controls directly and is
+ * unaffected — this is about what gets stored as the posting.
+ */
+function proseText(node: ParentNode): string {
+  const clone = (node as Element).cloneNode(true) as HTMLElement;
+  for (const el of Array.from(clone.querySelectorAll(`${NON_TEXT}, ${FORM_CHROME}`))) el.remove();
   return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
@@ -93,7 +142,7 @@ function fromJsonLd(root: ParentNode): JsonLdCapture | null {
 
 function fromDom(root: ParentNode): string {
   const main = root.querySelector("main") ?? root.querySelector("body") ?? root;
-  return readableText(main as ParentNode);
+  return proseText(main as ParentNode);
 }
 
 const MAX_JD_LEN = 12000;
