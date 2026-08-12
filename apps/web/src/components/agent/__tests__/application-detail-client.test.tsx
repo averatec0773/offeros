@@ -35,6 +35,8 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
         recon: vi.fn(),
         ensureTask: vi.fn(),
         analyzeJd: vi.fn(),
+        markSubmitted: vi.fn(),
+        undoSubmitted: vi.fn(),
       },
       resumes: { list: vi.fn() },
       fit: { recompute: vi.fn() },
@@ -231,6 +233,46 @@ describe("the form", () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: "Open & fill" }));
     await waitFor(() => expect(api.applications.ensureTask).toHaveBeenCalled());
+    await waitFor(() => expect(api.pipelineTasks.fillHandoff).toHaveBeenCalledWith("t1"));
+  });
+
+  it("re-filling an applied application does what the dialog promises: unsend, reset, ticket", async () => {
+    // The confirm card says "reopens it as unsent". That is three server acts
+    // in order — undo the submission, reset the done task, open a ticket — and
+    // skipping any of them is the bug where confirming ended in "Something
+    // went wrong": the cached done-task id went straight to the ticket route,
+    // which refuses finished tasks.
+    vi.mocked(api.applications.undoSubmitted).mockResolvedValue({
+      ...application,
+      status: "applying",
+    });
+    mount({
+      application: { ...application, status: "applied" },
+      initialTask: task({
+        id: "t-done",
+        status: "done",
+        step: PIPELINE_STEPS.length,
+        fieldReports: [
+          {
+            fieldId: "f1",
+            label: "Email",
+            classifiedType: "email",
+            status: "filled",
+            source: "personal",
+            reason: "",
+            outcome: "filled",
+            required: true,
+            value: "jordan@example.com",
+          },
+        ],
+      }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Re-fill" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Fill it again anyway/ }));
+
+    await waitFor(() => expect(api.applications.undoSubmitted).toHaveBeenCalledWith("app-1"));
+    // The done task must NOT be reused — the server route resets or replaces it.
+    await waitFor(() => expect(api.applications.ensureTask).toHaveBeenCalledWith("app-1"));
     await waitFor(() => expect(api.pipelineTasks.fillHandoff).toHaveBeenCalledWith("t1"));
   });
 

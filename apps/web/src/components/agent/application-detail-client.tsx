@@ -272,7 +272,10 @@ export function ApplicationDetailClient({
   /** The task id to generate against, created on demand. The user never sees
    *  this concept; it exists because generation runs a pipeline step. */
   async function ensureTask(): Promise<string> {
-    if (taskId) return taskId;
+    // A done task cannot take new work — handing its id out anyway is how
+    // "Fill it again" used to die with a generic error. The server route knows
+    // how to reset one; only short-circuit on a task that can still move.
+    if (taskId && task?.status !== "done") return taskId;
     const created = await api.applications.ensureTask(application.id);
     setTaskId(created.taskId);
     setTask(created.task);
@@ -324,6 +327,13 @@ export function ApplicationDetailClient({
     setTicketViaExtension(viaExtension);
     if (!viaExtension && knownApplyLink) window.open(knownApplyLink, "_blank");
     try {
+      // Re-filling something marked applied first takes the mark back — the
+      // confirm dialog promises exactly that ("reopens it as unsent"). A
+      // record cannot be both sent and being filled.
+      if (status === "applied") {
+        const restored = await api.applications.undoSubmitted(application.id);
+        setStatus(restored.status);
+      }
       const id = await ensureTask();
       const handoff = await api.pipelineTasks.fillHandoff(id);
       setTicketCreated(true);
