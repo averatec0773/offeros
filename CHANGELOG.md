@@ -19,6 +19,57 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-13
+
+### Added
+
+**A form OfferOS has never seen can now be read.** Field recognition was a fixed
+list of English label rules plus three platforms' own field metadata. A form in
+another language, or one phrased unusually, produced a page of unrecognised
+fields — and an unrecognised field was not merely unfilled, it was untried:
+nothing was attempted, and the existing AI answering could not help, because it
+only ran on fields already recognised as open-ended questions. There is now a
+button that asks a model what those fields are asking for. What comes back is a
+MAPPING, never a value: the answer still comes from your profile or your saved
+answers, the guards still run, and the write still verifies itself against the
+page. So a wrong guess is a visibly wrong field rather than invented text on a
+real application, and a guess that names nothing leaves the field honestly
+blank. The model is sent field names only — never your name, email, phone, or
+any stored answer.
+
+**The model can add a guard, never remove one.** The questions no automation may
+answer for you — self-identification, work authorisation — are matched by
+English patterns, and the whole point of the above is forms those patterns
+cannot read. So the classifier is also asked to flag those questions in any
+language, and a flag it raises is honoured. A flag it fails to raise changes
+nothing: the existing check runs first and its refusal is never revisited.
+
+**Tell a generated answer what to change about it.** The AI answers panel had
+one control: Regenerate — roll the dice again. A draft that was nearly right,
+too long or leading with the wrong project, had no way to be told so, and
+pressing Regenerate until it came out well was both expensive and likely to lose
+the good parts with the bad. Each answer now takes one line of instruction
+("shorter", "lead with the ML work"). Your instruction is treated as yours: the
+page's question is still fenced off from the model as untrusted text, but what
+you typed is not, because fencing it would tell the model to disregard the
+person who asked.
+
+**The fields that are still yours, named.** A fill that stopped short said so
+only by omission — the counts moved, a few rows stayed pale — and on a long form
+that silence reads as completion, which is how an application gets submitted
+with required fields empty. There is now a list of exactly what the run did not
+finish, in page order, each entry a click away from itself on the page. Fields
+the page already holds are never on it, whoever typed them.
+
+### Changed
+
+**Where a filled value came from is said in words** rather than in the engine's
+own slug — "from your profile", "from your saved answers", and, for a field a
+model placed, "AI-matched field", because that is a different level of
+confidence and worth seeing as one.
+
+---
+
 ## 2026-08-12
 
 ### Fixed
