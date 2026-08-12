@@ -47,6 +47,18 @@ import {
 
 type OkScan = Extract<ScanResponse, { ok: true }>;
 
+/**
+ * How many rows to ask an expandable section for.
+ *
+ * The panel does not carry the profile's education and experience lists — the
+ * fill bundle sends personal facts, skills and the answer bank, not the
+ * histories — so this cannot be "one per entry you have". Three is enough for
+ * most people's recent history, and the page's own stated maximum bounds it
+ * from above. An honest under-ask beats a guess dressed as knowledge; the
+ * button can be pressed again.
+ */
+const DEFAULT_ENTRIES_WANTED = 3;
+
 // The pieces this panel composes. They were inline until the file passed two
 // thousand lines and the orchestration below became hard to find. Four are
 // presentational — no state, no messaging. Two are not, and are the reason the
@@ -91,6 +103,7 @@ export function FillPanel({
   capture,
   attachFile,
   scrollToField,
+  expandRepeaters,
   captureTab,
   api,
   rescanNonce,
@@ -115,6 +128,12 @@ export function FillPanel({
   ) => Promise<AttachFileResponse>;
   /** Bring a scanned field into view on the page (scroll + highlight flash). */
   scrollToField?: (fieldId: string) => Promise<unknown>;
+  /** Open the page's "Add another" sections before scanning them. Absent in
+   *  contexts with no page to expand. */
+  expandRepeaters?: (wanted: number) => Promise<{
+    sections: { name: string; added: number; reason?: string }[];
+    added: number;
+  }>;
   /** Photograph the visible tab (panel → background → captureVisibleTab).
    *  Present = incident fields get screenshots on Done; absent = no evidence,
    *  everything else identical. */
@@ -240,6 +259,9 @@ export function FillPanel({
   /** Sending this page's rendered description to OfferOS. */
   const [jdBusy, setJdBusy] = useState(false);
   const [jdNote, setJdNote] = useState<string | null>(null);
+  /** What opening the page's "Add another" sections did, if anything. */
+  const [expandBusy, setExpandBusy] = useState(false);
+  const [expandNote, setExpandNote] = useState<string | null>(null);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
   // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
   // the caption never claims an unsaved edit was saved.
@@ -1405,6 +1427,44 @@ export function FillPanel({
     }
   };
 
+  /**
+   * Open the sections that hold no fields until asked.
+   *
+   * Education and work history are often an empty table with an Add button, so
+   * the rows do not exist in the DOM until something clicks it — a scan finds
+   * the button and nothing else. Expanding has to happen BEFORE the scan that
+   * builds the plan, which is why it is its own step and ends in a rescan
+   * rather than folding into the fill.
+   *
+   * How many rows: what the user has to place. The panel does not carry the
+   * profile's education and experience lists, so this asks for a small number
+   * and lets the page's own stated maximum bound it — an honest under-ask
+   * rather than a guess dressed as knowledge.
+   */
+  const onExpandRepeaters = async () => {
+    if (!expandRepeaters || expandBusy) return;
+    setExpandBusy(true);
+    setExpandNote(null);
+    try {
+      const res = await expandRepeaters(DEFAULT_ENTRIES_WANTED);
+      if (res.added === 0) {
+        const why = res.sections.find((s) => s.reason)?.reason;
+        setExpandNote(why ?? "No sections here needed opening.");
+        return;
+      }
+      const named = res.sections
+        .filter((s) => s.added > 0)
+        .map((s) => `${s.name || "a section"} (${s.added})`)
+        .join(", ");
+      const refused = res.sections.find((s) => s.reason)?.reason;
+      setExpandNote(`Opened ${named}.${refused ? ` ${refused}` : ""}`);
+      // The new rows only exist now, so the plan has to be rebuilt from them.
+      setScanNonce((n) => n + 1);
+    } finally {
+      setExpandBusy(false);
+    }
+  };
+
   const onFill = async () => {
     if (pendingRef.current || done || !scanResult.ok || !bundleRef.current) return;
     // Fields the page already holds are skipped inside taskFillPage — the one
@@ -1655,6 +1715,21 @@ export function FillPanel({
               {jdBusy ? "Reading the page…" : "Save this page's description"}
             </button>
             {jdNote && <p className="mt-1.5 text-caption text-text-secondary">{jdNote}</p>}
+          </div>
+        )}
+        {/* Sections that hold no fields until asked. Its own step, before the
+            scan that builds the plan — the rows do not exist until now. */}
+        {bundle && expandRepeaters && (
+          <div className="mb-2 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+            <button
+              type="button"
+              onClick={() => void onExpandRepeaters()}
+              disabled={expandBusy || pending}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 text-caption font-semibold text-text-primary transition-[color,transform] duration-fast ease-out-strong hover:bg-bg-base active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
+            >
+              {expandBusy ? "Opening…" : "Add education / experience rows"}
+            </button>
+            {expandNote && <p className="mt-1.5 text-caption text-text-secondary">{expandNote}</p>}
           </div>
         )}
         {plan.length > 0 && <CoverageBar coverage={fillCoverage(plan, satisfiedByPage)} />}

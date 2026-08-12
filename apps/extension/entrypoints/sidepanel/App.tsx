@@ -11,6 +11,7 @@ import {
   sendEngineFill,
   sendEngineScan,
   sendEngineScrollToField,
+  sendEngineExpandRepeaters,
 } from "../../src/lib/autofill/autofill-messaging";
 import {
   claim,
@@ -248,6 +249,10 @@ export default function App() {
       sendEngineAttachFile(tabId, fieldId, file.fileName, file.mimeType, file.bytesBase64),
     [tabId],
   );
+  const expandRepeaters = useCallback(
+    (wanted: number) => sendEngineExpandRepeaters(tabId, wanted),
+    [tabId],
+  );
   const scrollToField = useCallback(
     (fieldId: string) => sendEngineScrollToField(tabId, fieldId),
     [tabId],
@@ -335,6 +340,7 @@ export default function App() {
             capture={capture}
             attachFile={attachFile}
             scrollToField={scrollToField}
+            expandRepeaters={expandRepeaters}
             captureTab={captureTab}
             api={api}
             rescanNonce={rescanNonce}

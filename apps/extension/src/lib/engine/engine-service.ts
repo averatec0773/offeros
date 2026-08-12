@@ -27,13 +27,16 @@ import {
   isEngineCaptureJdRequest,
   isEngineAttachFileRequest,
   isEngineScrollToFieldRequest,
+  isEngineExpandRepeatersRequest,
   sendEnginePageChanged,
   type ScanResponse,
   type FillResponse,
   type CaptureJdResponse,
   type AttachFileResponse,
   type ScrollToFieldResponse,
+  type ExpandRepeatersResponse,
 } from "../autofill/autofill-messaging";
+import { expandRepeater, findRepeaters } from "../autofill/repeater";
 
 export interface Engine {
   scan(): Promise<ScanResponse>;
@@ -46,6 +49,7 @@ export interface Engine {
     bytesBase64: string,
   ): Promise<AttachFileResponse>;
   scrollToField(fieldId: string): ScrollToFieldResponse;
+  expandRepeaters(wanted: number): Promise<ExpandRepeatersResponse>;
   watch(cb: () => void): () => void;
 }
 
@@ -277,7 +281,27 @@ export function createEngine(doc: Document): Engine {
   const watch = (cb: () => void) =>
     watchPage(doc, cb, { pierce: matchAts(url())?.pierceShadow === true });
 
-  return { scan, fill, capture, attachFile, scrollToField, watch };
+  /**
+   * Open the sections that have no fields until asked.
+   *
+   * Education and work history are often an empty table with an Add button —
+   * the rows do not exist in the DOM until something clicks it, so a scan finds
+   * the button and nothing else and the application goes in with an empty
+   * history. `wanted` is how many entries the caller has to place.
+   */
+  const expandRepeaters = async (wanted: number): Promise<ExpandRepeatersResponse> => {
+    const sections = findRepeaters(edoc());
+    const outcomes = [];
+    for (const section of sections) {
+      outcomes.push(await expandRepeater(section, wanted));
+    }
+    return {
+      sections: outcomes,
+      added: outcomes.reduce((sum, o) => sum + o.added, 0),
+    };
+  };
+
+  return { scan, fill, capture, attachFile, scrollToField, watch, expandRepeaters };
 }
 
 export interface EngineContext {
@@ -301,6 +325,9 @@ export function registerEngine(doc: Document, ctx: EngineContext): Engine {
     if (isEngineCaptureJdRequest(msg)) return Promise.resolve(engine.capture());
     if (isEngineAttachFileRequest(msg)) {
       return engine.attachFile(msg.fieldId, msg.fileName, msg.mimeType, msg.bytesBase64);
+    }
+    if (isEngineExpandRepeatersRequest(msg)) {
+      return engine.expandRepeaters(msg.wanted);
     }
     if (isEngineScrollToFieldRequest(msg))
       return Promise.resolve(engine.scrollToField(msg.fieldId));

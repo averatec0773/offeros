@@ -46,6 +46,13 @@ export interface FillResponse {
   outcomes?: [string, FillOutcome][];
 }
 
+/** What expanding the page's "Add another" sections did. */
+export interface ExpandRepeatersResponse {
+  sections: { name: string; added: number; reason?: string }[];
+  /** Rows added in total — the panel rescans when this is above zero. */
+  added: number;
+}
+
 export interface CaptureJdResponse {
   jd: string;
   source: string;
@@ -81,6 +88,11 @@ export interface EngineAttachFileRequest {
   mimeType: string;
   /** The file's bytes, base64-encoded — see base64.ts for why. */
   bytesBase64: string;
+}
+export interface EngineExpandRepeatersRequest {
+  kind: "OFFEROS_ENGINE_EXPAND_REPEATERS";
+  /** How many entries the caller has to place. */
+  wanted: number;
 }
 export interface EngineScrollToFieldRequest {
   kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD";
@@ -120,6 +132,12 @@ export function isEngineAttachFileRequest(m: unknown): m is EngineAttachFileRequ
     typeof (m as EngineAttachFileRequest).fieldId === "string" &&
     typeof (m as EngineAttachFileRequest).fileName === "string" &&
     typeof (m as EngineAttachFileRequest).bytesBase64 === "string"
+  );
+}
+export function isEngineExpandRepeatersRequest(m: unknown): m is EngineExpandRepeatersRequest {
+  return (
+    hasKind(m, "OFFEROS_ENGINE_EXPAND_REPEATERS") &&
+    typeof (m as EngineExpandRepeatersRequest).wanted === "number"
   );
 }
 export function isEnginePingRequest(m: unknown): m is EnginePingRequest {
@@ -165,6 +183,15 @@ export async function sendEngineAttachFile(
     mimeType,
     bytesBase64,
   } satisfies EngineAttachFileRequest)) as AttachFileResponse;
+}
+export async function sendEngineExpandRepeaters(
+  tabId: number,
+  wanted: number,
+): Promise<ExpandRepeatersResponse> {
+  return (await browser.tabs.sendMessage(tabId, {
+    kind: "OFFEROS_ENGINE_EXPAND_REPEATERS",
+    wanted,
+  } satisfies EngineExpandRepeatersRequest)) as ExpandRepeatersResponse;
 }
 export async function sendEngineScrollToField(
   tabId: number,
