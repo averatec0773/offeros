@@ -32,6 +32,8 @@ const baseBundle: FillTaskBundle = {
     personal: { name: "Jordan Rivera", email: "a@b.com", phone: "", address: "", links: {} },
     skills: [],
     answerBank: [],
+    education: [],
+    experience: [],
   },
   resumeText: null,
   coverLetterText: null,
@@ -189,6 +191,8 @@ describe("AUDIT panel: the policy review card", () => {
             category: "screening",
           },
         ],
+        education: [],
+        experience: [],
       },
     };
     const used = api(bundle);

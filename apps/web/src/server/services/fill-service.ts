@@ -9,7 +9,7 @@ import {
   type JobInfo,
   type Profile,
 } from "@offeros/core";
-import { formatEvidence, selectEvidence } from "@offeros/autofill";
+import { formatEvidence, selectEvidence, totalExperienceYears } from "@offeros/autofill";
 import type { AnswerEntry, FillPersonalInfo, FillProfile } from "@offeros/autofill";
 import type { Db } from "../db/client";
 import {
@@ -334,6 +334,40 @@ function derivedAnswers(profile: Profile | null, jobText: string): AnswerEntry[]
     });
   }
 
+  // Total years of work, from the dates the user already recorded.
+  //
+  // "How many years of experience do you have?" is asked constantly and was
+  // coming back unknown, while the answer sat in the profile as a list of start
+  // and end dates. Deriving it beats asking a model, which would have to guess
+  // at exactly the arithmetic the profile makes exact. Rounds down and counts
+  // overlapping roles once — see totalExperienceYears for why both.
+  const years = totalExperienceYears(
+    (profile.experience ?? []).map((x) => ({
+      company: x.company,
+      title: x.title,
+      start: x.start,
+      end: x.end,
+      bullets: x.bullets ?? [],
+    })),
+  );
+  if (years !== null) {
+    out.push({
+      id: "derived:experience-years",
+      questionPatterns: [
+        "years of experience",
+        "years experience",
+        "total experience",
+        "experience in years",
+        "how many years",
+        "total years of work experience",
+      ],
+      answer: String(years),
+      type: "number",
+      category: "screening",
+      derived: true,
+    });
+  }
+
   // One entry per committed rating — but the bare topic must NOT be the
   // pattern. A topic like "Go" or "R" appears inside ordinary prose ("how far
   // are you willing to go…"), and a derived entry arrives as `fillable`, so a
@@ -409,6 +443,28 @@ export function buildFillProfile(db: Db, applicationId: string): FillProfile {
   return {
     personal: toFillPersonal(profile),
     skills: profile?.skills ?? [],
+    // The histories as LISTS, not as a flattened "most recent".
+    //
+    // `personal.recentCompany`/`recentTitle` answer the ordinary "current
+    // employer" field and are unchanged. These exist for the other shape: a
+    // form with three experience rows, where every row used to receive entry
+    // zero — so an applicant's three jobs came out as the same company three
+    // times. The bullets travel too: a row's "Summary" is the applicant's own
+    // description of that job, which is a lookup, not something to generate.
+    education: (profile?.education ?? []).map((e) => ({
+      school: e.school,
+      degree: e.degree,
+      field: e.field,
+      start: e.start,
+      end: e.end,
+    })),
+    experience: (profile?.experience ?? []).map((x) => ({
+      company: x.company,
+      title: x.title,
+      start: x.start,
+      end: x.end,
+      bullets: x.bullets ?? [],
+    })),
     // The stored bank first: an answer the user wrote always wins over one we
     // derived. The derived entries below only cover questions the bank has
     // nothing for.

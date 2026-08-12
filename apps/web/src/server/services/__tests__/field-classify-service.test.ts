@@ -25,6 +25,8 @@ const profile: FillProfile = {
     links: { linkedin: "https://linkedin.com/in/example" },
   },
   skills: ["TypeScript"],
+  education: [],
+  experience: [],
   answerBank: [
     {
       id: "a1",

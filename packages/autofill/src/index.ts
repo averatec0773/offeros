@@ -4,6 +4,8 @@ export type {
   AnswerCategory,
   FillPersonalInfo,
   FillProfile,
+  FillEducation,
+  FillExperience,
 } from "./types";
 
 export type { NameParts } from "./format";
@@ -27,6 +29,14 @@ export {
   looksLikeIdentifier,
   CAPTCHA_REASON,
 } from "./label-quality";
+
+export type { HistoryKind, HistoryField, RowFieldMatch } from "./history-rows";
+export {
+  assignHistoryRows,
+  matchHistoryField,
+  totalExperienceYears,
+  valueForRow,
+} from "./history-rows";
 
 export type { FieldDescriptor, CanonicalField } from "./classify";
 export { classifyField, isCoverLetterLabel } from "./classify";

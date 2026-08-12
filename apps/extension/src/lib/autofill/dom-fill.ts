@@ -126,8 +126,12 @@ function labelFromAncestorProp(el: HTMLElement, budget: number): string {
     if (depth > 0 && node.querySelectorAll("input, select, textarea").length > 2) break;
     for (const attr of Array.from(node.attributes)) {
       if (!/label/i.test(attr.name)) continue;
-      // aria-labelledby holds ids, not text — it has its own rung above.
-      if (/labelledby/i.test(attr.name)) continue;
+      // ARIA attributes are excluded outright. `aria-label` has a defined
+      // meaning and the element's OWN one is already rung 2; an ANCESTOR's is
+      // the name of a SECTION, not of this field — taking it gave every input
+      // inside `<div role="region" aria-label="Educational Details">` the
+      // label "Educational Details". `aria-labelledby` holds ids, not text.
+      if (/^aria-/i.test(attr.name)) continue;
       if (looksLikeHumanLabel(attr.value)) return attr.value.trim();
     }
   }
@@ -279,6 +283,25 @@ function contextTextFor(el: HTMLElement): string {
   return "";
 }
 
+/**
+ * The named section a field sits in, when the page marked one out.
+ *
+ * A labelled region or a fieldset legend — the page saying "these fields belong
+ * together and here is what they are about". Only history rows use it, and only
+ * for fields whose own label is ambiguous about which history they serve.
+ */
+function sectionNameOf(el: HTMLElement): string {
+  const region = el.closest<HTMLElement>(
+    "[role=region][aria-label], fieldset, section[aria-label]",
+  );
+  if (!region) return "";
+  const name =
+    region.getAttribute("aria-label")?.trim() ??
+    region.querySelector("legend")?.textContent?.replace(/\s+/g, " ").trim() ??
+    "";
+  return name;
+}
+
 /** Last resort: the placeholder. Worse than a heading, better than an id. */
 function placeholderLabel(el: HTMLElement): string {
   const text = (el.getAttribute("placeholder") ?? "").replace(/\s+/g, " ").trim();
@@ -359,6 +382,7 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
     ariaLabel: type === "listbox" ? "" : (el.getAttribute("aria-label") ?? ""),
     required: isRequired(el, label) || titleRequired,
     ...(label === "" ? { contextText: contextTextFor(el) } : {}),
+    ...(sectionNameOf(el) ? { sectionName: sectionNameOf(el) } : {}),
     ...(ariaGroup.length > 0 ? { options: ariaGroup.map(ariaOptionLabel).filter(Boolean) } : {}),
     currentValue:
       ariaGroup.length > 0

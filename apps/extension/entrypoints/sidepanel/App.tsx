@@ -250,7 +250,8 @@ export default function App() {
     [tabId],
   );
   const expandRepeaters = useCallback(
-    (wanted: number) => sendEngineExpandRepeaters(tabId, wanted),
+    (want: { education: number; experience: number; fallback: number }) =>
+      sendEngineExpandRepeaters(tabId, want),
     [tabId],
   );
   const scrollToField = useCallback(

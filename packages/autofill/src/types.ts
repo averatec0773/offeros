@@ -38,8 +38,43 @@ export interface FillPersonalInfo {
   links: { linkedin?: string; github?: string; portfolio?: string };
 }
 
+/**
+ * One schooling entry, as a repeated row needs it.
+ *
+ * Structurally mirrors `@offeros/core`'s Education so the server can pass its
+ * own records straight through, and this package stays free of that dependency.
+ */
+export interface FillEducation {
+  school: string;
+  degree: string;
+  field: string;
+  start: string;
+  end: string;
+}
+
+/** One job, as a repeated row needs it — bullets included. */
+export interface FillExperience {
+  company: string;
+  title: string;
+  start: string;
+  end: string;
+  /** The applicant's own description of the work, as they wrote it. */
+  bullets: string[];
+}
+
 export interface FillProfile {
   personal: FillPersonalInfo;
   skills: string[];
   answerBank: AnswerEntry[];
+  /**
+   * The histories, as lists rather than as a single flattened "most recent".
+   *
+   * `personal.recentCompany` and `recentTitle` answer the ordinary "current
+   * employer" field and are unchanged. These exist for the other shape: a form
+   * with three education rows and three experience rows, where every row used
+   * to receive entry zero — so an applicant's three jobs all came out as the
+   * same company.
+   */
+  education: FillEducation[];
+  experience: FillExperience[];
 }

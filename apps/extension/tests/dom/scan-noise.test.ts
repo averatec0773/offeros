@@ -113,6 +113,8 @@ describe("a CAPTCHA", () => {
     },
     skills: [],
     answerBank: [],
+    education: [],
+    experience: [],
   };
 
   it("is never filled, whatever the profile holds", () => {

@@ -91,6 +91,8 @@ const bundle: FillTaskBundle = {
     personal: { name: "Jordan Rivera", email: "a@b.com", phone: "", address: "", links: {} },
     skills: [],
     answerBank: [],
+    education: [],
+    experience: [],
   },
   resumeText: null,
   coverLetterText: null,

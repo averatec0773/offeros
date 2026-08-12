@@ -29,6 +29,8 @@ function withSkills(skills: string[]): FillProfile {
     },
     skills,
     answerBank: [],
+    education: [],
+    experience: [],
   };
 }
 

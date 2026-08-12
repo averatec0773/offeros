@@ -45,6 +45,8 @@ const bundle: FillTaskBundle = {
     },
     skills: [],
     answerBank: [],
+    education: [],
+    experience: [],
   },
   resumeText: null,
   coverLetterText: null,

@@ -36,7 +36,7 @@ import {
   type ScrollToFieldResponse,
   type ExpandRepeatersResponse,
 } from "../autofill/autofill-messaging";
-import { expandRepeater, findRepeaters } from "../autofill/repeater";
+import { expandRepeater, findRepeaters, historyKindOf } from "../autofill/repeater";
 
 export interface Engine {
   scan(): Promise<ScanResponse>;
@@ -49,7 +49,11 @@ export interface Engine {
     bytesBase64: string,
   ): Promise<AttachFileResponse>;
   scrollToField(fieldId: string): ScrollToFieldResponse;
-  expandRepeaters(wanted: number): Promise<ExpandRepeatersResponse>;
+  expandRepeaters(want: {
+    education: number;
+    experience: number;
+    fallback: number;
+  }): Promise<ExpandRepeatersResponse>;
   watch(cb: () => void): () => void;
 }
 
@@ -289,10 +293,22 @@ export function createEngine(doc: Document): Engine {
    * the button and nothing else and the application goes in with an empty
    * history. `wanted` is how many entries the caller has to place.
    */
-  const expandRepeaters = async (wanted: number): Promise<ExpandRepeatersResponse> => {
+  const expandRepeaters = async (want: {
+    education: number;
+    experience: number;
+    fallback: number;
+  }): Promise<ExpandRepeatersResponse> => {
     const sections = findRepeaters(edoc());
     const outcomes = [];
     for (const section of sections) {
+      // How many rows this section needs is a property of the applicant's data,
+      // not a number for them to pick: three jobs means three rows. A section
+      // whose purpose cannot be read falls back to a small constant rather than
+      // guessing at somebody's history.
+      const kind = historyKindOf(section.name);
+      const wanted = kind ? want[kind] : want.fallback;
+      // A section that needs no rows is left closed rather than opened empty.
+      if (wanted <= 0) continue;
       outcomes.push(await expandRepeater(section, wanted));
     }
     return {
@@ -327,7 +343,7 @@ export function registerEngine(doc: Document, ctx: EngineContext): Engine {
       return engine.attachFile(msg.fieldId, msg.fileName, msg.mimeType, msg.bytesBase64);
     }
     if (isEngineExpandRepeatersRequest(msg)) {
-      return engine.expandRepeaters(msg.wanted);
+      return engine.expandRepeaters(msg.want);
     }
     if (isEngineScrollToFieldRequest(msg))
       return Promise.resolve(engine.scrollToField(msg.fieldId));

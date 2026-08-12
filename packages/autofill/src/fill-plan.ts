@@ -1,5 +1,11 @@
 import { classifyField, type CanonicalField, type FieldDescriptor } from "./classify";
 import { CAPTCHA_REASON, looksLikeCaptcha } from "./label-quality";
+import {
+  assignHistoryRows,
+  valueForRow,
+  type HistoryField,
+  type HistoryKind,
+} from "./history-rows";
 import { questionKey } from "./fingerprint";
 import { splitName, normalizeLink } from "./format";
 import { matchAnswer } from "./answer-match";
@@ -22,6 +28,8 @@ export interface FillItem {
   generatable?: boolean;
   /** A CAPTCHA. Permanently the user's; never attempted, by choice. */
   captcha?: boolean;
+  /** Set when this field belongs to a repeated history row, and which. */
+  historyRow?: { kind: HistoryKind; field: HistoryField; index: number };
 }
 
 // A free-text box (textarea) or a long question-like label the classifier and
@@ -112,7 +120,19 @@ function matchDeclineOption(options: string[], answer: string): string | null {
 export function buildFillPlan(
   descriptors: FieldDescriptor[],
   profile: FillProfile | null,
+  /** The repeated section each field sits in, when the page named one. Lets a
+   *  bare "Start Date" be read as an education date inside an education
+   *  section. */
+  sectionHintFor?: (fieldId: string) => string,
 ): FillItem[] {
+  // Which repeated row each history field belongs to, worked out across the
+  // whole page before any single field is decided — a row index only means
+  // something relative to its siblings.
+  const hintFor =
+    sectionHintFor ??
+    ((fieldId: string) => descriptors.find((d) => d.fieldId === fieldId)?.sectionName ?? "");
+  const rows = profile ? assignHistoryRows(descriptors, hintFor) : new Map();
+
   return descriptors.map((desc): FillItem => {
     const label = desc.label || desc.ariaLabel || desc.placeholder || desc.name;
     const required = desc.required === true;
@@ -146,6 +166,24 @@ export function buildFillPlan(
         source: "none",
         required,
         captcha: true,
+      };
+    }
+
+    // A repeated history row answers from ITS entry, not from the profile's
+    // most recent one. This runs ahead of the ordinary classifier because the
+    // classifier has no notion of rows: it would answer every "Company" with
+    // the current employer, which is how three jobs came out as one.
+    const row = profile ? rows.get(desc.fieldId) : undefined;
+    if (row && profile) {
+      const value = valueForRow(row, profile, row.rowIndex);
+      return {
+        fieldId: desc.fieldId,
+        label,
+        status: value.trim() !== "" ? "fillable" : "needs-answer",
+        value,
+        source: "personal",
+        required,
+        historyRow: { kind: row.kind, field: row.field, index: row.rowIndex },
       };
     }
 
@@ -343,6 +381,14 @@ function deriveReason(
 ): string {
   if (item.captcha === true) return CAPTCHA_REASON;
 
+  if (item.historyRow) {
+    const { kind, field, index } = item.historyRow;
+    const ordinal = index + 1;
+    return item.status === "fillable"
+      ? `row ${ordinal} of your ${kind} → ${field} from entry ${ordinal}`
+      : `row ${ordinal} of your ${kind} → no entry ${ordinal} in your profile`;
+  }
+
   if (desc.type === "file") {
     const suffix = canonical ? ` (classified '${canonical}')` : "";
     return `file input${suffix} → always manual upload, left needs-answer`;
@@ -384,8 +430,9 @@ function deriveReason(
 export function explainFillPlan(
   descriptors: FieldDescriptor[],
   profile: FillProfile | null,
+  sectionHintFor?: (fieldId: string) => string,
 ): { plan: FillItem[]; trace: FieldTrace[] } {
-  const plan = buildFillPlan(descriptors, profile);
+  const plan = buildFillPlan(descriptors, profile, sectionHintFor);
   const trace = descriptors.map((desc, i): FieldTrace => {
     const item = plan[i]!;
     const canonical = classifyField(desc);

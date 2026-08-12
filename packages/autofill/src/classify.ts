@@ -26,6 +26,16 @@ export interface FieldDescriptor {
    * an id and asked what it meant.
    */
   contextText?: string;
+  /**
+   * The repeated section this field sits in, when the page named one
+   * ("Educational Details", "Work Experience").
+   *
+   * Only a history row needs it, and only for the fields whose own label does
+   * not say which history they belong to: a bare "Start Date" is an education
+   * date inside an education section and an employment date inside an
+   * employment one.
+   */
+  sectionName?: string;
 }
 
 export type CanonicalField =

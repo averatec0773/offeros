@@ -74,6 +74,31 @@ export function canaryPersonas(): CanaryPersona[] {
         },
         skills: ["TypeScript", "React"],
         answerBank: answers("University career fair", "avery"),
+        education: [
+          {
+            school: "Birchwood College",
+            degree: "Bachelor of Science",
+            field: "Computer Science",
+            start: "2014",
+            end: "2018",
+          },
+        ],
+        experience: [
+          {
+            company: "Northwind Systems",
+            title: "Senior Engineer",
+            start: "2021",
+            end: "Present",
+            bullets: ["Led the avery-side ingestion rewrite."],
+          },
+          {
+            company: "Lakeside Analytics",
+            title: "Engineer",
+            start: "2018",
+            end: "2021",
+            bullets: ["Built the avery reporting service."],
+          },
+        ],
       },
     },
     {
@@ -92,6 +117,31 @@ export function canaryPersonas(): CanaryPersona[] {
         },
         skills: ["Python", "Django"],
         answerBank: answers("A friend's referral", "riley"),
+        education: [
+          {
+            school: "Cedarcrest University",
+            degree: "Bachelor of Science",
+            field: "Computer Science",
+            start: "2014",
+            end: "2018",
+          },
+        ],
+        experience: [
+          {
+            company: "Fernvale Robotics",
+            title: "Senior Engineer",
+            start: "2021",
+            end: "Present",
+            bullets: ["Led the riley-side ingestion rewrite."],
+          },
+          {
+            company: "Harbour Data",
+            title: "Engineer",
+            start: "2018",
+            end: "2021",
+            bullets: ["Built the riley reporting service."],
+          },
+        ],
       },
     },
     {
@@ -110,6 +160,31 @@ export function canaryPersonas(): CanaryPersona[] {
         },
         skills: ["Java", "Spring"],
         answerBank: answers("An industry newsletter", "quinn"),
+        education: [
+          {
+            school: "Maplefield Institute",
+            degree: "Bachelor of Science",
+            field: "Computer Science",
+            start: "2014",
+            end: "2018",
+          },
+        ],
+        experience: [
+          {
+            company: "Sablewood Labs",
+            title: "Senior Engineer",
+            start: "2021",
+            end: "Present",
+            bullets: ["Led the quinn-side ingestion rewrite."],
+          },
+          {
+            company: "Ridgeway Cloud",
+            title: "Engineer",
+            start: "2018",
+            end: "2021",
+            bullets: ["Built the quinn reporting service."],
+          },
+        ],
       },
     },
   ];

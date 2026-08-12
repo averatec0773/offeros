@@ -91,8 +91,8 @@ export interface EngineAttachFileRequest {
 }
 export interface EngineExpandRepeatersRequest {
   kind: "OFFEROS_ENGINE_EXPAND_REPEATERS";
-  /** How many entries the caller has to place. */
-  wanted: number;
+  /** How many entries the caller has to place, per kind of history. */
+  want: { education: number; experience: number; fallback: number };
 }
 export interface EngineScrollToFieldRequest {
   kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD";
@@ -137,7 +137,7 @@ export function isEngineAttachFileRequest(m: unknown): m is EngineAttachFileRequ
 export function isEngineExpandRepeatersRequest(m: unknown): m is EngineExpandRepeatersRequest {
   return (
     hasKind(m, "OFFEROS_ENGINE_EXPAND_REPEATERS") &&
-    typeof (m as EngineExpandRepeatersRequest).wanted === "number"
+    typeof (m as EngineExpandRepeatersRequest).want === "object"
   );
 }
 export function isEnginePingRequest(m: unknown): m is EnginePingRequest {
@@ -186,11 +186,11 @@ export async function sendEngineAttachFile(
 }
 export async function sendEngineExpandRepeaters(
   tabId: number,
-  wanted: number,
+  want: { education: number; experience: number; fallback: number },
 ): Promise<ExpandRepeatersResponse> {
   return (await browser.tabs.sendMessage(tabId, {
     kind: "OFFEROS_ENGINE_EXPAND_REPEATERS",
-    wanted,
+    want,
   } satisfies EngineExpandRepeatersRequest)) as ExpandRepeatersResponse;
 }
 export async function sendEngineScrollToField(

@@ -118,6 +118,14 @@ function fieldsIn(region: ParentNode): HTMLElement[] {
     .filter((el) => !(el instanceof HTMLInputElement && el.type === "submit"));
 }
 
+/** Which history a section is for, from the name the page gave it. */
+export function historyKindOf(sectionName: string): "education" | "experience" | null {
+  const t = sectionName.toLowerCase();
+  if (/educat|academic|qualification|school|degree/.test(t)) return "education";
+  if (/experien|employ|work history|career|previous/.test(t)) return "experience";
+  return null;
+}
+
 /** Every expandable section on the page. */
 export function findRepeaters(root: ParentNode): RepeaterSection[] {
   const controls = deepQueryAll(root, 'button, [role="button"], a[href="#"]')
