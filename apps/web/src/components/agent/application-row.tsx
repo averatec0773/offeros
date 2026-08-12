@@ -37,10 +37,12 @@ export function ApplicationRow({
   application,
   task,
   fit,
+  hasLogo = false,
 }: {
   application: Application;
   task: PipelineTask | null;
   fit?: FitAnalysis | null;
+  hasLogo?: boolean;
 }) {
   const actionRequired = task?.applicationInfo?.status === 2;
   const { jobInfo } = application;
@@ -59,7 +61,7 @@ export function ApplicationRow({
     <>
       <CompanyAvatar
         company={jobInfo.companyName}
-        logoUrl={`/api/v1/applications/${application.id}/logo`}
+        {...(hasLogo ? { logoUrl: `/api/v1/applications/${application.id}/logo` } : {})}
       />
 
       <span className="min-w-0 flex-1">

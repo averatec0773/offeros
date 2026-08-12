@@ -6,6 +6,11 @@ export type ApplicationListRow = {
   application: Application;
   task: PipelineTask | null;
   fit: FitAnalysis | null;
+  /** Whether a logo was ever cached for this application. Decided on the
+   *  server, because only the server can see the file — pointing an <img> at a
+   *  logo that is not there costs a request per row and shows a broken image
+   *  before the fallback can take over. */
+  hasLogo: boolean;
 };
 
 /** The applications list: what is still moving, and what has finished. */
@@ -20,6 +25,7 @@ export function ApplicationList({
     application: row.application,
     task: row.task,
     fit: row.fit,
+    hasLogo: row.hasLogo,
   });
 
   return (

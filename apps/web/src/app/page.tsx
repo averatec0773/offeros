@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { getDb } from "@/server/db/client";
 import { listApplications } from "@/server/repositories/application-repo";
+import { getLogo } from "@/server/services/logo-service";
 import { listPipelineTasks } from "@/server/repositories/pipeline-task-repo";
 import { newestTaskByApplication } from "@/server/repositories/pipeline-task-by-application";
 import { getProfile } from "@/server/repositories/profile-repo";
@@ -26,6 +27,7 @@ export default function HomePage() {
     application,
     task: taskByApplication.get(application.id) ?? null,
     fit: fitByApplication.get(application.id) ?? null,
+    hasLogo: getLogo(application.id) !== null,
   });
 
   return (

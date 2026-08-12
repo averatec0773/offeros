@@ -77,6 +77,15 @@ export function CompanyAvatar({
         alt=""
         aria-hidden
         style={dimension}
+        // The ref matters as much as onError. This markup is rendered on the
+        // server, so the browser has already tried the image — and possibly
+        // already failed — before React attaches any handler. That error is
+        // gone by hydration and onError never fires, which left a broken-image
+        // icon sitting there for good. A finished load with no pixels is that
+        // same failure, observable after the fact.
+        ref={(img) => {
+          if (img?.complete && img.naturalWidth === 0) setFailed(true);
+        }}
         onError={() => setFailed(true)}
         className={cn("shrink-0 rounded-xl bg-muted object-contain", className)}
       />

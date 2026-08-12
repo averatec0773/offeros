@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { CompanyAvatar, avatarStyle, initials } from "../company-avatar";
 
@@ -46,6 +46,26 @@ describe("avatarStyle", () => {
 });
 
 describe("CompanyAvatar", () => {
+  /**
+   * happy-dom never fetches an image, so every <img> reports `complete: true`
+   * with `naturalWidth: 0` — which in a real browser means "this one failed".
+   * Left alone, every test here would look like a broken logo. So the state is
+   * stated explicitly per test: pending by default, failed where that is the
+   * point.
+   */
+  function stubImageLoad(complete: boolean, naturalWidth: number) {
+    Object.defineProperty(HTMLImageElement.prototype, "complete", {
+      configurable: true,
+      get: () => complete,
+    });
+    Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", {
+      configurable: true,
+      get: () => naturalWidth,
+    });
+  }
+
+  beforeEach(() => stubImageLoad(false, 0));
+
   it("renders letters when there is no logo", () => {
     render(<CompanyAvatar company="Acme Corp" />);
     expect(screen.getByText("AC")).toBeTruthy();
@@ -64,5 +84,22 @@ describe("CompanyAvatar", () => {
     fireEvent.error(document.querySelector("img")!);
     expect(screen.getByText("AC")).toBeTruthy();
     expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("falls back when the image already failed before React could listen", () => {
+    // The markup is server-rendered, so a load can finish — and fail — before
+    // hydration attaches onError. That error is never replayed; a finished
+    // image with no pixels is the only evidence left, and it has to be enough.
+    // This is the bug the broken-image icons on a refreshed list page were.
+    stubImageLoad(true, 0);
+    render(<CompanyAvatar company="Acme Corp" logoUrl="/api/v1/applications/app-1/logo" />);
+    expect(screen.getByText("AC")).toBeTruthy();
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("keeps a logo that loaded with pixels", () => {
+    stubImageLoad(true, 64);
+    render(<CompanyAvatar company="Acme Corp" logoUrl="/api/v1/applications/app-1/logo" />);
+    expect(document.querySelector("img")).not.toBeNull();
   });
 });

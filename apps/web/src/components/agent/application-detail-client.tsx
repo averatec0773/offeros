@@ -70,6 +70,7 @@ export function ApplicationDetailClient({
   initialIncidents,
   initialJdAnalysis,
   profileSkills,
+  hasLogo = false,
 }: {
   application: Application;
   initialTask: PipelineTask | null;
@@ -82,6 +83,8 @@ export function ApplicationDetailClient({
   /** The applicant's own skills, for the zero-cost highlighting. Passed in
    *  rather than fetched: the page already reads the profile server-side. */
   profileSkills: string[];
+  /** Decided on the server: only it can see whether the file exists. */
+  hasLogo?: boolean;
 }) {
   const [taskId, setTaskId] = useState<string | null>(initialTask?.id ?? null);
   const [task, setTask] = useState<PipelineTask | null>(initialTask);
@@ -349,7 +352,7 @@ export function ApplicationDetailClient({
           <div className="flex min-w-0 items-start gap-3">
             <CompanyAvatar
               company={jobInfo.companyName}
-              logoUrl={`/api/v1/applications/${application.id}/logo`}
+              {...(hasLogo ? { logoUrl: `/api/v1/applications/${application.id}/logo` } : {})}
               size={48}
             />
             <div className="min-w-0">
