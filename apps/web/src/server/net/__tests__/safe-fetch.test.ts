@@ -164,6 +164,16 @@ describe("safeFetch", () => {
     if (!actual.ok) expect(actual.reason).toMatch(/too large/);
   });
 
+  it("allows a response that declares no content type at all", async () => {
+    // Absence is not a mismatch, and real servers omit it.
+    const result = await safeFetch("https://jobs.example.com/x", {
+      fetchImpl: vi.fn(async () => reply({ body: "page" })) as never,
+      resolve: publicDns,
+      accept: ["text/html"],
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it("enforces the content type when one is required", async () => {
     const result = await safeFetch("https://jobs.example.com/x", {
       fetchImpl: vi.fn(async () =>

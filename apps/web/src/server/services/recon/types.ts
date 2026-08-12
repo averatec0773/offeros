@@ -60,5 +60,6 @@ export interface AtsRecon {
     url: string,
     fetchImpl: typeof fetch,
     signal?: AbortSignal,
+    resolve?: (hostname: string) => Promise<string[]>,
   ) => Promise<ProbeResult | null>;
 }

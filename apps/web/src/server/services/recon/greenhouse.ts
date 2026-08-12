@@ -2,6 +2,7 @@ import { questionKey, toControl, type FieldDescriptor, type FieldMeta } from "@o
 // One parser, shared with the dedup path: a link this can read is a link the
 // "already added?" check can identify, and the two must never disagree.
 import { parseGreenhouseUrl } from "../../job-url";
+import { safeFetch } from "../../net/safe-fetch";
 import type { AtsRecon, ReconQuestion, ReconVerdict } from "./types";
 
 /**
@@ -148,16 +149,22 @@ export async function fetchGreenhouse(
   jobId: string,
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
+  resolve?: (hostname: string) => Promise<string[]>,
 ): Promise<{ verdict: ReconVerdict; job: GreenhouseJob | null }> {
   const url = `${GREENHOUSE_API}/v1/boards/${encodeURIComponent(token)}/jobs/${encodeURIComponent(jobId)}?questions=true`;
-  const response = await fetchImpl(url, signal ? { signal } : {});
-  if (response.status === 404 || response.status === 410) {
+  const result = await safeFetch(url, {
+    fetchImpl,
+    ...(resolve ? { resolve } : {}),
+    ...(signal ? { signal } : {}),
+  });
+  if (!result.ok) return { verdict: "unknown", job: null };
+  if (result.response.status === 404 || result.response.status === 410) {
     return { verdict: "closed", job: null };
   }
-  if (!response.ok) return { verdict: "unknown", job: null };
+  if (result.response.status >= 400) return { verdict: "unknown", job: null };
   let payload: unknown;
   try {
-    payload = await response.json();
+    payload = JSON.parse(new TextDecoder().decode(result.bytes));
   } catch {
     return { verdict: "unknown", job: null };
   }
@@ -169,10 +176,16 @@ export const greenhouseRecon: AtsRecon = {
   vendor: "greenhouse",
   matches: (url) => parseGreenhouseUrl(url) !== null,
   closedMarker: greenhouseClosedMarker,
-  probe: async (url, fetchImpl, signal) => {
+  probe: async (url, fetchImpl, signal, resolve) => {
     const parsed = parseGreenhouseUrl(url);
     if (!parsed) return null;
-    const { verdict, job } = await fetchGreenhouse(parsed.token, parsed.jobId, fetchImpl, signal);
+    const { verdict, job } = await fetchGreenhouse(
+      parsed.token,
+      parsed.jobId,
+      fetchImpl,
+      signal,
+      resolve,
+    );
     return {
       verdict,
       ...(job

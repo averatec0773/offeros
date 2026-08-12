@@ -4,8 +4,10 @@ import { appendEvent } from "../repositories/application-event-repo";
 import { recordShapes } from "../repositories/form-memory-repo";
 import { cacheLogo } from "./logo-service";
 import { greenhouseRecon } from "./recon/greenhouse";
-import type { AtsRecon, ProbeResult, ReconQuestion, ReconVerdict } from "./recon/types";
-import { safeFetchText } from "../net/safe-fetch";
+import type { AtsRecon, ReconVerdict } from "./recon/types";
+import { extractJob } from "../extract/ladder";
+import type { ExtractedJob } from "../extract/types";
+import { VENDOR_ADAPTERS } from "../extract/vendors";
 
 export type { ReconVerdict, ReconQuestion } from "./recon/types";
 
@@ -117,89 +119,110 @@ export async function reconApplication(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
+  // The same climb "add a job" does. Reconnaissance wants a verdict rather
+  // than fields, but it wants them from the same evidence — and a posting that
+  // answers with its content is, self-evidently, still up.
+  const extracted = await extractJob(url, {
+    ...(deps.fetchImpl ? { fetchImpl } : {}),
+    ...(deps.resolve ? { resolve: deps.resolve } : {}),
+    signal: controller.signal,
+  }).catch(() => null);
+
+  // Anything the climb learned that we did not have is worth keeping, whatever
+  // the verdict turns out to be.
+  const backfilled = extracted ? applyExtraction(db, applicationId, extracted) : false;
+
   try {
-    // Platforms with a public API are asked directly — it answers both
-    // questions (is it live, what does it ask) in one call, and it answers
-    // them in the platform's own words rather than from parsed markup.
-    if (platform?.probe) {
-      const probe = await platform.probe(url, fetchImpl, controller.signal);
-      // A probe that reached a conclusion ends it. One that could not — the
-      // API was down, or answered something unrecognisable — falls through to
-      // the page below, which may still carry the platform's own closed
-      // wording. Giving up at the first `unknown` would throw away evidence
-      // that is one request away.
-      if (probe && probe.verdict !== "unknown") {
-        return finish(db, applicationId, applyProbe(db, application.id, platform, probe, now()));
-      }
+    // The verdict, read off the one climb above rather than a second round of
+    // requests. Order matters: the platform answering is the strongest
+    // evidence a posting is live, and a 404 the strongest that it is not.
+    const vendor = extracted?.vendor ?? platform?.vendor;
+    const vendorTag = vendor ? { vendor } : {};
+
+    if (!extracted || !extracted.page) {
+      return finish(db, applicationId, {
+        verdict: "unknown",
+        detail: "Could not check the posting.",
+        ...vendorTag,
+        at: now(),
+        ...(backfilled ? { jdBackfilled: true } : {}),
+      });
     }
 
-    // Everything else: fetch the page and read the status code, the final URL
-    // and — only for a platform whose closed-page wording we know — the text.
-    // Through the shared guard, which re-checks the host on every redirect
-    // hop: a board's own link 301s to the employer's domain, so the host we
-    // end up talking to is routinely not the one we were given.
-    const page = await safeFetchText(url, {
-      fetchImpl,
-      ...(deps.resolve ? { resolve: deps.resolve } : {}),
-      timeoutMs: TIMEOUT_MS,
-      signal: controller.signal,
-    });
-    if (!page.ok) {
-      return finish(db, applicationId, {
-        verdict: "unknown",
-        detail: `Could not read the posting — ${page.reason}.`,
-        ...(platform ? { vendor: platform.vendor } : {}),
-        at: now(),
-      });
-    }
-    const response = { status: page.status, url: page.finalUrl };
-    if (response.status === 404 || response.status === 410) {
-      return finish(db, applicationId, {
-        verdict: "closed",
-        detail: `The posting is gone (HTTP ${response.status}).`,
-        ...(platform ? { vendor: platform.vendor } : {}),
-        at: now(),
-      });
-    }
-    if (response.status >= 400) {
-      return finish(db, applicationId, {
-        verdict: "unknown",
-        detail: `The site answered HTTP ${response.status}, which does not tell us either way.`,
-        ...(platform ? { vendor: platform.vendor } : {}),
-        at: now(),
-      });
-    }
-    if (looksLikeBoardIndex(response.url || url, url)) {
-      return finish(db, applicationId, {
-        verdict: "suspected-closed",
-        detail: describe["suspected-closed"],
-        ...(platform ? { vendor: platform.vendor } : {}),
-        at: now(),
-      });
-    }
-    if (platform) {
-      if (platform.closedMarker(page.text)) {
-        return finish(db, applicationId, {
-          verdict: "closed",
-          detail: describe.closed,
-          vendor: platform.vendor,
-          at: now(),
-        });
-      }
+    if (extracted.vendorAnswered) {
       return finish(db, applicationId, {
         verdict: "open",
         detail: describe.open,
-        vendor: platform.vendor,
+        ...vendorTag,
         at: now(),
+        ...summarise(extracted, backfilled),
+      });
+    }
+
+    if (!extracted.page.ok) {
+      return finish(db, applicationId, {
+        verdict: "unknown",
+        detail: `Could not read the posting — ${extracted.page.reason}.`,
+        ...vendorTag,
+        at: now(),
+      });
+    }
+
+    const status = extracted.page.status ?? 0;
+    if (status === 404 || status === 410) {
+      return finish(db, applicationId, {
+        verdict: "closed",
+        detail: `The posting is gone (HTTP ${status}).`,
+        ...vendorTag,
+        at: now(),
+      });
+    }
+    if (status >= 400) {
+      return finish(db, applicationId, {
+        verdict: "unknown",
+        detail: `The site answered HTTP ${status}, which does not tell us either way.`,
+        ...vendorTag,
+        at: now(),
+      });
+    }
+    if (looksLikeBoardIndex(extracted.finalUrl ?? url, url)) {
+      return finish(db, applicationId, {
+        verdict: "suspected-closed",
+        detail: describe["suspected-closed"],
+        ...vendorTag,
+        at: now(),
+      });
+    }
+    // A platform whose closed-page wording we know gets the page read for it.
+    const closed = VENDOR_ADAPTERS.find(
+      (adapter) => adapter.vendor === vendor && adapter.closedMarker,
+    );
+    if (closed?.closedMarker?.(extracted.pageText ?? "")) {
+      return finish(db, applicationId, {
+        verdict: "closed",
+        detail: describe.closed,
+        ...vendorTag,
+        at: now(),
+      });
+    }
+    if (vendor) {
+      return finish(db, applicationId, {
+        verdict: "open",
+        detail: describe.open,
+        ...vendorTag,
+        at: now(),
+        ...summarise(extracted, backfilled),
       });
     }
     // An unrecognised site answered 200. That is genuinely not evidence the
     // posting is live — plenty of dead links serve a friendly page — so it
-    // stays unknown rather than being promoted to "open".
+    // stays unknown rather than being promoted to "open". Anything the climb
+    // did learn was already kept.
     return finish(db, applicationId, {
       verdict: "unknown",
       detail: "The page loaded, but this site is not one we can read a verdict from.",
       at: now(),
+      ...(backfilled ? { jdBackfilled: true } : {}),
     });
   } catch {
     return finish(db, applicationId, {
@@ -214,91 +237,77 @@ export async function reconApplication(
 }
 
 /**
- * What a platform can tell us about a URL before anything is saved.
+ * What a link can tell us before anything is saved — the same climb, used when
+ * adding a job by pasting its URL.
  *
- * Used when adding a job by pasting its link: on a platform we can read, the
- * title, company and description come from the platform itself rather than
- * from the user retyping them. Anywhere else this returns null and the caller
- * keeps what it has — a minimal record with an editable title is honest; a
- * guessed one is not.
+ * Returns null only when the climb found nothing at all; a partial answer (a
+ * title but no description, say) is still worth having, and the caller decides
+ * what to do with the gaps.
  */
 export async function describeJobUrl(
   url: string,
   deps: ReconDeps = {},
 ): Promise<{ title: string; company: string; location: string; jdText: string } | null> {
-  const platform = PLATFORMS.find((p) => p.matches(url));
-  if (!platform?.probe) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const probe = await platform.probe(url, deps.fetchImpl ?? fetch, controller.signal);
-    if (!probe?.job) return null;
-    return {
-      title: probe.job.title,
-      company: probe.job.company,
-      location: probe.job.location,
-      jdText: htmlToText(probe.job.descriptionHtml),
-    };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const found = await extractJob(url, {
+    ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+    ...(deps.resolve ? { resolve: deps.resolve } : {}),
+  }).catch(() => null);
+  if (!found || Object.keys(found.fields).length === 0) return null;
+  return {
+    title: found.fields.title ?? "",
+    company: found.fields.company ?? "",
+    location: found.fields.location ?? "",
+    jdText: found.fields.jdText ?? "",
+  };
 }
 
-/** Store what a platform probe returned: questions, and a JD if we had none. */
-function applyProbe(
-  db: Db,
-  applicationId: string,
-  platform: AtsRecon,
-  probe: ProbeResult,
-  at: number,
-): ReconResult {
-  const questions = probe.questions ?? [];
-  if (questions.length > 0) {
+/** The counts a recon result carries alongside its verdict. */
+function summarise(extracted: ExtractedJob, backfilled: boolean) {
+  return {
+    ...(extracted.questions.length
+      ? {
+          questionsFound: extracted.questions.length,
+          requiredFound: extracted.questions.filter((q) => q.required).length,
+          questionKeys: extracted.questions.map((q) => q.questionKey),
+        }
+      : {}),
+    ...(backfilled ? { jdBackfilled: true } : {}),
+  };
+}
+
+/**
+ * Keep whatever the climb learned that we did not already have.
+ *
+ * Questions become prescan shapes; a description fills an empty jdText and
+ * never replaces one, because an existing description may have come from the
+ * real page or from the user. Returns whether a description landed.
+ */
+function applyExtraction(db: Db, applicationId: string, extracted: ExtractedJob): boolean {
+  const vendor = extracted.vendor ?? "unknown";
+  if (extracted.questions.length > 0) {
     recordShapes(
       db,
-      platform.vendor,
+      vendor,
       applicationId,
-      questions.map((q: ReconQuestion) => ({
+      extracted.questions.map((q) => ({
         questionKey: q.questionKey,
         question: q.question,
         classifiedType: q.control,
         failed: false,
         required: q.required,
       })),
-      at,
-      // Never counts as having met the question on a real form, and never
-      // overwrites what a real fill recorded.
+      Date.now(),
       "prescan",
     );
   }
 
-  // Backfill the description only when we have none. An existing jdText may
-  // have been captured from the real page (or edited by the user); this is the
-  // weaker source, so it does not get to replace it.
-  let jdBackfilled = false;
   const existing = getApplication(db, applicationId);
-  const description = probe.job?.descriptionHtml?.trim();
+  const description = extracted.fields.jdText?.trim();
   if (existing && !existing.jdText?.trim() && description) {
-    updateApplication(db, applicationId, { jdText: htmlToText(description) });
-    jdBackfilled = true;
+    updateApplication(db, applicationId, { jdText: description });
+    return true;
   }
-
-  return {
-    verdict: probe.verdict,
-    detail: describe[probe.verdict],
-    vendor: platform.vendor,
-    questionsFound: questions.length,
-    requiredFound: questions.filter((q) => q.required).length,
-    // The keys, not the questions: the text lives once in form_shapes, and
-    // this is the per-application link back to it. Without it a prescan would
-    // be a global pile of questions with no way to say which form they
-    // belonged to.
-    questionKeys: questions.map((q) => q.questionKey),
-    ...(jdBackfilled ? { jdBackfilled: true } : {}),
-    at,
-  };
+  return false;
 }
 
 /**

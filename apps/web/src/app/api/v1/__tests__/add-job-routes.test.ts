@@ -6,6 +6,13 @@ import { join } from "node:path";
 const dir = mkdtempSync(join(tmpdir(), "offeros-addjob-"));
 process.env.OFFEROS_DB_PATH = join(dir, "addjob.db");
 
+// The route resolves hostnames before fetching them (the guard has to, or a
+// public name pointing at 127.0.0.1 would sail through). These fixtures use
+// hosts that do not exist, so resolution is answered here rather than by DNS.
+vi.mock("node:dns/promises", () => ({
+  lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+}));
+
 const applicationsRoute = await import("../applications/route");
 const { getDb } = await import("@/server/db/client");
 const { listApplications } = await import("@/server/repositories/application-repo");
@@ -39,6 +46,8 @@ function post(url: unknown) {
 }
 
 beforeEach(() => {
+  // The climb reads bytes, not `.json()`/`.text()` — everything now goes
+  // through the guard, which caps the body itself.
   vi.stubGlobal(
     "fetch",
     vi.fn(
@@ -47,8 +56,8 @@ beforeEach(() => {
           ok: true,
           status: 200,
           url: "",
-          json: async () => GH_JOB,
-          text: async () => JSON.stringify(GH_JOB),
+          headers: new Headers({ "content-type": "application/json" }),
+          arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(GH_JOB)).buffer,
         }) as unknown as Response,
     ),
   );

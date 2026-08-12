@@ -200,9 +200,12 @@ export async function safeFetch(
       }
 
       if (options.accept) {
+        // Only when the server actually declared one. A missing content-type
+        // is not a wrong content-type, and plenty of real servers omit it —
+        // refusing those would reject pages we can read perfectly well.
         const type = (response.headers.get("content-type") ?? "").toLowerCase();
-        if (!options.accept.some((prefix) => type.startsWith(prefix))) {
-          return { ok: false, reason: `unexpected content type (${type || "none"})` };
+        if (type !== "" && !options.accept.some((prefix) => type.startsWith(prefix))) {
+          return { ok: false, reason: `unexpected content type (${type})` };
         }
       }
 
