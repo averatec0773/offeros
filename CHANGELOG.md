@@ -97,6 +97,23 @@ instant, and the same colour for that company forever. When a posting is
 checked, its site's icon is fetched once and kept on your machine; pages read
 it locally, so browsing your own applications never calls an employer's server.
 
+**Job details from the employer's own careers page.** Adding a job used to
+work only when the link was on a job board's own domain. Most postings are not:
+companies embed the board into their own careers page, and a board's own link
+often redirects there anyway. OfferOS now recognises which platform is behind a
+page from the page itself, so pasting the link you actually have — the one on
+the company's site — brings back the title, the location and the full
+description. Greenhouse, Lever and Ashby postings are read from each platform's
+own listing, whether the link is theirs or the employer's.
+
+**It tells you where the description came from,** because the sources are not
+equally clean: a platform's own listing is what the employer wrote, while text
+pulled out of a page can drag in navigation. One line under the description
+says which. And when it cannot read a posting at all, it says that too, rather
+than saving a blank one — some pages are built entirely in your browser and
+simply are not visible to a server. Settings → Data can retry the ones that
+came up empty, and reports which worked and why the rest did not.
+
 **Job reconnaissance.** One click asks the posting two questions: are you still
 up, and what will your form ask? On Greenhouse the answer comes from the
 platform's own job-board API — every question, its type, and whether it is
