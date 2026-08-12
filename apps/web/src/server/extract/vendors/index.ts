@@ -1,5 +1,7 @@
 import type { VendorAdapter } from "../types";
+import { ashbyAdapter } from "./ashby";
 import { greenhouseAdapter } from "./greenhouse";
+import { leverAdapter } from "./lever";
 
 /**
  * Every platform the server knows how to read.
@@ -14,4 +16,4 @@ import { greenhouseAdapter } from "./greenhouse";
  * server yields an empty shell, and the right answer for them is the browser
  * extension, which sees the page the applicant sees.
  */
-export const VENDOR_ADAPTERS: VendorAdapter[] = [greenhouseAdapter];
+export const VENDOR_ADAPTERS: VendorAdapter[] = [greenhouseAdapter, leverAdapter, ashbyAdapter];

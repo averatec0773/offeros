@@ -74,7 +74,16 @@ export function normalizeJobUrl(url: string): string {
  * Reading the identity out of both does.
  */
 export interface JobIdentity {
-  vendor: "greenhouse";
+  /**
+   * Which platform this posting belongs to.
+   *
+   * A plain string, not a union of the platforms that happen to exist today.
+   * It started as a literal and adding the second and third platform forced an
+   * edit here — which is exactly the kind of change a new adapter is supposed
+   * never to need. Widening it is the fix; the alternative was every vendor
+   * touching a file that has nothing to do with it.
+   */
+  vendor: string;
   board: string;
   jobId: string;
 }
