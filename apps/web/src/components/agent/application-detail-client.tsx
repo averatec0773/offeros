@@ -22,6 +22,7 @@ import { subscribeToAgentEvents } from "@/lib/agent-events";
 import { cn } from "@/lib/utils";
 import { LabeledSelect } from "@/components/profile/fields";
 import { ConnectProviderNote } from "./connect-provider-note";
+import { ApplicationMetaRow } from "./application-meta-row";
 import { FitCard } from "./fit-card";
 import { FormCard } from "./form-card";
 import { MaterialsCard } from "./materials-card";
@@ -396,6 +397,14 @@ export function ApplicationDetailClient({
             {requirements.lastChecked.detail}
           </p>
         )}
+
+        <ApplicationMetaRow
+          createdAt={application.createdAt}
+          {...(jobInfo.publishTimeDesc ? { publishTimeDesc: jobInfo.publishTimeDesc } : {})}
+          {...(application.appliedAt ? { appliedAt: application.appliedAt } : {})}
+          {...(requirements.lastChecked ? { lastCheckedAt: requirements.lastChecked.at } : {})}
+          analysis={jdAnalysis}
+        />
       </header>
 
       {showConnectBanner && <ConnectProviderNote message="Connect your AI provider to generate" />}
