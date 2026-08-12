@@ -248,14 +248,19 @@ try {
   const eduBefore = await page.evaluate(() => document.querySelectorAll("#edu-rows input").length);
   const expanded = await sw.evaluate(
     async (id) =>
-      await chrome.tabs.sendMessage(id, { kind: "OFFEROS_ENGINE_EXPAND_REPEATERS", wanted: 3 }),
+      await chrome.tabs.sendMessage(id, {
+        kind: "OFFEROS_ENGINE_EXPAND_REPEATERS",
+        // How many rows is a property of the applicant's data now, not a
+        // number anyone picks: two schools means two rows.
+        want: { education: 2, experience: 3, fallback: 1 },
+      }),
     tabId,
   );
   const eduAfter = await page.evaluate(() => document.querySelectorAll("#edu-rows input").length);
   log("repeater_sections", JSON.stringify(expanded?.sections ?? []));
-  check("repeater_rows_added", expanded?.added, 3);
+  check("repeater_rows_added", expanded?.added, 2);
   check("repeater_fields_before", eduBefore, 0);
-  check("repeater_fields_after", eduAfter, 6);
+  check("repeater_fields_after", eduAfter, 4);
 
   // 4d) The hidden file input behind a custom uploader.
   const rescan = await sw.evaluate(

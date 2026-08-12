@@ -1930,11 +1930,17 @@ describe("FillPanel", () => {
       // flake that only showed up under load.
       await waitFor(() => expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "resume"));
       expect(api.fetchResumeFile).not.toHaveBeenCalled();
-      expect(attachFile).toHaveBeenCalledWith("r1", {
-        fileName: "Jordan_Rivera_Resume.pdf",
-        mimeType: "application/pdf",
-        bytesBase64: expect.any(String),
-      });
+      // The attach happens AFTER that fetch resolves, so it needs its own wait.
+      // Asserting it synchronously passed alone and failed under a fuller
+      // suite — the same latent race the comment above describes, one step
+      // further along the chain.
+      await waitFor(() =>
+        expect(attachFile).toHaveBeenCalledWith("r1", {
+          fileName: "Jordan_Rivera_Resume.pdf",
+          mimeType: "application/pdf",
+          bytesBase64: expect.any(String),
+        }),
+      );
       expect(api.postReport).toHaveBeenCalledWith(
         "t1",
         expect.arrayContaining([

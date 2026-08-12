@@ -19,6 +19,44 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-19
+
+### Fixed
+
+**Your work history fills in as your work history.** Forms that ask for several
+jobs or several schools were getting the same answer in every row — three
+employers came out as one company three times, and each row's description was
+written by AI instead of taken from what you had already written about that job.
+Each row now gets its own entry, in order, and a row's summary is your own words
+about that role. Nothing is generated where the real answer was already on file.
+
+**Those sections also open themselves.** Many forms start education and work
+history as an empty table with an "Add" button, so there was nothing to fill
+until you found the button and pressed it once per entry. How many rows you need
+is something OfferOS can already see — two schools means two rows.
+
+**"Years of experience" answers itself.** The question is asked constantly and
+was coming back blank while the answer sat in your profile as a list of dates.
+It is worked out from those: whole years, rounded down, and overlapping roles
+counted once. When the dates cannot support a number, it stays blank rather than
+guessing.
+
+**A job description that was mostly the form talking about itself.** Capturing a
+posting from a page that also holds its application form was picking up the
+form's own words — a country dropdown's two hundred country names, an upload
+widget's "Drag and drop or browse / Max 5 MB / PDF, DOC, DOCX". On one capture
+more than half the stored description was that. Controls and their chrome are
+now left out; the posting's headings and lists are kept.
+
+**Three re-fills no longer leave three copies of your résumé.** Nothing checked
+whether the file was already on the form, so every fill attached it again. It is
+now left alone when it is already there — and said so, rather than reported as a
+fresh upload.
+
+**Fields inside a labelled section stopped borrowing the section's name.** Every
+input inside a group called "Educational Details" was being labelled
+"Educational Details".
+
 ## 2026-08-20
 
 ### Added
