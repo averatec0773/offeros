@@ -1330,11 +1330,16 @@ describe("FillPanel", () => {
 
     it("still reports the field as filled, saying it was left alone", async () => {
       const { api } = await runFill("Jordan_Rivera_Resume.pdf");
-      const calls = (api.postReport as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-      const reports = calls.at(-1)![1] as FieldReport[];
-      const row = reports.find((r) => r.fieldId === "r1")!;
-      expect(row.outcome).toBe("filled");
-      expect(row.reason).toMatch(/already attached/i);
+      // Waiting for the row itself rather than for any report at all: the file
+      // decision lands a beat after the first cumulative post, so asserting on
+      // the latest call raced the chain under a full suite.
+      await waitFor(() => {
+        const calls = (api.postReport as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+        const row = calls
+          .flatMap((c) => c[1] as FieldReport[])
+          .find((r) => r.fieldId === "r1" && /already attached/i.test(r.reason));
+        expect(row?.outcome).toBe("filled");
+      });
     });
 
     it("attaches when the page holds a DIFFERENT file", async () => {

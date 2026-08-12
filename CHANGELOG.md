@@ -19,6 +19,39 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-20
+
+### Added
+
+**The fields OfferOS cannot fill can be handed to the agent.** Until now the
+fallback for an unrecognised field was a narrow one: a model was asked which
+standard field it looked like, and was shown nothing at all about you. That can
+recognise "Telefonnummer" and can do nothing with "which of your projects is
+most relevant to this role?" — a question you answer by having read your own
+résumé and the posting. The agent now gets both, along with your profile and the
+answers you have saved before, and works through what is left in one pass.
+
+**Every suggestion arrives with its source and its reason,** and none of them is
+written for you. You see the value, a line saying where it came from — your
+profile, your résumé, the job description, an answer you saved — and you apply
+them one at a time or all at once. A value you apply is recorded as the agent's,
+with that reason, so the record of the application says how each answer got
+there.
+
+**An answer that cannot be traced back to your own material is thrown away
+before you see it.** The agent has to quote the words its answer rests on, and
+OfferOS checks that quote is genuinely in the source named. This is what stops a
+plausible invention — a job you never held, a date that was never true — from
+reaching an employer's form. It is a check, not an instruction.
+
+**Long answers can be drafted one at a time,** with a word from you about what
+to emphasise: "lead with the Docker work". Your instruction is treated as yours,
+not as text scraped off the page.
+
+**Identity, work authorisation and consent questions are never answered for
+you** — the panel says plainly that they are yours, and offers no AI button at
+all.
+
 ## 2026-08-19
 
 ### Fixed

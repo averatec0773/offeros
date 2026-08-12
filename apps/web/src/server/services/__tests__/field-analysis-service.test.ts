@@ -179,11 +179,25 @@ describe("honest nulls", () => {
     expect(r!.reason).toMatch(/options matched/i);
   });
 
-  it("drops a fieldId that was never sent", () => {
-    // Otherwise a model could add rows to a plan keyed by fieldId.
-    expect(
-      resolveAnalyses([analysis({ fieldId: "not-on-this-page" })], [field()], sources),
-    ).toEqual([]);
+  it("ignores a fieldId that was never sent", () => {
+    // A model cannot add rows to a plan keyed by fieldId; the field that WAS
+    // sent still gets an answer.
+    const out = resolveAnalyses([analysis({ fieldId: "not-on-this-page" })], [field()], sources);
+    expect(out.map((r) => r.fieldId)).toEqual(["f1"]);
+    expect(out[0]!.value).toBeNull();
+  });
+
+  it("answers every field asked about, even one the model skipped", () => {
+    // Silence would otherwise make a field vanish from the applicant's view —
+    // and a guarded question would lose its "this one is yours" note.
+    const out = resolveAnalyses(
+      [analysis({ fieldId: "f1" })],
+      [field(), field({ fieldId: "f2", label: "Certifications" })],
+      sources,
+    );
+    expect(out.map((r) => r.fieldId)).toEqual(["f1", "f2"]);
+    expect(out[1]!.needsUser).toBe(true);
+    expect(out[1]!.reason).toMatch(/no answer came back/i);
   });
 });
 

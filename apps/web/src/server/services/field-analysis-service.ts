@@ -160,19 +160,19 @@ export function resolveAnalyses(
   fields: AnalyzeFieldInput[],
   sources: AnalyzeSources,
 ): AnalyzedField[] {
-  const byId = new Map(fields.map((f) => [f.fieldId, f]));
-  const out: AnalyzedField[] = [];
+  // Iterate over what was SENT, not over what came back.
+  //
+  // A model that omits a field would otherwise make it vanish: the applicant
+  // is told nothing about it, and a guarded question silently loses its "this
+  // one is yours" note. Every field asked about gets an answer, and silence is
+  // one of the answers.
+  const byId = new Map(analyses.map((a) => [a.fieldId, a]));
 
-  for (const analysis of analyses) {
-    const field = byId.get(analysis.fieldId);
-    // A fieldId nobody sent is not a field. Dropping it stops a model from
-    // adding rows to a plan that is keyed by fieldId.
-    if (!field) continue;
-
+  return fields.map((field): AnalyzedField => {
     const subject = { label: field.label, options: field.options };
     if (isAutoAnswerForbidden(subject)) {
       const guard = guardClassOf(subject);
-      out.push({
+      return {
         fieldId: field.fieldId,
         value: null,
         source: "agent",
@@ -181,54 +181,60 @@ export function resolveAnalyses(
           guard === "sensitive"
             ? "Self-identification is yours to answer — set it once in Profile → Equal Employment."
             : "This is a legal statement only you can make.",
-      });
-      continue;
+      };
+    }
+
+    const analysis = byId.get(field.fieldId);
+    if (!analysis) {
+      return {
+        fieldId: field.fieldId,
+        value: null,
+        source: "agent",
+        needsUser: true,
+        reason: "No answer came back for this one — it is yours to fill in.",
+      };
     }
 
     if (analysis.value === null || analysis.value.trim() === "") {
-      out.push({
+      return {
         fieldId: field.fieldId,
         value: null,
         source: "agent",
         needsUser: true,
         reason: analysis.reason.trim() || "Nothing in your profile or résumé answers this.",
-      });
-      continue;
+      };
     }
 
     // An answer that cannot point at the words it came from is thrown away.
     if (!evidenceHolds(analysis, sources)) {
-      out.push({
+      return {
         fieldId: field.fieldId,
         value: null,
         source: "agent",
         needsUser: true,
         reason:
           "Couldn't trace an answer for this back to your profile or résumé, so it is yours to fill in.",
-      });
-      continue;
+      };
     }
 
     // A multiple-choice answer has to be one of the page's own options.
     if (field.options?.length && !field.options.includes(analysis.value)) {
-      out.push({
+      return {
         fieldId: field.fieldId,
         value: null,
         source: "agent",
         needsUser: true,
         reason: "None of this field's options matched what your material says.",
-      });
-      continue;
+      };
     }
 
-    out.push({
+    return {
       fieldId: field.fieldId,
       value: analysis.value,
       source: "agent",
       reason: analysis.reason.trim() || whereFrom(analysis),
-    });
-  }
-  return out;
+    };
+  });
 }
 
 function whereFrom(analysis: FieldAnalysis): string {
