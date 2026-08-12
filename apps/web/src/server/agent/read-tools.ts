@@ -10,6 +10,7 @@ import { getFit } from "../repositories/fit-repo";
 import { getProfile } from "../repositories/profile-repo";
 import { listResumes, getResumeText } from "../services/resume-service";
 import { getArtifact } from "../repositories/artifact-repo";
+import { listDocuments } from "../services/document-service";
 import { resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { formMemorySummary, listIncidents } from "../repositories/form-memory-repo";
 import { buildInbox } from "../services/attention-service";
@@ -635,6 +636,83 @@ export const readArtifactTool: Tool<
   verify: async () => null,
 };
 
+/** One generated document as the model sees it. Dates are ISO days rather than
+ *  epoch milliseconds: "last week's Databricks letter" is a question about
+ *  dates, and a number of milliseconds is not an answer to it. */
+export interface DocumentLine {
+  name: string;
+  kind: string;
+  company: string;
+  title: string;
+  versions: number;
+  accepted: boolean;
+  /** So a follow-up ("show me that one") can be scoped to the right job. */
+  applicationId: string;
+  updated: string;
+}
+
+/**
+ * What the user has generated, across every application.
+ *
+ * Every other read here is about ONE job, which left a whole class of question
+ * unanswerable: "which résumés have I actually made", "where is that Databricks
+ * letter". The rows come from the same `listDocuments` the Documents page uses,
+ * so the agent and the page cannot disagree about what exists or about whether
+ * something was accepted. Free — a database read, no model call.
+ */
+export const listDocumentsTool: Tool<
+  { query?: string } | void,
+  { total: number; shown: number; documents: DocumentLine[] }
+> = {
+  id: "list_documents",
+  description:
+    'List the tailored résumés and cover letters generated across ALL applications: name, kind, which job, version count, whether it was accepted, and the date. Pass {"query":"<company, job title or document name>"} to narrow it. Use for "what have I generated", "which résumés do I have", "where is the letter for X" — anything about the set of documents rather than one job.',
+  parse: (input) => {
+    const query = (input as Record<string, unknown> | null)?.query;
+    return typeof query === "string" && query.trim() !== "" ? { query: query.trim() } : undefined;
+  },
+  run: async (ctx, input) => {
+    const needle = input?.query?.toLowerCase();
+    const all = listDocuments(ctx.db).filter(
+      (row) =>
+        !needle ||
+        row.name.toLowerCase().includes(needle) ||
+        row.company.toLowerCase().includes(needle) ||
+        row.title.toLowerCase().includes(needle),
+    );
+    const shown = all.slice(0, ROW_BUDGET);
+    const resumes = all.filter((r) => r.kind === "resume").length;
+    const letters = all.length - resumes;
+    return {
+      ok: true,
+      summary:
+        all.length === 0
+          ? needle
+            ? `no generated document matches "${input?.query}"`
+            : "nothing generated yet"
+          : `${all.length} document${all.length === 1 ? "" : "s"} — ${resumes} résumé${resumes === 1 ? "" : "s"}, ${letters} cover letter${letters === 1 ? "" : "s"}`,
+      result: {
+        // `total` is the real count and `shown` is what fits: an agent that
+        // says "you have 12" off a capped list would be wrong by however many
+        // were cut.
+        total: all.length,
+        shown: shown.length,
+        documents: shown.map((row) => ({
+          name: row.name,
+          kind: row.kind,
+          company: row.company,
+          title: row.title,
+          versions: row.versions,
+          accepted: row.state === "accepted",
+          applicationId: row.applicationId,
+          updated: new Date(row.updatedAt).toISOString().slice(0, 10),
+        })),
+      },
+    };
+  },
+  verify: async () => null,
+};
+
 /** Every read the agent may perform, by id. */
 export const READ_TOOLS = {
   [listApplicationsTool.id]: listApplicationsTool,
@@ -646,6 +724,7 @@ export const READ_TOOLS = {
   [readProfileTool.id]: readProfileTool,
   [readResumeTool.id]: readResumeTool,
   [readArtifactTool.id]: readArtifactTool,
+  [listDocumentsTool.id]: listDocumentsTool,
   [readFormMemoryTool.id]: readFormMemoryTool,
   [readInboxTool.id]: readInboxTool,
 } as const;

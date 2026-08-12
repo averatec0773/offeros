@@ -7,7 +7,14 @@ import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
 import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { appendEvent } from "../../repositories/application-event-repo";
-import { readFillReportTool, readTimelineTool, READ_TOOLS, type TimelineLine } from "../read-tools";
+import {
+  listDocumentsTool,
+  readFillReportTool,
+  readTimelineTool,
+  READ_TOOLS,
+  toolMenu,
+  type TimelineLine,
+} from "../read-tools";
 import type { ToolContext } from "../types";
 
 /**
@@ -314,5 +321,118 @@ describe("read_timeline exposes the application_events log the agent could not s
 
   it("is registered as a read tool", () => {
     expect(READ_TOOLS.read_timeline).toBe(readTimelineTool);
+  });
+});
+
+describe("list_documents", () => {
+  const AUG_12 = Date.UTC(2026, 7, 12, 6, 30);
+
+  /** One generated document for a job, optionally already named/accepted. */
+  function generate(
+    company: string,
+    kind: "resume" | "cover-letter",
+    over: { versions?: number; name?: string; at?: number } = {},
+  ): string {
+    const application = createApplication(db, {
+      jobInfo: { jobId: `j-${company}-${kind}`, jobTitle: "ML Engineer", companyName: company },
+    });
+    const task = createPipelineTask(db, { applicationId: application.id });
+    const at = over.at ?? AUG_12;
+    const count = over.versions ?? 1;
+    upsertArtifact(db, {
+      id: `${task.id}-${kind}`,
+      taskId: task.id,
+      kind,
+      ...(over.name ? { name: over.name } : {}),
+      versions: Array.from({ length: count }, (_, i) => ({
+        id: `v${i + 1}`,
+        content: "text",
+        rationale: "",
+        createdAt: at,
+      })),
+      currentVersionId: `v${count}`,
+      createdAt: at,
+      updatedAt: at,
+    });
+    return application.id;
+  }
+
+  it("lists what was generated across applications, with the job and the date", async () => {
+    const databricks = generate("Databricks", "cover-letter", { versions: 2 });
+    generate("Acme", "resume", { at: AUG_12 - 86_400_000 });
+
+    const obs = await listDocumentsTool.run({ db, applicationId: appId }, undefined);
+
+    expect(obs.ok).toBe(true);
+    expect(obs.summary).toBe("2 documents — 1 résumé, 1 cover letter");
+    const rows = obs.result!.documents;
+    // Newest first, as the Documents page shows them.
+    expect(rows[0]).toEqual({
+      name: "cover_Databricks_2026-08-12",
+      kind: "cover-letter",
+      company: "Databricks",
+      title: "ML Engineer",
+      versions: 2,
+      accepted: false,
+      applicationId: databricks,
+      updated: "2026-08-12",
+    });
+    expect(rows[1]!.company).toBe("Acme");
+    expect(rows[1]!.updated).toBe("2026-08-11");
+  });
+
+  it("narrows by company, title or document name", async () => {
+    generate("Databricks", "cover-letter");
+    generate("Acme", "resume");
+    generate("Beta", "resume", { name: "the one that worked" });
+
+    const byCompany = await listDocumentsTool.run(
+      { db, applicationId: appId },
+      { query: "databricks" },
+    );
+    expect(byCompany.result!.total).toBe(1);
+    expect(byCompany.result!.documents[0]!.company).toBe("Databricks");
+
+    const byName = await listDocumentsTool.run({ db, applicationId: appId }, { query: "worked" });
+    expect(byName.result!.documents[0]!.name).toBe("the one that worked");
+
+    const nothing = await listDocumentsTool.run({ db, applicationId: appId }, { query: "stripe" });
+    expect(nothing.ok).toBe(true);
+    expect(nothing.result!.total).toBe(0);
+    expect(nothing.summary).toContain('no generated document matches "stripe"');
+  });
+
+  it("caps the rows but reports the real total", async () => {
+    // The honesty that matters: an agent reading a capped list must not tell
+    // the user the cap is the count.
+    for (let i = 0; i < 15; i++) generate(`Co${i}`, "resume", { at: AUG_12 + i * 1_000 });
+
+    const obs = await listDocumentsTool.run({ db, applicationId: appId }, undefined);
+    expect(obs.result!.total).toBe(15);
+    expect(obs.result!.shown).toBe(12);
+    expect(obs.result!.documents).toHaveLength(12);
+    expect(obs.summary).toContain("15 documents");
+  });
+
+  it("reports accepted from the timeline, like the workbench", async () => {
+    const application = generate("Acme", "resume");
+    appendEvent(db, {
+      applicationId: application,
+      kind: "artifact-approved",
+      payload: { kind: "resume" },
+    });
+    const obs = await listDocumentsTool.run({ db, applicationId: appId }, undefined);
+    expect(obs.result!.documents[0]!.accepted).toBe(true);
+  });
+
+  it("says nothing was generated rather than returning an empty success in silence", async () => {
+    const obs = await listDocumentsTool.run({ db, applicationId: appId }, undefined);
+    expect(obs.summary).toBe("nothing generated yet");
+    expect(obs.result!.total).toBe(0);
+  });
+
+  it("is in the menu the model chooses from", () => {
+    expect(READ_TOOLS.list_documents).toBe(listDocumentsTool);
+    expect(toolMenu(READ_TOOLS)).toContain("list_documents:");
   });
 });

@@ -364,6 +364,31 @@ describe("global scope", () => {
   });
 });
 
+describe("the real tool registry is what the loop offers", () => {
+  it("resolves list_documents rather than calling it a tool that does not exist", async () => {
+    // A tool the model cannot name is a tool that does not exist. This runs the
+    // loop over the SHIPPED registry (no injected doubles) to prove the wiring:
+    // the call reaches a real tool run, so it lands in steps[] instead of the
+    // "there is no such tool" finding.
+    const chooseNext = script(
+      { kind: "use-tool", tool: "list_documents", reason: "see what has been generated" },
+      { kind: "answer", text: "here they are" },
+    );
+    const out = await runTurn({
+      // The db here is a stand-in: what is under test is which tool the loop
+      // resolves, and a tool that fails on a fake handle still proves it was
+      // FOUND (a missing tool never reaches a run at all).
+      ctx,
+      question: "which résumés have I generated?",
+      runLlm: noLlm,
+      chooseNext,
+    });
+    expect(out.steps.map((s) => s.tool)).toEqual(["list_documents"]);
+    expect(chooseNext.mock.calls.at(-1)![0].context).not.toContain("There is no such tool");
+    expect(chooseNext.mock.calls[0]![0].context).toContain("list_documents:");
+  });
+});
+
 describe("parseDecision", () => {
   it("reads both decision shapes", () => {
     expect(parseDecision('{"kind":"use-tool","tool":"read_trace","reason":"check"}')).toEqual({
