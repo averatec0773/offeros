@@ -38,8 +38,15 @@ vi.mock("../../pipeline/tweak", () => ({
   tweakArtifact: (...a: unknown[]) => tweakArtifact(...(a as [])),
 }));
 
-const { markSubmittedTool, tailorResumeTool, refineArtifactTool, draftAnswerTool } =
-  await import("../tools");
+const {
+  markSubmittedTool,
+  tailorResumeTool,
+  coverLetterTool,
+  refineArtifactTool,
+  draftAnswerTool,
+  openFillTool,
+  checkGateTool,
+} = await import("../tools");
 
 const FILL = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
 const SUBMIT = PIPELINE_STEPS.findIndex((s) => s.key === "submit");
@@ -132,6 +139,68 @@ describe("tailor_resume's verify must be independent of run's own check", () => 
     // artifact that predates the call. `verify` is run's own check, verbatim.
     expect(obs.ok).toBe(false);
     expect(listTrace(db, appId)[0]?.verified).not.toBe(true);
+  });
+});
+
+describe("a task-scoped tool without a task refuses as a precondition, with a way out", () => {
+  /**
+   * These tools used to `throw new Error("this tool needs a task")`, which
+   * arrives at the agent as a `dependency` failure — the class that means "an
+   * outage, try again" — carrying no remedy. A real turn burned three of its six
+   * steps on exactly that, retrying tools that could not work until the
+   * conversation named an application.
+   */
+  const anyTool = (t: unknown) => t as Tool<never, unknown>;
+  const cases: { id: string; tool: Tool<never, unknown>; input?: unknown }[] = [
+    { id: "tailor_resume", tool: anyTool(tailorResumeTool) },
+    { id: "generate_cover_letter", tool: anyTool(coverLetterTool) },
+    {
+      id: "refine_artifact",
+      tool: anyTool(refineArtifactTool),
+      input: { kind: "resume", instruction: "make it shorter" },
+    },
+    {
+      id: "draft_answer",
+      tool: anyTool(draftAnswerTool),
+      input: { question: "Why do you want to work here?" },
+    },
+    { id: "open_fill", tool: anyTool(openFillTool) },
+    { id: "mark_submitted", tool: anyTool(markSubmittedTool), input: { confirmedByUser: true } },
+    { id: "check_gate", tool: anyTool(checkGateTool) },
+  ];
+
+  for (const { id, tool, input } of cases) {
+    it(`${id} states the class and how to recover`, async () => {
+      // No taskId in the context — the global conversation before it has
+      // settled on a job.
+      const ctx: ToolContext = { db, applicationId: appId, reason: "audit" };
+      const obs = await runTool(tool, ctx, input);
+
+      expect(obs.ok).toBe(false);
+      expect(obs.failure?.kind).toBe("precondition");
+      // The remedy is IN the observation: what to call, and what to stop doing.
+      expect(obs.failure?.reason).toContain("list_applications");
+      expect(obs.failure?.reason).toContain("applicationId");
+      expect(obs.failure?.reason).toMatch(/not call this tool again|ask the user/);
+      // Not the old shape: no bare throw dressed up as an outage.
+      expect(obs.failure?.reason).not.toBe("this tool needs a task");
+      // And the refusal is on the ledger like every other outcome.
+      expect(listTrace(db, appId).at(-1)).toMatchObject({
+        tool: id,
+        ok: false,
+        failureKind: "precondition",
+      });
+    });
+  }
+
+  it("does nothing on the way out — a refusal is not a half-done write", async () => {
+    runTargetedStep.mockClear();
+    tweakArtifact.mockClear();
+    const ctx: ToolContext = { db, applicationId: appId, reason: "audit" };
+    await runTool(tailorResumeTool, ctx, undefined);
+    await runTool(refineArtifactTool, ctx, { kind: "resume", instruction: "shorter" });
+    expect(runTargetedStep).not.toHaveBeenCalled();
+    expect(tweakArtifact).not.toHaveBeenCalled();
   });
 });
 

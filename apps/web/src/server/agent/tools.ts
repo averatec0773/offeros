@@ -40,9 +40,29 @@ function stepKeyOf(db: ToolContext["db"], taskId: string): string | undefined {
   return PIPELINE_STEPS[task.step]?.key;
 }
 
-function requireTaskId(ctx: ToolContext): string {
-  if (!ctx.taskId) throw new Error("this tool needs a task");
-  return ctx.taskId;
+/**
+ * The refusal every task-scoped tool returns when the conversation has not
+ * settled on an application yet.
+ *
+ * This was `throw new Error("this tool needs a task")`, which `runTool` turns
+ * into a `dependency` failure carrying that sentence. Both halves were wrong.
+ * A dependency failure reads as an outage worth retrying, while a missing
+ * subject never becomes ready on its own; and "this tool needs a task" tells
+ * the agent nothing it can act on, so a real turn spent three of its six steps
+ * re-calling tools that could not possibly work. Failures here are values with
+ * a class and a way out — that is the whole contract in ./types.ts, and the
+ * throw was the one place it was not honored.
+ */
+function noTaskContext<T>(): ToolObservation<T> {
+  return {
+    ok: false,
+    summary: "I do not know which application this is for yet",
+    failure: {
+      kind: "precondition",
+      reason:
+        'no task context — settle which application this is about first: call list_applications and pass {"applicationId":"<id>"} with this call, or ask the user which job they mean (a conversation opened from an application carries its task automatically). If the application you pick has no agent task yet, tell the user to open its workspace once to start it. Do not call this tool again without an application.',
+    },
+  };
 }
 
 /** What a generation step produced, and what was there before it ran. */
@@ -63,7 +83,8 @@ async function runArtifactStep(
   kind: "resume" | "cover-letter",
   noun: string,
 ): Promise<ToolObservation<ArtifactRun>> {
-  const taskId = requireTaskId(ctx);
+  const taskId = ctx.taskId;
+  if (!taskId) return noTaskContext<ArtifactRun>();
   const before = getArtifact(ctx.db, taskId, kind);
   const versionsBefore = before?.versions.length ?? 0;
   await runTargetedStep(buildPipelineContext(taskId), step);
@@ -97,7 +118,11 @@ const verifyArtifactAdvanced =
   (kind: "resume" | "cover-letter") =>
   async (ctx: ToolContext, _input: void, result: unknown): Promise<boolean> => {
     const run = result as ArtifactRun | undefined;
-    const artifact = getArtifact(ctx.db, requireTaskId(ctx), kind);
+    // Unreachable in practice — `run` refuses without a task before anything is
+    // verified — but a verify that cannot read the record must say "not
+    // confirmed", never assume.
+    if (!ctx.taskId) return false;
+    const artifact = getArtifact(ctx.db, ctx.taskId, kind);
     if (!artifact || !run) return false;
     return artifact.versions.length > run.versionsBefore;
   };
@@ -148,7 +173,8 @@ export const refineArtifactTool: Tool<
     return { kind, instruction: instruction.trim() };
   },
   run: async (ctx, input) => {
-    const taskId = requireTaskId(ctx);
+    const taskId = ctx.taskId;
+    if (!taskId) return noTaskContext<ArtifactRun & { kind: string }>();
     const noun = input.kind === "resume" ? "tailored résumé" : "cover letter";
     const before = getArtifact(ctx.db, taskId, input.kind);
     if (!before) {
@@ -192,8 +218,8 @@ export const refineArtifactTool: Tool<
   // The durable check: a NEW version exists beyond what was there before.
   verify: async (ctx, input, result) => {
     const run = result as (ArtifactRun & { kind: string }) | undefined;
-    if (!run) return false;
-    const artifact = getArtifact(ctx.db, requireTaskId(ctx), input.kind);
+    if (!run || !ctx.taskId) return false;
+    const artifact = getArtifact(ctx.db, ctx.taskId, input.kind);
     return !!artifact && artifact.versions.length > run.versionsBefore;
   },
 };
@@ -224,7 +250,8 @@ export const draftAnswerTool: Tool<{ question: string; options?: string[] }, { d
     return { question: question.trim(), ...(options && options.length ? { options } : {}) };
   },
   run: async (ctx, input) => {
-    const taskId = requireTaskId(ctx);
+    const taskId = ctx.taskId;
+    if (!taskId) return noTaskContext<{ draft: string }>();
     // Same guard the panel's AI-answer flow uses: some questions must never be
     // answered on the user's behalf, drafted or not.
     if (isAutoAnswerForbidden({ label: input.question, options: input.options })) {
@@ -296,7 +323,8 @@ export const openFillTool: Tool<void, { handoffId: string }> = {
   description:
     "Create a fill ticket for the extension. Use when artifacts are ready and the form itself is the next thing that has to happen.",
   run: async (ctx) => {
-    const taskId = requireTaskId(ctx);
+    const taskId = ctx.taskId;
+    if (!taskId) return noTaskContext<{ handoffId: string }>();
     const handoff = createHandoffForTask(ctx.db, taskId);
     return { ok: true, summary: "opened a fill ticket", result: { handoffId: handoff.id } };
   },
@@ -344,7 +372,8 @@ export const markSubmittedTool: Tool<{ confirmedByUser: boolean }, { taskId: str
     return { confirmedByUser: true };
   },
   run: async (ctx) => {
-    const taskId = requireTaskId(ctx);
+    const taskId = ctx.taskId;
+    if (!taskId) return noTaskContext<{ taskId: string }>();
     // The gate is checked HERE, not only inside the service: a refusal has to
     // read as "waiting for you", not as an outage a ladder should retry.
     const key = stepKeyOf(ctx.db, taskId);
@@ -378,7 +407,8 @@ export const checkGateTool: Tool<void, { gate: string | null }> = {
   description:
     "Report whether this task is parked at a gate a human owns (the form, or submission). Call before choosing any acting tool.",
   run: async (ctx) => {
-    const key = stepKeyOf(ctx.db, requireTaskId(ctx));
+    if (!ctx.taskId) return noTaskContext<{ gate: string | null }>();
+    const key = stepKeyOf(ctx.db, ctx.taskId);
     const gate = key && HUMAN_GATES.has(key) ? key : null;
     return {
       ok: true,
