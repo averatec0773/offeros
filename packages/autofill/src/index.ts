@@ -18,6 +18,14 @@ export { pickSkillMatch, skillCandidates } from "./skill-match";
 
 export { normalizeQuestion, matchAnswer } from "./answer-match";
 
+export {
+  isTransientText,
+  isUsableLabel,
+  looksLikeCaptcha,
+  looksLikeIdentifier,
+  CAPTCHA_REASON,
+} from "./label-quality";
+
 export type { FieldDescriptor, CanonicalField } from "./classify";
 export { classifyField, isCoverLetterLabel } from "./classify";
 
