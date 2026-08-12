@@ -1,8 +1,6 @@
-import { randomUUID } from "node:crypto";
-import type { PipelineTask, JdAnalysis } from "@offeros/core";
-import type { JdAnalysisInput, JdAnalysisOutput } from "@offeros/llm";
+import type { PipelineTask } from "@offeros/core";
 import type { PipelineContext } from "../types";
-import { buildProfileFacts } from "./grounding";
+import { analyzeJd } from "../../services/jd-analysis-service";
 import { computeFit } from "../../services/fit-service";
 
 /**
@@ -16,29 +14,11 @@ export async function run(ctx: PipelineContext, task: PipelineTask): Promise<voi
   const profile = ctx.repos.getProfile();
   if (!profile) throw new Error("profile not found");
 
-  const input: JdAnalysisInput = {
-    jdText: application.jdText ?? "",
-    jobInfo: application.jobInfo,
-    profileSummary: buildProfileFacts(profile),
-  };
-  const output = (await ctx.runLlm("jd-analysis", input)) as JdAnalysisOutput;
-
-  const existing = ctx.repos.getJdAnalysis(task.applicationId);
-  const analysis: JdAnalysis = {
-    id: existing?.id ?? randomUUID(),
-    applicationId: task.applicationId,
-    summary: output.summary,
-    responsibilities: output.responsibilities,
-    requiredSkills: output.requiredSkills,
-    preferredSkills: output.preferredSkills,
-    matchNotes: output.matchNotes,
-    gaps: output.gaps,
-    coverLetterRequirement: output.coverLetterRequirement,
-    createdAt: existing?.createdAt ?? Date.now(),
-  };
-  ctx.repos.saveJdAnalysis(analysis);
+  // One definition of "an analysis" — the application page's own AI-read
+  // button runs the same service, so the two cannot drift.
+  const analysis = await analyzeJd(ctx.db, task.applicationId, { runLlm: ctx.runLlm });
   await ctx.repos.updatePipelineTask(ctx.taskId, {
-    coverLetterRequirement: output.coverLetterRequirement,
+    coverLetterRequirement: analysis.coverLetterRequirement,
   });
 
   // Fit scoring is advisory: it must never affect the step's observable outcome.

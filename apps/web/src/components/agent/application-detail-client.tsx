@@ -15,6 +15,7 @@ import {
 } from "@offeros/core";
 import type { LineDiff } from "@/lib/diff";
 import { api, isLlmNotConfigured } from "@/lib/api-client";
+import type { JdAnalysis } from "@offeros/core";
 import type { RequirementsSummary } from "@/server/services/requirements-service";
 import type { FillIncidentRow } from "@/server/repositories/form-memory-repo";
 import { extensionPresent, openFillTabViaExtension } from "@/lib/extension-bridge";
@@ -26,6 +27,7 @@ import { ArtifactViewer } from "./artifact-viewer";
 import { ConnectProviderNote } from "./connect-provider-note";
 import { FillReportCard } from "./fill-report-card";
 import { FitCard } from "./fit-card";
+import { JdCard } from "./jd-card";
 import { RequirementsCard } from "./requirements-card";
 import { TimelineCard } from "./timeline-card";
 import { TweakInput } from "./tweak-input";
@@ -68,6 +70,8 @@ export function ApplicationDetailClient({
   initialEvents,
   initialRequirements,
   initialIncidents,
+  initialJdAnalysis,
+  profileSkills,
 }: {
   application: Application;
   initialTask: PipelineTask | null;
@@ -76,12 +80,20 @@ export function ApplicationDetailClient({
   initialEvents: ApplicationEvent[];
   initialRequirements: RequirementsSummary;
   initialIncidents: FillIncidentRow[];
+  initialJdAnalysis: JdAnalysis | null;
+  /** The applicant's own skills, for the zero-cost highlighting. Passed in
+   *  rather than fetched: the page already reads the profile server-side. */
+  profileSkills: string[];
 }) {
   const [taskId, setTaskId] = useState<string | null>(initialTask?.id ?? null);
   const [task, setTask] = useState<PipelineTask | null>(initialTask);
   const [artifacts, setArtifacts] = useState<Artifact[]>(initialArtifacts);
   const [events, setEvents] = useState<ApplicationEvent[]>(initialEvents);
   const [requirements, setRequirements] = useState<RequirementsSummary>(initialRequirements);
+  const [jdText, setJdText] = useState(application.jdText ?? "");
+  const [jdAnalysis, setJdAnalysis] = useState<JdAnalysis | null>(initialJdAnalysis);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [savingJd, setSavingJd] = useState(false);
   const [fit, setFit] = useState<FitAnalysis | null>(initialFit);
   const [status, setStatus] = useState<ApplicationStatus>(application.status);
   const [resumes, setResumes] = useState<ResumeSummary[]>([]);
@@ -128,6 +140,10 @@ export function ApplicationDetailClient({
     ]);
     if (nextEvents) setEvents(nextEvents);
     if (nextRequirements) setRequirements(nextRequirements);
+    // A posting check can backfill the description, so re-read it here rather
+    // than making the user reload to see what the check found.
+    const fresh = await api.applications.get(application.id).catch(() => null);
+    if (fresh) setJdText(fresh.jdText ?? "");
     if (taskId) {
       try {
         const data = await api.pipelineTasks.get(taskId);
@@ -185,6 +201,40 @@ export function ApplicationDetailClient({
     } catch {
       setAttachResume(previous);
       setError("Couldn't update the attach choice.");
+    }
+  }
+
+  async function handleSaveJdText(text: string) {
+    const trimmed = text.trim();
+    if (trimmed === "" || savingJd) return;
+    setSavingJd(true);
+    setError(null);
+    const previous = jdText;
+    setJdText(trimmed); // optimistic
+    try {
+      await api.applications.update(application.id, { jdText: trimmed });
+      await refresh();
+    } catch {
+      setJdText(previous);
+      setError("Couldn't save the job description.");
+    } finally {
+      setSavingJd(false);
+    }
+  }
+
+  async function handleAnalyzeJd() {
+    if (analyzing) return;
+    setAnalyzing(true);
+    setError(null);
+    setShowConnectBanner(false);
+    try {
+      setJdAnalysis(await api.applications.analyzeJd(application.id));
+      await refresh();
+    } catch (err) {
+      if (isLlmNotConfigured(err)) setShowConnectBanner(true);
+      else setError(err instanceof Error ? err.message : "Couldn't read the posting.");
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -377,6 +427,18 @@ export function ApplicationDetailClient({
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_420px]">
         {/* ── The record: what has happened to this application ───────────── */}
         <div className="space-y-4">
+          <JdCard
+            jobInfo={jobInfo}
+            jdText={jdText}
+            analysis={jdAnalysis}
+            profileSkills={profileSkills}
+            onAnalyze={() => void handleAnalyzeJd()}
+            onSaveJdText={(text) => void handleSaveJdText(text)}
+            onCheckPosting={() => void handleCheck()}
+            analyzing={analyzing}
+            saving={savingJd}
+          />
+
           {actionRequired && (
             <ActionRequiredCard
               applicationInfo={actionRequired}

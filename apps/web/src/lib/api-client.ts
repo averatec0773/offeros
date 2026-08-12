@@ -93,6 +93,7 @@ export const api = {
         appliedAt: number;
       }>,
     ) => request<Application>(`/applications/${id}`, json("PATCH", patch)),
+    get: (id: string) => request<Application>(`/applications/${id}`),
     events: (id: string) => request<ApplicationEvent[]>(`/applications/${id}/events`),
     trace: (id: string) => request<TraceEntry[]>(`/applications/${id}/trace`),
     /** Track a job from its link. Returns the existing one, flagged, when the
@@ -104,6 +105,11 @@ export const api = {
       ),
     /** Check whether the posting is still up, and learn what its form asks. */
     recon: (id: string) => request<ReconResult>(`/applications/${id}/recon`, json("POST", {})),
+    /** The stored AI reading of this posting. */
+    jdAnalysis: (id: string) => request<JdAnalysis>(`/applications/${id}/jd-analysis`),
+    /** Read the posting with the model — one call, on the user's key. */
+    analyzeJd: (id: string) =>
+      request<JdAnalysis>(`/applications/${id}/jd-analysis`, json("POST", {})),
     /** What the form asks and how much of it we can already answer. */
     requirements: (id: string) => request<RequirementsSummary>(`/applications/${id}/requirements`),
     /** The generation task for this application, created on demand. The page

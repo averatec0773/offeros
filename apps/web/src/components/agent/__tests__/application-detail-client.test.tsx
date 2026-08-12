@@ -28,11 +28,13 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
         fillResolve: vi.fn(),
       },
       applications: {
+        get: vi.fn(),
         update: vi.fn(),
         events: vi.fn(),
         requirements: vi.fn(),
         recon: vi.fn(),
         ensureTask: vi.fn(),
+        analyzeJd: vi.fn(),
       },
       resumes: { list: vi.fn() },
       fit: { recompute: vi.fn() },
@@ -104,6 +106,8 @@ function mount(over: Partial<Props> = {}) {
     initialEvents: [],
     initialRequirements: requirements(),
     initialIncidents: [],
+    initialJdAnalysis: null,
+    profileSkills: [],
     ...over,
   };
   return render(<ApplicationDetailClient {...props} />);
@@ -114,6 +118,7 @@ beforeEach(() => {
   vi.mocked(api.applications.events).mockResolvedValue([]);
   vi.mocked(api.applications.requirements).mockResolvedValue(requirements());
   vi.mocked(api.applications.update).mockResolvedValue(application);
+  vi.mocked(api.applications.get).mockResolvedValue(application);
   vi.mocked(api.applications.ensureTask).mockResolvedValue({
     taskId: "t1",
     task: task(),

@@ -6,6 +6,8 @@ import { listArtifacts } from "@/server/repositories/artifact-repo";
 import { listEvents } from "@/server/repositories/application-event-repo";
 import { listIncidents } from "@/server/repositories/form-memory-repo";
 import { getFit } from "@/server/repositories/fit-repo";
+import { getJdAnalysis } from "@/server/repositories/jd-analysis-repo";
+import { getProfile } from "@/server/repositories/profile-repo";
 import { buildRequirements } from "@/server/services/requirements-service";
 import { ApplicationDetailClient } from "@/components/agent/application-detail-client";
 
@@ -34,6 +36,8 @@ export default async function ApplicationDetailPage({
       initialEvents={listEvents(db, id)}
       initialRequirements={buildRequirements(db, id)!}
       initialIncidents={listIncidents(db, id)}
+      initialJdAnalysis={getJdAnalysis(db, id)}
+      profileSkills={getProfile(db)?.skills ?? []}
     />
   );
 }
