@@ -320,10 +320,12 @@ describe("FillPanel", () => {
     expect(openWebApp).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to the workspace hint when the web app is unreachable (no instant entry)", async () => {
+  it("falls back to the not-linked-yet hint when the web app is unreachable (no instant entry)", async () => {
     renderPanel({ webReachable: false });
     expect(
-      await screen.findByText("No fill task for this page. Start one from the OfferOS workspace."),
+      await screen.findByText(
+        "This page isn't linked to an application yet. Open OfferOS and start it from there.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Fill this page with my profile" }),
@@ -397,9 +399,7 @@ describe("FillPanel", () => {
       renderPanel({ api });
       const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
       await userEvent.click(fillBtn);
-      await userEvent.click(
-        await screen.findByRole("button", { name: "Done — report to workspace" }),
-      );
+      await userEvent.click(await screen.findByRole("button", { name: "Done — save to OfferOS" }));
       await userEvent.click(
         await screen.findByRole("button", { name: "I've submitted — mark as applied" }),
       );
@@ -563,7 +563,7 @@ describe("FillPanel", () => {
       await screen.findByText("Engineer · Acme");
       // filledOnce was restored from the bundle's reports — Done is clickable
       // without re-running the fill in this session.
-      const done = await screen.findByRole("button", { name: "Done — report to workspace" });
+      const done = await screen.findByRole("button", { name: "Done — save to OfferOS" });
       expect(done).not.toBeDisabled();
       await userEvent.click(done);
       const posted = (api.postReport as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
@@ -718,14 +718,14 @@ describe("FillPanel", () => {
     const api = emptyApi();
     api.instantFill = vi.fn(async () => ({
       ok: false as const,
-      error: "already tracked in OfferOS — open the application workspace",
+      error: "This job is already in OfferOS — open it there to keep going.",
     }));
     renderPanel({ api });
     await userEvent.click(
       await screen.findByRole("button", { name: "Fill this page with my profile" }),
     );
     expect(
-      await screen.findByText("already tracked in OfferOS — open the application workspace"),
+      await screen.findByText("This job is already in OfferOS — open it there to keep going."),
     ).toBeInTheDocument();
     // Still no bundle: the instant entry stays available.
     expect(
@@ -844,10 +844,10 @@ describe("FillPanel", () => {
     expect(screen.getByDisplayValue("Because I build compilers.")).toBeInTheDocument();
 
     await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: "Done — report to workspace" }));
+      await userEvent.click(screen.getByRole("button", { name: "Done — save to OfferOS" }));
     });
     expect(api.postReport).toHaveBeenLastCalledWith("t1", expect.any(Array), true, "h1");
-    expect(await screen.findByText("Reported — check the workspace.")).toBeInTheDocument();
+    expect(await screen.findByText("Saved to OfferOS.")).toBeInTheDocument();
   });
 
   it("AI answers a required non-sensitive choice group with one of its own options, never a self-ID group", async () => {
@@ -2051,7 +2051,9 @@ describe("FillPanel", () => {
   describe("Add this job", () => {
     it("is hidden when the web app is unreachable", async () => {
       renderPanel({ webReachable: false });
-      await screen.findByText("No fill task for this page. Start one from the OfferOS workspace.");
+      await screen.findByText(
+        "This page isn't linked to an application yet. Open OfferOS and start it from there.",
+      );
       expect(screen.queryByRole("button", { name: "Add this job" })).not.toBeInTheDocument();
     });
 

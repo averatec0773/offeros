@@ -13,7 +13,6 @@ const answerRoute = await import("../agent/tasks/[id]/fill/answer/route");
 const resolveRoute = await import("../agent/tasks/[id]/fill/resolve/route");
 const pendingRoute = await import("../agent/fill/pending/route");
 const claimRoute = await import("../agent/fill/handoffs/[id]/claim/route");
-const advanceRoute = await import("../agent/tasks/[id]/advance/route");
 
 const { getDb } = await import("@/server/db/client");
 const { saveProfile } = await import("@/server/repositories/profile-repo");
@@ -278,18 +277,5 @@ describe("POST /agent/tasks/[id]/fill/resolve", () => {
   it("404s for a missing task", async () => {
     const res = await resolveRoute.POST(post({ action: "fixed" }), idCtx("does-not-exist"));
     expect(res.status).toBe(404);
-  });
-});
-
-describe("POST /agent/tasks/[id]/advance at the submit gate", () => {
-  it("completes the task and marks the application applied", async () => {
-    const { taskId, applicationId } = seedTaskAtFillForm();
-    updatePipelineTask(getDb(), taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
-    const res = await advanceRoute.POST(post(), idCtx(taskId));
-    const body = await res.json();
-    expect(res.status).toBe(200);
-    expect(body.result.status).toBe("done");
-    expect(body.result.step).toBe(PIPELINE_STEPS.length);
-    expect(getApplication(getDb(), applicationId)?.status).toBe("applied");
   });
 });

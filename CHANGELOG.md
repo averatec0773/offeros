@@ -19,6 +19,61 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-14
+
+### Fixed
+
+**"Applied" meant three different things depending on where you clicked it.**
+Marking an application as sent is five things at once: the fill ticket closes,
+the status and the date are set, the work item finishes, the timeline records
+it, and enough is kept to take it back. The button in the browser panel did all
+five. The agent's version left the ticket open, so a sent application kept
+appearing in the panel's list of forms waiting to be filled. And picking
+"Applied" from the status dropdown wrote the status and nothing else — no date,
+nothing on the timeline, the form still queued, and no way to undo it, because
+undo reads the record that path never wrote. All of them go through one place
+now, and the shortcut is refused rather than merely avoided.
+
+**Undo works from wherever you marked it,** including the status dropdown, and
+including an application that was never opened in the browser panel at all —
+added by link, filled by hand, sent. That is a real way to apply for a job.
+
+**A finished form had nothing to say and nowhere to go.** When a fill completed
+with nothing left outstanding, the page showed a count and no more; the only
+hint that it was waiting on you lived in a separate list. Pressing "Re-fill"
+from there failed every time with "Something went wrong". The page now says
+what is true at that moment — everything we could fill is filled, go and check
+it and submit it yourself — with the two things that can happen next. Filling it
+again works.
+
+**Polishing an answer after the form was filled no longer goes unrecorded.**
+Between finishing a fill and actually pressing submit you might rewrite an
+answer or fix a field by hand. Those changes reached the page but were refused
+by the record, so what OfferOS knew about the form stopped matching the form at
+exactly the moment it mattered. They are accepted now. What is still refused is
+anything arriving after you have said you submitted.
+
+**Re-filling an application you already sent asks first.** It used to quietly
+reopen the finished record while leaving it marked as applied.
+
+**Forms left half-open no longer wait forever.** If the browser panel was closed
+mid-fill, its ticket stayed open indefinitely and the application kept showing
+up as "open the page to fill it" — for a fill that ended weeks ago. Tickets more
+than a week old are now retired. And when the same form is open in two places at
+once, the second one is told, instead of the two of them silently overwriting
+each other.
+
+### Changed
+
+**The timeline says what happened in words.** Several kinds of entry were
+rendered as their internal names — `fill-handoff-created`, `instant-fill-started`
+— which is not a sentence anyone wrote for a person to read.
+
+**"Ticket created" is gone,** along with the promise attached to it. Opening a
+job from OfferOS now says what actually happened, and when the browser extension
+is not installed it says that too, instead of promising a panel that is not
+there will fill the form.
+
 ## 2026-08-13
 
 ### Added

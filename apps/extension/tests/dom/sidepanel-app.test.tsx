@@ -65,7 +65,7 @@ describe("Side panel App", () => {
     // The panel opens anywhere now, so this state is a dashboard rather than
     // the old "you're on the wrong page" apology.
     expect(await screen.findByText("Needs you")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open OfferOS" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Your applications" })).toBeInTheDocument();
     // Orientation is kept, demoted below the dashboard.
     for (const name of ["Greenhouse", "Lever", "Ashby", "Workday"]) {
       expect(screen.getByText(name)).toBeInTheDocument();

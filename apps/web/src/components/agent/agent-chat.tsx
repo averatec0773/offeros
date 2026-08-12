@@ -347,7 +347,7 @@ function StepList({
                     href={`/applications/${workspaceId}`}
                     className="font-semibold text-primary hover:underline"
                   >
-                    view in workspace →
+                    open this application →
                   </a>
                 )}
               </div>

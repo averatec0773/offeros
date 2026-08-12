@@ -347,10 +347,14 @@ describe("the header's main action", () => {
     await waitFor(() => expect(api.pipelineTasks.fillHandoff).toHaveBeenCalledWith("t1"));
   });
 
-  it("keeps the ticket confirmation where the button that made it is", async () => {
+  it("keeps the we-opened-it confirmation where the button that made it is", async () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: /Open & fill this application/i }));
-    expect(await screen.findAllByText(/Ticket created/)).not.toHaveLength(0);
+    // The copy no longer names a ticket at the user, and no longer promises
+    // the panel will pick it up when no extension answered.
+    expect(
+      await screen.findAllByText(/Opened on the job site|Opened the job site/),
+    ).not.toHaveLength(0);
   });
 
   it("is disabled, and says why, with no link to open", () => {

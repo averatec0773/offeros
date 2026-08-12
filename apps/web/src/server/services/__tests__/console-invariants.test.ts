@@ -6,13 +6,12 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PIPELINE_STEPS, type PipelineTask } from "@offeros/core";
+import { PIPELINE_STEPS } from "@offeros/core";
 import { createDb, type Db } from "../../db/client";
 import { createApplication } from "../../repositories/application-repo";
 import { createPipelineTask, updatePipelineTask } from "../../repositories/pipeline-task-repo";
 import { appendTrace, listRecentTrace } from "../../repositories/agent-trace-repo";
 import { buildInbox } from "../attention-service";
-import { runItemToGate, __resetQueueForTests } from "../queue-service";
 
 const FILL = PIPELINE_STEPS.findIndex((s) => s.key === "fill-form");
 const SUBMIT = PIPELINE_STEPS.findIndex((s) => s.key === "submit");
@@ -23,10 +22,8 @@ let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "offeros-audit-console-"));
   db = createDb(join(dir, "t.db"));
-  __resetQueueForTests();
 });
 afterEach(() => {
-  __resetQueueForTests();
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -53,17 +50,10 @@ describe("the inbox must read the CURRENT task of an application", () => {
 });
 
 describe("a fill gate the browser has never touched is the user's turn", () => {
-  it("lists an application the queue parked at the fill gate with no report", async () => {
+  it("lists an application parked at the fill gate with no report", () => {
     const id = seed("AI Engineer");
     const task = createPipelineTask(db, { applicationId: id });
-    const park = async (): Promise<PipelineTask> => {
-      updatePipelineTask(db, task.id, { step: FILL, status: "awaiting_user" });
-      return { ...task, step: FILL, status: "awaiting_user" } as PipelineTask;
-    };
-    await runItemToGate(db, id, {
-      ctxFor: () => ({}) as never,
-      runner: { startTask: park, advance: park, choose: park } as never,
-    });
+    updatePipelineTask(db, task.id, { step: FILL, status: "awaiting_user" });
 
     // applicationInfo is undefined: no fill has ever run. Nothing will happen
     // until the person opens the side panel on the apply page — yet the console

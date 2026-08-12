@@ -95,7 +95,7 @@ export function HomePanel({
             </p>
           </div>
           <Button variant="primary" className="shrink-0 rounded-full" onClick={openWebApp}>
-            Open OfferOS
+            Your applications
           </Button>
         </div>
 

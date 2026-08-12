@@ -772,12 +772,12 @@ describe("startInstantFill", () => {
     expect(bundle.applicationId).toBe(applicationId);
   });
 
-  it("refuses a mid-pipeline application instead of fighting the workspace gates", () => {
+  it("refuses a mid-pipeline application instead of fighting the state gates", () => {
     const { taskId } = seedTaskAtFillForm();
     updatePipelineTask(db, taskId, { step: 1, status: "running" });
     expect(() =>
       startInstantFill(db, { jobInfo: { ...JOB, applyLink: "https://apply.example.com/job/1" } }),
-    ).toThrow(/already tracked/);
+    ).toThrow(/already in OfferOS/);
   });
 
   it("refuses when the page URL is missing", () => {

@@ -17,7 +17,6 @@ import type {
 } from "@offeros/core";
 import type { ParsedResume } from "@offeros/llm";
 import type { StyleMemoryKind, StyleMemorySetting } from "@/server/repositories/style-memory-repo";
-import type { QueueStatus } from "@/server/services/queue-service";
 import type { AgentStep } from "@/server/agent/loop";
 import type { FillStats } from "@offeros/autofill";
 import type { TraceEntry } from "@/server/agent/types";
@@ -151,16 +150,11 @@ export const api = {
       request<{ task: PipelineTask; jdAnalysis: JdAnalysis | null; artifacts: Artifact[] }>(
         `/agent/tasks/${id}`,
       ),
-    start: (id: string) => request<PipelineTask>(`/agent/tasks/${id}/start`, json("POST", {})),
-    advance: (id: string) => request<PipelineTask>(`/agent/tasks/${id}/advance`, json("POST", {})),
     tweak: (id: string, kind: "resume" | "cover-letter", instruction: string) =>
       request<{ version: ArtifactVersion; diff: LineDiff }>(
         `/agent/tasks/${id}/tweak`,
         json("POST", { kind, instruction }),
       ),
-    choice: (id: string, choice: "skip" | "generate") =>
-      request<PipelineTask>(`/agent/tasks/${id}/choice`, json("POST", { choice })),
-    pause: (id: string) => request<PipelineTask>(`/agent/tasks/${id}/pause`, json("POST", {})),
     fillHandoff: (id: string) =>
       request<FillHandoff>(`/agent/tasks/${id}/fill/handoff`, json("POST", {})),
     fillResolve: (id: string, action: "fixed" | "applied-manually") =>
@@ -206,15 +200,6 @@ export const api = {
           at: number;
         }[]
       >(`/agent/chat/history${applicationId ? `?applicationId=${applicationId}` : ""}`),
-  },
-  queue: {
-    status: () => request<QueueStatus>(`/agent/queue`),
-    start: (applicationIds: string[]) =>
-      request<{ status: QueueStatus; skipped: { applicationId: string; reason: string }[] }>(
-        `/agent/queue`,
-        json("POST", { applicationIds }),
-      ),
-    pause: () => request<QueueStatus>(`/agent/queue/pause`, json("POST", {})),
   },
   fit: {
     recompute: (applicationId: string) =>

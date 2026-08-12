@@ -1415,7 +1415,7 @@ export function FillPanel({
             {bundle.job.title} · {bundle.job.company}
           </span>
           <span className="shrink-0 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
-            Task
+            Filling
           </span>
         </div>
       )}
@@ -1531,7 +1531,7 @@ export function FillPanel({
         ) : (
           <div className="mb-3 rounded-xl bg-bg-base p-3">
             <p className="text-caption leading-relaxed text-text-secondary">
-              No fill task for this page. Start one from the OfferOS workspace.
+              This page isn't linked to an application yet. Open OfferOS and start it from there.
             </p>
             <Button variant="primary" className="mt-2 rounded-full" onClick={openWebApp}>
               Open OfferOS
@@ -1644,7 +1644,7 @@ export function FillPanel({
         )}
         {done && !wizard && (
           <p className="mt-3 text-caption text-success">
-            Filled — review the page, then report to the workspace.
+            Filled — check the page over, then save it to OfferOS.
           </p>
         )}
         {bundle && !bundle.resumeText && (
@@ -1831,7 +1831,7 @@ export function FillPanel({
         {bundle &&
           (reported ? (
             <div className="mt-3 space-y-2">
-              <p className="text-caption text-success">Reported — check the workspace.</p>
+              <p className="text-caption text-success">Saved to OfferOS.</p>
               {submitState === "done" ? (
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-caption text-success">
@@ -1863,7 +1863,7 @@ export function FillPanel({
                 disabled={pending || !filledOnce}
                 onClick={() => void onDone()}
               >
-                Done — report to workspace
+                Done — save to OfferOS
               </Button>
               {/* A refused Done used to return in silence, which looked exactly
                   like a successful one. */}

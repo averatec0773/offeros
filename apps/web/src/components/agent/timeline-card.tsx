@@ -58,8 +58,26 @@ function describeEvent(event: ApplicationEvent): string {
     }
     case "jd-analyzed":
       return "Read the job description";
+    case "fill-handoff-created":
+      return "Opened the form to fill";
+    case "instant-fill-started":
+      return "Started filling from the browser panel";
+    case "form-memory-recorded":
+      return "Remembered what this form asked";
+    case "submission-undone":
+      return "Un-marked as submitted";
+    case "repair-attempted":
+      return "Looked for the application form";
+    case "repair-succeeded":
+      return "Found the application form";
+    case "repair-failed":
+      return "Couldn't find the application form";
     default:
-      return event.kind;
+      // A kind this build has never heard of. Better a readable guess than a
+      // raw slug: "fill-handoff-created" is not a sentence anyone wrote for a
+      // person to read, and every one of these used to reach the timeline
+      // exactly as written.
+      return event.kind.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
   }
 }
 

@@ -79,9 +79,9 @@ describe("HomePanel (the off-ATS dashboard)", () => {
     expect(await screen.findByText("1 thing waiting on you.")).toBeInTheDocument();
   });
 
-  it("Open OfferOS is always there — the jump to the web app is the point", async () => {
+  it("the jump to the web app is always there — that is the point", async () => {
     const { openWebApp } = mount({ items: [] });
-    await userEvent.click(screen.getByRole("button", { name: "Open OfferOS" }));
+    await userEvent.click(screen.getByRole("button", { name: "Your applications" }));
     expect(openWebApp).toHaveBeenCalled();
   });
 

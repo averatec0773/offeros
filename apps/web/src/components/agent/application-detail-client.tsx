@@ -474,7 +474,9 @@ export function ApplicationDetailClient({
         )}
         {ticketCreated && (
           <p className="mt-1 text-right text-caption text-muted-foreground">
-            Ticket created — the Side Panel will pick it up on the ATS page.
+            {ticketViaExtension
+              ? "Opened on the job site — the browser panel is filling it in."
+              : "Opened the job site in a new tab. Install the OfferOS browser extension and it fills the form for you."}
           </p>
         )}
 

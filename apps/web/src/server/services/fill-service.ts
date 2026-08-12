@@ -155,7 +155,7 @@ export function startInstantFill(
     if (task && task.status === "awaiting_user" && PIPELINE_STEPS[task.step]?.key === "fill-form") {
       taskId = task.id;
     } else if (task) {
-      throw new ServiceError("already tracked in OfferOS — open the application workspace");
+      throw new ServiceError("This job is already in OfferOS — open it there to keep going.");
     } else {
       taskId = createFillFirstTask(db, existing.id);
     }
