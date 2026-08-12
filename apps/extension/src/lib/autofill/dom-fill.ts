@@ -8,6 +8,15 @@ import { groupByMeta } from "./field-meta-bridge";
 import type { AtsRecipe } from "./recipes";
 import { deepQueryAll } from "./deep-query";
 import {
+  fillAriaChoice,
+  fillAriaPopup,
+  isAriaChoice,
+  isAriaPopupControl,
+  ariaControlValue,
+  ariaGroupMembers,
+  ariaOptionLabel,
+} from "./aria-driver";
+import {
   COMBOBOX_FILL,
   isComboboxResultMsg,
   SKILLS_FILL,
@@ -97,9 +106,22 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
   // it is semantically a select whose options exist only while the popup is
   // open, so the descriptor honestly carries no option list. Classification
   // still works from the label; options are matched live at fill time.
-  const type = isListboxButton(el)
+  // A control that opens a list reports as "listbox" whatever it is made of —
+  // semantically a select whose options exist only while the popup is open, so
+  // the descriptor honestly carries no option list and they are matched live at
+  // fill time. Covers Workday's button and any ARIA combobox alike; without it
+  // a `<div role="combobox">` would describe itself as type "div", which the
+  // classifier and the panel would both read as free text.
+  const isPopup = isListboxButton(el) || isAriaPopupControl(el);
+  // A declared radiogroup is a choice group, and carries its option labels —
+  // the answer bank and the AI option-picker both read those, so a group that
+  // reported itself as a bare "div" would be unanswerable by either.
+  const ariaGroup = el.getAttribute("role") === "radiogroup" ? ariaGroupMembers(el) : [];
+  const type = isPopup
     ? "listbox"
-    : (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text";
+    : ariaGroup.length > 0
+      ? "radio-group"
+      : (el.getAttribute("type") ?? el.tagName.toLowerCase()) || "text";
   const autocomplete = el.getAttribute("autocomplete") ?? "";
   const fieldId = stableFieldId(`${type}|${name}|${label}|${autocomplete}`, used);
   el.setAttribute("data-offeros-id", fieldId);
@@ -119,7 +141,13 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
     // The label association is authoritative for these; drop the aria-label.
     ariaLabel: type === "listbox" ? "" : (el.getAttribute("aria-label") ?? ""),
     required: isRequired(el, label) || titleRequired,
-    currentValue: currentValueOf(el, type),
+    ...(ariaGroup.length > 0 ? { options: ariaGroup.map(ariaOptionLabel).filter(Boolean) } : {}),
+    currentValue:
+      ariaGroup.length > 0
+        ? (ariaGroup.find((m) => m.getAttribute("aria-checked") === "true")?.textContent ?? "")
+            .replace(/\s+/g, " ")
+            .trim()
+        : currentValueOf(el, type),
   };
 }
 
@@ -130,7 +158,9 @@ function currentValueOf(el: HTMLElement, type: string): string {
     const f = (el as HTMLInputElement).files?.[0];
     return f ? f.name : "";
   }
-  if (type === "listbox") return listboxButtonValue(el);
+  if (type === "listbox") {
+    return isListboxButton(el) ? listboxButtonValue(el) : ariaControlValue(el);
+  }
   const v = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
   return typeof v === "string" ? v : "";
 }
@@ -686,6 +716,34 @@ export async function applyFillDetailed(
         outcomes.set(fieldId, "filled");
       } else {
         outcomes.set(fieldId, "failed");
+      }
+      continue;
+    }
+    // The generic layer, AFTER every site-specific driver above. Those are
+    // faster and more precise where they apply; this only sees a control none
+    // of them recognised. It goes by what the page declared about itself in
+    // ARIA — the one description a custom widget usually supplies whatever it
+    // was built out of — and, like every path here, reports only what the page
+    // confirms.
+    if (el && isAriaPopupControl(el)) {
+      const res = await fillAriaPopup(el, value);
+      if (res.ok) {
+        highlight(el);
+        filled++;
+        outcomes.set(fieldId, "filled");
+      } else {
+        outcomes.set(fieldId, { outcome: "failed", reason: res.reason ?? "" });
+      }
+      continue;
+    }
+    if (el && isAriaChoice(el)) {
+      const res = await fillAriaChoice(el, value);
+      if (res.ok) {
+        highlight(el);
+        filled++;
+        outcomes.set(fieldId, "filled");
+      } else {
+        outcomes.set(fieldId, { outcome: "failed", reason: res.reason ?? "" });
       }
       continue;
     }

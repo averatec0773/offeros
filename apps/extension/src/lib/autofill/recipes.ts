@@ -79,7 +79,12 @@ export const GENERIC_RECIPE: AtsRecipe = {
   atsId: "generic",
   urlPatterns: [],
   formSelector: "form",
-  fieldSelector: FIELDS,
+  // Native controls plus the ARIA ones. A site nobody wrote a driver for is
+  // exactly where a custom widget is likeliest, and a widget the scan never
+  // sees is a field the panel cannot even tell the user about. Roles only —
+  // no class names, no framework internals; whatever the page published about
+  // itself for a screen reader is all this knows.
+  fieldSelector: `${FIELDS}, [role="combobox"], [role="listbox"], [aria-haspopup="listbox"], [aria-haspopup="menu"], [role="radiogroup"]`,
 };
 
 /**

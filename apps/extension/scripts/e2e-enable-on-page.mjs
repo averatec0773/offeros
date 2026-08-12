@@ -20,8 +20,37 @@ const FORM = `<!doctype html><html><head><title>Apply — Example Systems</title
   <label for="n">Full name *</label><input id="n" name="name" type="text" required />
   <label for="p">Phone</label><input id="p" name="phone" type="tel" />
   <label for="r">Resume/CV</label><input id="r" name="resume" type="file" aria-label="Resume/CV" />
+  <span id="cq">Country</span>
+  <div id="cb" role="combobox" aria-labelledby="cq" aria-expanded="false" tabindex="0">Select one</div>
   <button type="submit">Submit application</button>
-</form></main></body></html>`;
+</form>
+<script>
+  // A custom dropdown built the way most of them are: ARIA roles, and a
+  // listbox portalled to the end of <body>. No framework, no adapter — this
+  // is what the generic driver has to cope with.
+  var cb = document.getElementById("cb");
+  cb.addEventListener("click", function () {
+    if (document.getElementById("lb")) return;
+    var lb = document.createElement("div");
+    lb.id = "lb";
+    lb.setAttribute("role", "listbox");
+    ["United States", "Canada", "Germany"].forEach(function (name) {
+      var o = document.createElement("div");
+      o.setAttribute("role", "option");
+      o.setAttribute("aria-selected", "false");
+      o.textContent = name;
+      o.addEventListener("click", function () {
+        cb.textContent = name;
+        cb.setAttribute("aria-expanded", "false");
+        lb.remove();
+      });
+      lb.appendChild(o);
+    });
+    document.body.appendChild(lb);
+    cb.setAttribute("aria-expanded", "true");
+  });
+</script>
+</main></body></html>`;
 
 const log = (k, v) => console.log(`E2E ${k}: ${v}`);
 let ctx;
@@ -118,6 +147,23 @@ try {
     log("fill_filled", fill?.filled);
     const written = await page.evaluate(() => document.querySelector('input[name="email"]').value);
     check("dom_value_written", written, "jordan@example.com");
+  }
+
+  // 4b) The generic ARIA driver, on a widget nobody wrote a driver for.
+  const comboId = scan?.ok ? scan.descriptors.find((d) => d.type === "listbox")?.fieldId : null;
+  check("aria_combobox_scanned_as_listbox", comboId != null, true);
+  if (comboId) {
+    const comboFill = await sw.evaluate(
+      async ({ id, fid }) =>
+        await chrome.tabs.sendMessage(id, {
+          kind: "OFFEROS_ENGINE_FILL",
+          values: [{ fieldId: fid, value: "Canada" }],
+        }),
+      { id: tabId, fid: comboId },
+    );
+    log("aria_combobox_filled", comboFill?.filled);
+    const shown = await page.evaluate(() => document.getElementById("cb").textContent);
+    check("aria_combobox_committed", shown, "Canada");
   }
 
   // 5) MAIN-world driver present in the page's own world — the half that
