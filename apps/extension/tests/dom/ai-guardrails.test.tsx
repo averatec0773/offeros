@@ -108,9 +108,9 @@ const api = (): FillApi => ({
     ok: true as const,
     value: { answer: "Yes, I am authorized." },
   })),
-  classifyFields: vi.fn(async () => ({
+  analyzeFields: vi.fn(async () => ({
     ok: true as const,
-    value: { resolutions: [], considered: 0, classified: 0 },
+    value: { fields: [], summary: "" },
   })),
   saveJdFromPage: vi.fn(async () => ({ ok: true as const, value: {} })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({

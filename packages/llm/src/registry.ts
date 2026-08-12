@@ -6,7 +6,7 @@ import { questionAnswerTask } from "./tasks/question-answer.task";
 import { resumeParseTask } from "./tasks/resume-parse.task";
 import { fitAnalysisTask } from "./tasks/fit-analysis.task";
 import { styleDistillTask } from "./tasks/style-distill.task";
-import { fieldClassifyTask } from "./tasks/field-classify.task";
+import { fieldAnalyzeTask } from "./tasks/field-analyze.task";
 
 export const TASKS: Record<TaskId, LlmTask> = {
   "resume-tailor": resumeTailorTask as LlmTask,
@@ -16,7 +16,7 @@ export const TASKS: Record<TaskId, LlmTask> = {
   "resume-parse": resumeParseTask as LlmTask,
   "fit-analysis": fitAnalysisTask as LlmTask,
   "style-distill": styleDistillTask as LlmTask,
-  "field-classify": fieldClassifyTask as LlmTask,
+  "field-analyze": fieldAnalyzeTask as LlmTask,
 };
 
 export function getTask(id: string): LlmTask | null {

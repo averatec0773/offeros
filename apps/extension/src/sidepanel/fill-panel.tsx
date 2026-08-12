@@ -30,7 +30,13 @@ import type {
   CaptureJdResponse,
   AttachFileResponse,
 } from "../lib/autofill/autofill-messaging";
-import type { FieldReport, FileFetchResult, FillTaskBundle, FitSummary } from "../lib/offeros-api";
+import type {
+  AnalyzedField,
+  FieldReport,
+  FileFetchResult,
+  FillTaskBundle,
+  FitSummary,
+} from "../lib/offeros-api";
 import {
   buildFieldReports,
   isCoverLetterField,
@@ -40,7 +46,6 @@ import {
   NO_FILE_REASON,
   RENDER_FAILED_REASON,
   FILE_KIND_SOURCE,
-  applyAiResolutions,
   handoverList,
   type WriteOutcome,
 } from "../lib/autofill/task-mode";
@@ -226,9 +231,15 @@ export function FillPanel({
    */
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [aiSummary, setAiSummary] = useState<{ considered: number; classified: number } | null>(
-    null,
-  );
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  /**
+   * What the agent suggests for fields the engine could not fill.
+   *
+   * Held rather than written: a value derived from someone's own history is
+   * still theirs to approve, and the reason beside it is what makes approving
+   * it an informed act rather than a leap of faith.
+   */
+  const [suggestions, setSuggestions] = useState<Map<string, AnalyzedField>>(new Map());
   const aiAppliedRef = useRef<Set<string>>(new Set());
   /** Per-field refine: which row is open, what was typed, which row is running,
    *  and what went wrong on it. Keyed by fieldId so two rows never share state. */
@@ -340,6 +351,18 @@ export function FillPanel({
     for (const r of reports) reportsRef.current.set(reportKey(r), r);
   };
   const allReports = () => Array.from(reportsRef.current.values());
+
+  /**
+   * A field the agent could usefully look at: the engine did not recognise it,
+   * or recognised it and had no value. A CAPTCHA and the guarded questions are
+   * excluded here as well as server-side — offering to analyse something that
+   * will always come back "yours to answer" wastes the applicant's money.
+   */
+  const outstanding = (item: FillItem): boolean => {
+    if (item.captcha === true) return false;
+    if (item.status === "fillable") return false;
+    return item.status === "unknown" || item.status === "needs-answer";
+  };
   const resetArtifactLanes = () => {
     resumeLane.reset();
     coverLane.reset();
@@ -1332,7 +1355,7 @@ export function FillPanel({
   // What the AI read would actually be given: the fields the deterministic
   // engine gave up on. Shown next to the button so pressing it is an informed
   // choice about spending, not a guess.
-  const unrecognised = plan.filter((i) => i.status === "unknown").length;
+  const unrecognised = plan.filter((i) => outstanding(i)).length;
   // Built from the reports a run actually produced, not from the plan alone, so
   // a field the engine meant to fill and the page refused lands here too. Only
   // after a run: telling someone to fill six fields in before anything has been
@@ -1359,51 +1382,131 @@ export function FillPanel({
    * ordinary fill, so every value still goes through the same verified DOM
    * write as any other. Nothing the model wrote is typed into the page.
    */
-  const runAiClassify = async () => {
+  /**
+   * The fields the deterministic engine could not fill, sent to the agent.
+   *
+   * The lane this replaces asked a model "which canonical field name is this?"
+   * and showed it nothing about the applicant — useful for `Telefonnummer`,
+   * useless for "which of your projects is most relevant to this role?". The
+   * server now hands over the profile, the résumé, the job description and the
+   * saved answers, which is what makes the second question answerable.
+   *
+   * Nothing is written here. Suggestions land in a list the applicant reads
+   * and applies one at a time or all at once, because a value produced from
+   * their history is still theirs to approve.
+   */
+  const runAnalysis = async (opts?: { onlyFieldId?: string; instruction?: string }) => {
     const b = bundleRef.current;
     if (!b || aiBusy || pendingRef.current || !scanResult.ok) return;
     setAiBusy(true);
     setAiError(null);
     try {
       const descriptorById = new Map(scanResult.descriptors.map((d) => [d.fieldId, d]));
-      const fields = plan
-        .filter((i) => i.status === "unknown")
-        .map((i) => {
-          const d = descriptorById.get(i.fieldId);
-          return {
-            fieldId: i.fieldId,
-            label: i.label,
-            type: d?.type ?? "text",
-            options: d?.options,
-            currentStatus: i.status,
-            required: i.required,
-            // Only present when the page never named this field — which is
-            // exactly when an id alone would tell the model nothing.
-            ...(d?.contextText ? { contextText: d.contextText } : {}),
-          };
-        });
+      const wanted = opts?.onlyFieldId
+        ? plan.filter((i) => i.fieldId === opts.onlyFieldId)
+        : plan.filter((i) => outstanding(i));
+      const fields = wanted.map((i) => {
+        const d = descriptorById.get(i.fieldId);
+        return {
+          fieldId: i.fieldId,
+          label: i.label,
+          type: d?.type ?? "text",
+          options: d?.options,
+          required: i.required,
+          ...(d?.sectionName ? { sectionLabel: d.sectionName } : {}),
+          ...(i.historyRow ? { rowIndex: i.historyRow.index } : {}),
+          ...(d?.currentValue ? { currentValue: d.currentValue } : {}),
+        };
+      });
       if (fields.length === 0) {
-        setAiError("Nothing left for AI to read — every field here is already recognised.");
+        setAiError("Nothing outstanding on this page.");
         return;
       }
-      const res = await api.classifyFields(b.taskId, fields);
+      const res = await api.analyzeFields(b.taskId, {
+        handoffId: b.handoffId,
+        fields,
+        ...(opts?.instruction ? { instruction: opts.instruction } : {}),
+      });
       if (!res.ok) {
         setAiError(res.error);
         return;
       }
-      const { resolutions, considered, classified } = res.value;
-      const merged = applyAiResolutions(plan, traceRef.current, resolutions);
-      for (const id of merged.applied) aiAppliedRef.current.add(id);
-      setPlan(merged.plan);
-      traceRef.current = merged.trace;
-      setAiSummary({ considered, classified });
-      if (merged.applied.size > 0) {
-        await taskFillPage(merged.plan, scanResult, merged.trace);
-      }
+      setSuggestions((prev) => {
+        const next = new Map(prev);
+        for (const f of res.value.fields) next.set(f.fieldId, f);
+        return next;
+      });
+      setAiSummary(res.value.summary);
     } finally {
       setAiBusy(false);
     }
   };
+
+  /** Write one suggestion into the page, through the ordinary verified path. */
+  const applySuggestion = async (fieldId: string) => {
+    const b = bundleRef.current;
+    const suggestion = suggestions.get(fieldId);
+    if (!b || !suggestion?.value) return;
+    if (!(await writeOne(fieldId, suggestion.value))) {
+      setAiError("The page didn't take that value — copy it in yourself.");
+      return;
+    }
+    markWritten(fieldId, suggestion.value);
+    let updated = false;
+    for (const [k, r] of reportsRef.current) {
+      if (r.fieldId === fieldId) {
+        reportsRef.current.set(k, {
+          ...r,
+          value: suggestion.value,
+          outcome: "filled",
+          source: "agent",
+          reason: suggestion.reason,
+        });
+        updated = true;
+      }
+    }
+    if (!updated) {
+      // Analysing before any fill run leaves no row to update, and a value
+      // written to the page with no report is a value the workspace never
+      // learns about. Build the row from the trace, which is what the ordinary
+      // report path builds from too.
+      const t = traceRef.current.find((x) => x.fieldId === fieldId);
+      const item = plan.find((i) => i.fieldId === fieldId);
+      const row: FieldReport = {
+        fieldId,
+        label: item?.label ?? t?.label ?? fieldId,
+        classifiedType: t?.classifiedType ?? "unknown",
+        status: t?.status ?? "needs-answer",
+        value: suggestion.value,
+        source: "agent",
+        reason: suggestion.reason,
+        outcome: "filled",
+        required: item?.required === true,
+        ...(pageIdRef.current ? { page: pageIdRef.current } : {}),
+        ...(t?.questionKey ? { questionKey: t.questionKey } : {}),
+      };
+      reportsRef.current.set(reportKey(row), row);
+    }
+    await api.postReport(b.taskId, allReports(), false, b.handoffId);
+    setSuggestions((prev) => {
+      const next = new Map(prev);
+      next.delete(fieldId);
+      return next;
+    });
+  };
+
+  const applyAllSuggestions = async () => {
+    for (const [fieldId, s] of [...suggestions]) {
+      if (s.value) await applySuggestion(fieldId);
+    }
+  };
+
+  const dismissSuggestion = (fieldId: string) =>
+    setSuggestions((prev) => {
+      const next = new Map(prev);
+      next.delete(fieldId);
+      return next;
+    });
 
   /**
    * Send the description as the browser sees it.
@@ -1686,43 +1789,100 @@ export function FillPanel({
             remains as the loud case; the button is always here. */}
         {bundle && (
           <div className="mb-2 space-y-1.5 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
-            {drift && !aiSummary && (
+            {aiSummary ? (
+              <p className="text-caption text-text-secondary">{aiSummary}</p>
+            ) : drift ? (
               <p className="text-caption text-warning">
                 Most fields here weren't recognized — this form doesn't look like one OfferOS knows.
               </p>
-            )}
-            {!drift && !aiSummary && (
+            ) : (
               <p className="text-caption text-text-secondary">
                 {unrecognised > 0
-                  ? `${unrecognised} field${unrecognised === 1 ? "" : "s"} OfferOS couldn't place.`
-                  : "Every field here was recognised."}
-              </p>
-            )}
-            {aiSummary && (
-              <p className="text-caption text-text-secondary">
-                AI read {aiSummary.considered} unrecognised field
-                {aiSummary.considered === 1 ? "" : "s"} and placed {aiSummary.classified}.
+                  ? `${unrecognised} field${unrecognised === 1 ? "" : "s"} left for you.`
+                  : "Every field here is filled or accounted for."}
               </p>
             )}
             {aiError && <p className="text-caption text-warning">{aiError}</p>}
-            <button
-              type="button"
-              onClick={() => void runAiClassify()}
-              disabled={aiBusy || pending}
-              title={SPEND_TITLE}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 text-caption font-semibold text-text-primary transition-[color,transform] duration-fast ease-out-strong hover:bg-bg-base active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
-            >
-              <SpendMark />
-              {/* A constant label: the count lives in the line above, where it
-                  can change without the button becoming a moving target. */}
-              {aiBusy
-                ? "Reading the form…"
-                : aiSummary
-                  ? "Read it again"
-                  : "Have AI read this form"}
-            </button>
+            {unrecognised > 0 && (
+              <button
+                type="button"
+                onClick={() => void runAnalysis()}
+                disabled={aiBusy || pending}
+                title={SPEND_TITLE}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 text-caption font-semibold text-text-primary transition-[color,transform] duration-fast ease-out-strong hover:bg-bg-base active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
+              >
+                <SpendMark />
+                {aiBusy
+                  ? "Reading your profile and the job…"
+                  : `AI analyse the remaining ${unrecognised} field${unrecognised === 1 ? "" : "s"}`}
+              </button>
+            )}
           </div>
         )}
+
+        {/* What the agent came back with. Held rather than written: a value
+            derived from someone's own history is still theirs to approve, and
+            the reason beside it is what makes approving it informed. */}
+        {suggestions.size > 0 && (
+          <div className="mb-2 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+                Suggestions
+              </p>
+              {[...suggestions.values()].some((v) => v.value) && (
+                <button
+                  type="button"
+                  onClick={() => void applyAllSuggestions()}
+                  className="rounded-full border border-border-subtle px-2.5 py-0.5 text-micro font-semibold text-text-primary transition-colors hover:bg-bg-base"
+                >
+                  Apply all
+                </button>
+              )}
+            </div>
+            <ul className="space-y-2">
+              {[...suggestions.entries()].map(([fieldId, s]) => (
+                <li key={fieldId} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => jumpToField(fieldId)}
+                    className="block w-full truncate text-left text-caption font-medium text-text-primary hover:underline"
+                  >
+                    {plan.find((i) => i.fieldId === fieldId)?.label || fieldId}
+                  </button>
+                  {s.value ? (
+                    <p className="rounded-lg bg-bg-base px-2 py-1 text-caption text-text-primary">
+                      {s.value}
+                    </p>
+                  ) : (
+                    <p className="text-caption text-warning">This one is yours to answer.</p>
+                  )}
+                  {/* Where it came from. A value with no traceable source never
+                      reaches this list, so the reason is always a real one. */}
+                  <p className="text-micro text-text-tertiary">{s.reason}</p>
+                  <div className="flex gap-2">
+                    {s.value && (
+                      <button
+                        type="button"
+                        onClick={() => void applySuggestion(fieldId)}
+                        className="rounded-full border border-border-subtle px-2.5 py-0.5 text-micro font-semibold text-text-primary transition-colors hover:bg-bg-base"
+                      >
+                        Apply
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => dismissSuggestion(fieldId)}
+                      className="rounded-full px-2.5 py-0.5 text-micro text-text-secondary transition-colors hover:text-text-primary"
+                    >
+                      {s.value ? "Ignore" : "Dismiss"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* The description, from the page the user is actually looking at. The
             server can only fetch; on a page built in the browser that returns a
             blurb. This is the only place standing in the right browser. */}

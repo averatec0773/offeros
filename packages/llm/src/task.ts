@@ -6,7 +6,7 @@ export type TaskId =
   | "resume-parse"
   | "fit-analysis"
   | "style-distill"
-  | "field-classify";
+  | "field-analyze";
 
 export interface LlmTask<Input = unknown, Output = unknown> {
   id: TaskId;

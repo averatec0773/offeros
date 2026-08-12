@@ -16,7 +16,7 @@ import {
 import {
   claim,
   computeFit,
-  classifyFields,
+  analyzeFields,
   createAnswer,
   createTaskFromJd,
   fetchArtifactPdf,
@@ -53,7 +53,7 @@ const api = {
   postReport,
   postEvidence,
   generateAnswer,
-  classifyFields,
+  analyzeFields,
   findApplicationsByJobUrl,
   createTaskFromJd,
   instantFill,

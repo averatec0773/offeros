@@ -134,9 +134,9 @@ const emptyApi = (): FillApi => ({
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
   postEvidence: vi.fn(async () => ({ ok: true as const, value: { file: "", bytes: 0 } })),
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
-  classifyFields: vi.fn(async () => ({
+  analyzeFields: vi.fn(async () => ({
     ok: true as const,
-    value: { resolutions: [], considered: 0, classified: 0 },
+    value: { fields: [], summary: "" },
   })),
   saveJdFromPage: vi.fn(async () => ({ ok: true as const, value: {} })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({

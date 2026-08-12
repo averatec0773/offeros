@@ -8,8 +8,8 @@ import type {
   FillTicket,
   FitSummary,
   ReportResult,
+  AnalyzedField,
 } from "../../lib/offeros-api";
-import type { AiResolution } from "../../lib/autofill/task-mode";
 
 /** The web-app fill API the panel talks to. Injected so tests can supply fakes. */
 export interface FillApi {
@@ -40,22 +40,26 @@ export interface FillApi {
     },
   ) => Promise<ApiResult<{ answer: string }>>;
   /**
-   * The AI fallback classifier. Sends descriptions of the fields the
-   * deterministic engine could not read; gets back mappings the server has
-   * already resolved into values and run the guards over.
+   * Ask the agent to fill the fields the engine could not, from the
+   * applicant's own profile, résumé, job description and saved answers.
    */
-  classifyFields: (
+  analyzeFields: (
     taskId: string,
-    fields: {
-      fieldId: string;
-      label: string;
-      type: string;
-      options?: string[];
-      currentStatus: string;
-      required?: boolean;
-      contextText?: string;
-    }[],
-  ) => Promise<ApiResult<{ resolutions: AiResolution[]; considered: number; classified: number }>>;
+    body: {
+      handoffId?: string;
+      fields: {
+        fieldId: string;
+        label: string;
+        type: string;
+        options?: string[];
+        required?: boolean;
+        sectionLabel?: string;
+        rowIndex?: number;
+        currentValue?: string;
+      }[];
+      instruction?: string;
+    },
+  ) => Promise<ApiResult<{ fields: AnalyzedField[]; summary: string }>>;
   /** Store this page's rendered description against the application. */
   saveJdFromPage: (applicationId: string, jdText: string) => Promise<ApiResult<unknown>>;
   findApplicationsByJobUrl: (jobUrl: string) => Promise<ApiResult<ApplicationSummary[]>>;

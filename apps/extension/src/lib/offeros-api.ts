@@ -7,7 +7,6 @@ import type {
   FillHandoff,
   FitAnalysis,
 } from "@offeros/core";
-import type { AiResolution } from "./autofill/task-mode";
 import { settings } from "./settings";
 
 /**
@@ -272,31 +271,44 @@ export function generateAnswer(
   );
 }
 
+/** One field, as the analysis lane answers it. */
+export interface AnalyzedField {
+  fieldId: string;
+  value: string | null;
+  source: "agent";
+  reason: string;
+  needsUser?: true;
+}
+
 /**
- * Ask the web app's AI fallback classifier what the fields the deterministic
- * engine could not read are asking for.
+ * Ask the agent to fill the fields the engine could not.
  *
- * Sends descriptions, never values, and gets back MAPPINGS the server has
- * already resolved against the profile — the panel writes the resolved values
- * through its ordinary verified DOM path. Costs a model call, so it only ever
- * runs from a button the user pressed.
+ * Unlike the classifier this replaces, the server hands the model the
+ * applicant's own material — profile, résumé, job description, saved answers —
+ * so "which of your projects is most relevant here?" is answerable at all.
+ * Costs a model call, so it only ever runs from a button the user pressed.
  */
-export function classifyFields(
+export function analyzeFields(
   taskId: string,
-  fields: {
-    fieldId: string;
-    label: string;
-    type: string;
-    options?: string[];
-    currentStatus: string;
-    required?: boolean;
-    contextText?: string;
-  }[],
+  body: {
+    handoffId?: string;
+    fields: {
+      fieldId: string;
+      label: string;
+      type: string;
+      options?: string[];
+      required?: boolean;
+      sectionLabel?: string;
+      rowIndex?: number;
+      currentValue?: string;
+    }[];
+    instruction?: string;
+  },
   fetchImpl: typeof fetch = fetch,
-): Promise<ApiResult<{ resolutions: AiResolution[]; considered: number; classified: number }>> {
-  return call<{ resolutions: AiResolution[]; considered: number; classified: number }>(
-    `/agent/tasks/${taskId}/fill/classify`,
-    json("POST", { fields }),
+): Promise<ApiResult<{ fields: AnalyzedField[]; summary: string }>> {
+  return call<{ fields: AnalyzedField[]; summary: string }>(
+    `/agent/tasks/${taskId}/fill/analyze`,
+    json("POST", body),
     fetchImpl,
   );
 }
