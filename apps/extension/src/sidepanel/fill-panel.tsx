@@ -41,6 +41,7 @@ import {
   RENDER_FAILED_REASON,
   FILE_KIND_SOURCE,
   applyAiResolutions,
+  handoverList,
   type WriteOutcome,
 } from "../lib/autofill/task-mode";
 
@@ -1268,6 +1269,12 @@ export function FillPanel({
     (i) => i.status === "unknown" && !satisfiedByPage.has(i.fieldId),
   ).length;
   const drift = plan.length > 0 && classifiedRatio(plan) < 0.3;
+  // Built from the reports a run actually produced, not from the plan alone, so
+  // a field the engine meant to fill and the page refused lands here too. Only
+  // after a run: telling someone to fill six fields in before anything has been
+  // attempted would be describing work that may not be theirs.
+  const handover =
+    reportsRef.current.size > 0 ? handoverList(plan, allReports(), satisfiedByPage) : [];
 
   // Panel row → page glue. traceRef is written together with `plan`, so at
   // render time the reasons match the rows being shown.
@@ -1554,6 +1561,38 @@ export function FillPanel({
           </div>
         )}
         {plan.length > 0 && <CoverageBar coverage={fillCoverage(plan, satisfiedByPage)} />}
+        {/* What is left for the person. A fill that stops short used to say so
+            only by omission — the counts moved, some rows stayed pale, and
+            nothing stated plainly that four fields were theirs. On a long form
+            that silence reads as completion. */}
+        {handover.length > 0 && (
+          <div className="mt-3 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+            <p className="mb-1.5 text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+              You'll need to fill {handover.length === 1 ? "this one" : `these ${handover.length}`}
+            </p>
+            <ul className="space-y-1">
+              {handover.map((f) => (
+                <li key={f.fieldId}>
+                  <button
+                    type="button"
+                    onClick={() => jumpToField(f.fieldId)}
+                    className="w-full rounded-lg px-1 py-0.5 text-left transition-colors duration-fast hover:bg-bg-base"
+                  >
+                    <span className="block truncate text-caption text-text-primary">{f.label}</span>
+                    {f.reason && (
+                      <span className="block truncate text-micro text-text-tertiary">
+                        {f.reason}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-micro text-text-tertiary">
+              Click one to jump to it on the page.
+            </p>
+          </div>
+        )}
         <FieldGroup
           title="Required"
           items={plan.filter((i) => i.required)}

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { FieldTrace } from "@offeros/autofill";
+import type { FieldTrace, FillItem } from "@offeros/autofill";
 import {
   matchHandoff,
   buildFieldReports,
+  handoverList,
   isCoverLetterField,
   isTextAnswerTarget,
   NO_FILE_REASON,
   CUSTOM_UPLOADER_REASON,
 } from "../src/lib/autofill/task-mode";
-import type { FillTicket } from "../src/lib/offeros-api";
+import type { FieldReport, FillTicket } from "../src/lib/offeros-api";
 import { jobIdFromUrl } from "../src/lib/autofill/recipes";
 
 const ticket = (over: Partial<FillTicket>): FillTicket => ({
@@ -422,5 +423,101 @@ describe("writeOne outcome mapping (caller-path contract)", () => {
   });
   it("treats an explicit 'failed' outcome as not filled", () => {
     expect(writeOneOutcome(new Map([["f1", "failed"]]), "f1")).toBe(false);
+  });
+});
+
+/**
+ * The handover list: the fields a run did not finish, stated plainly.
+ *
+ * The failure it exists for is silence. A fill that stops short says so only by
+ * omission — counts move, some rows stay pale — and on a long form that reads as
+ * completion, which is how an application gets submitted with required fields
+ * empty.
+ */
+describe("handoverList", () => {
+  const item = (fieldId: string, status: FillItem["status"], label = fieldId): FillItem => ({
+    fieldId,
+    label,
+    status,
+    value: "",
+    source: "none",
+    required: true,
+  });
+
+  const report = (
+    fieldId: string,
+    outcome: FieldReport["outcome"],
+    reason = "because",
+  ): FieldReport => ({
+    fieldId,
+    label: fieldId,
+    classifiedType: "unknown",
+    status: "unknown",
+    source: "none",
+    reason,
+    outcome,
+    required: true,
+  });
+
+  it("lists what the run left for the user, in page order", () => {
+    const plan = [
+      item("a", "fillable"),
+      item("b", "unknown"),
+      item("c", "needs-answer"),
+      item("d", "fillable"),
+    ];
+    const reports = [
+      report("a", "filled"),
+      report("b", "needs-user", "AI couldn't tell what this is asking for."),
+      report("c", "needs-user"),
+      report("d", "failed", "The page cleared this field."),
+    ];
+    const out = handoverList(plan, reports, new Set());
+    expect(out.map((f) => f.fieldId)).toEqual(["b", "c", "d"]);
+    expect(out[0]!.reason).toContain("couldn't tell");
+    expect(out[2]!.reason).toContain("cleared");
+  });
+
+  it("a failed write is the user's problem too, not just an unrecognised field", () => {
+    // Both end the same way for the person in front of the form: an empty box.
+    const out = handoverList([item("a", "fillable")], [report("a", "failed")], new Set());
+    expect(out).toHaveLength(1);
+  });
+
+  it("never lists a field the page already holds a value for", () => {
+    // Asking someone to fill in what they already filled in is the same lie as
+    // claiming an empty field is done, pointing the other way.
+    const out = handoverList(
+      [item("a", "unknown"), item("b", "unknown")],
+      [report("a", "needs-user"), report("b", "needs-user")],
+      new Set(["a"]),
+    );
+    expect(out.map((f) => f.fieldId)).toEqual(["b"]);
+  });
+
+  it("a filled field never appears", () => {
+    expect(handoverList([item("a", "fillable")], [report("a", "filled")], new Set())).toEqual([]);
+  });
+
+  it("a required field nobody could place appears, even though it reports skipped", () => {
+    // `skipped` is one word for two things: a control we correctly left alone,
+    // and a field nothing could read. A required one is the user's either way.
+    const out = handoverList([item("a", "unknown")], [report("a", "skipped")], new Set());
+    expect(out.map((f) => f.fieldId)).toEqual(["a"]);
+  });
+
+  it("an OPTIONAL control we left alone is not work, and is not listed", () => {
+    const optional = { ...item("a", "unknown"), required: false };
+    expect(handoverList([optional], [report("a", "skipped")], new Set())).toEqual([]);
+  });
+
+  it("falls back to the plan when a field produced no report at all", () => {
+    const out = handoverList([item("a", "unknown"), item("b", "fillable")], [], new Set());
+    expect(out.map((f) => f.fieldId)).toEqual(["a"]);
+    expect(out[0]!.reason).toBe("");
+  });
+
+  it("a field that filled is never listed, whatever its plan status said", () => {
+    expect(handoverList([item("a", "unknown")], [report("a", "filled")], new Set())).toEqual([]);
   });
 });

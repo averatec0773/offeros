@@ -317,8 +317,13 @@ export function applyAiResolutions(
   });
 
   const nextTrace = trace.map((t): FieldTrace => {
-    if (!applied.has(t.fieldId)) return t;
-    const r = byId.get(t.fieldId)!;
+    const r = byId.get(t.fieldId);
+    if (!r) return t;
+    // A field the model could not place still gets its REASON updated, without
+    // its status or value moving. "AI couldn't tell what this is asking for"
+    // is the truth about that field now; leaving the engine's "no classifier
+    // match → left unknown" would describe a step that has since been retried.
+    if (!applied.has(t.fieldId)) return { ...t, reason: r.reason };
     return { ...t, status: r.status, chosenValue: r.value, source: r.source, reason: r.reason };
   });
 
@@ -326,19 +331,43 @@ export function applyAiResolutions(
 }
 
 /**
- * Fields still on the user: the classifier could not place them, or a guard
- * refused to let anything place them. Returned in the order they appear on the
- * page so the list reads top to bottom like the form does.
+ * What is left for the person to type.
+ *
+ * A fill that stops short currently says so only by omission: the counts move,
+ * some rows in the field list stay pale, and nothing anywhere states plainly
+ * "these four are yours." On a long form that silence reads as completion, and
+ * the application gets submitted with required fields empty.
+ *
+ * So this is the explicit list. A field belongs on it when the page does not
+ * already hold a value for it AND either the last report said it needs the user
+ * or the write failed, or there is no report and the engine never worked out
+ * what it was. Page order, because the user is going to walk the form.
+ *
+ * Fields the page already holds are never listed, whoever put the value there —
+ * asking someone to fill in something they have already filled in is the same
+ * lie as claiming an empty field is done, pointing the other way.
  */
-export function stillOnTheUser(
+export function handoverList(
   plan: FillItem[],
-  resolutions: AiResolution[],
+  reports: FieldReport[],
+  satisfied: ReadonlySet<string>,
 ): { fieldId: string; label: string; reason: string }[] {
-  const byId = new Map(resolutions.map((r) => [r.fieldId, r]));
+  const reportById = new Map(reports.map((r) => [r.fieldId, r]));
   return plan
-    .filter((i) => {
-      const r = byId.get(i.fieldId);
-      return r != null && (r.status === "unknown" || r.blockedBy != null);
+    .filter((item) => {
+      if (satisfied.has(item.fieldId)) return false;
+      const report = reportById.get(item.fieldId);
+      if (report?.outcome === "needs-user" || report?.outcome === "failed") return true;
+      if (report?.outcome === "filled") return false;
+      // An unrecognised field reports as `skipped`, which the report vocabulary
+      // also uses for controls we correctly left alone — one word for two very
+      // different things. `required` separates them: a required field nobody
+      // could place has to be filled by someone, and it will not be us.
+      return item.status === "unknown" && item.required;
     })
-    .map((i) => ({ fieldId: i.fieldId, label: i.label, reason: byId.get(i.fieldId)!.reason }));
+    .map((item) => ({
+      fieldId: item.fieldId,
+      label: item.label,
+      reason: reportById.get(item.fieldId)?.reason ?? "",
+    }));
 }

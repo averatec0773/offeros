@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
 import type {
@@ -282,6 +282,69 @@ describe("what happens to the mappings that came back", () => {
       await userEvent.click(await screen.findByRole("button", { name: /Have AI read this form/ }));
     });
     expect(await screen.findByText(/AI read 4 unrecognised fields and placed 3\./)).toBeTruthy();
+  });
+
+  it("names the fields that are still the user's, and jumps to one on click", async () => {
+    const scrollToField = vi.fn(async () => ({}));
+    render(
+      <FillPanel
+        scan={async () => scan}
+        fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+        capture={vi.fn(async () => captureOk)}
+        attachFile={vi.fn(async () => ({ ok: true }))}
+        scrollToField={scrollToField}
+        api={api()}
+        rescanNonce={0}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+        tabUrl={scan.ok ? scan.url : ""}
+      />,
+    );
+    await screen.findByText("Ingenieur · Acme");
+    await act(async () => {
+      await userEvent.click(await screen.findByRole("button", { name: /Have AI read this form/ }));
+    });
+
+    // The guarded field and the unreadable one — stated, not left to silence.
+    const heading = await screen.findByText(/You'll need to fill/);
+    expect(heading.textContent).toContain("these 2");
+    // Scoped to the handover list: the ordinary field rows also carry buttons
+    // for the same fields, and the point here is this list specifically.
+    const list = within(heading.parentElement!);
+    expect(list.getByRole("button", { name: /Feld 7/ })).toBeTruthy();
+    // It explains itself in the AI's words, not the engine's pre-AI wording.
+    expect(heading.parentElement!.textContent).toContain("couldn't tell");
+    const row = list.getByRole("button", { name: /Arbeitserlaubnis/ });
+    await act(async () => {
+      await userEvent.click(row);
+    });
+    expect(scrollToField).toHaveBeenCalledWith("f3");
+  });
+
+  it("never says task or workspace to the user", async () => {
+    // Both are internal words for things the product does not show. A panel
+    // that names them is describing its own plumbing.
+    const { container } = render(
+      <FillPanel
+        scan={async () => scan}
+        fill={vi.fn(async (v: FillValue[]) => okFill(v))}
+        capture={vi.fn(async () => captureOk)}
+        attachFile={vi.fn(async () => ({ ok: true }))}
+        api={api()}
+        rescanNonce={0}
+        openWebApp={vi.fn()}
+        openApplication={vi.fn()}
+        webReachable
+        tabUrl={scan.ok ? scan.url : ""}
+      />,
+    );
+    await screen.findByText("Ingenieur · Acme");
+    await act(async () => {
+      await userEvent.click(await screen.findByRole("button", { name: /Have AI read this form/ }));
+    });
+    const handover = container.querySelector("ul")?.parentElement?.textContent ?? "";
+    expect(handover.toLowerCase()).not.toContain("workspace");
   });
 
   it("shows the error instead of doing nothing when the call fails", async () => {
