@@ -54,6 +54,7 @@ type OkScan = Extract<ScanResponse, { ok: true }>;
 // twice, once per artifact kind.
 import type { FillApi } from "./panel/fill-api";
 import { describeWizard } from "@offeros/autofill";
+import { stablePageId } from "../lib/autofill/page-id";
 import { CoverageBar } from "./panel/coverage-bar";
 import { FieldGroup } from "./panel/field-group";
 import { ArtifactCard } from "./panel/artifact-card";
@@ -274,6 +275,9 @@ export function FillPanel({
 
   const pendingRef = useRef(false);
   const pageSigRef = useRef<string | null>(null);
+  /** Which page of the application this is — stable across the page changing
+   *  shape. The merge key for every field report. */
+  const pageIdRef = useRef<string | null>(null);
   const jobKeyRef = useRef<string | null>(null);
   const bundleRef = useRef<FillTaskBundle | null>(null);
   const traceRef = useRef<FieldTrace[]>([]);
@@ -282,7 +286,9 @@ export function FillPanel({
    *  Done button's re-entry guard. */
   const doneRef = useRef(false);
   const lastRescanNonceRef = useRef(rescanNonce);
-  // Field reports accumulate across wizard pages, keyed by (page ?? "") + fieldId, re-sent cumulatively.
+  // Field reports accumulate across wizard pages, keyed by (page ?? "") + fieldId,
+  // re-sent cumulatively. `page` must be STABLE for a given page of the
+  // application — see stablePageId.
   const reportsRef = useRef<Map<string, FieldReport>>(new Map());
   const reportKey = (r: FieldReport) => `${r.page ?? ""} ${r.fieldId}`;
   const accumulateReports = (reports: FieldReport[]) => {
@@ -330,7 +336,7 @@ export function FillPanel({
     const live = writtenFields.get(fieldId);
     if (live !== undefined) return live;
     const onPage = pageValuesRef.current.get(fieldId) ?? "";
-    const hydrated = reportsRef.current.get(`${pageSigRef.current ?? ""} ${fieldId}`);
+    const hydrated = reportsRef.current.get(`${pageIdRef.current ?? ""} ${fieldId}`);
     if (hydrated?.outcome === "filled" && onPage !== "") return hydrated.value ?? "";
     return onPage.trim() === "" ? undefined : onPage;
   };
@@ -692,7 +698,7 @@ export function FillPanel({
       }
 
       // 5) build + accumulate + send the cumulative report for this page.
-      const page = pageSigRef.current ?? sr.url;
+      const page = pageIdRef.current ?? stablePageId(sr.url, sr.wizard);
       const requiredIds = new Set(planForFill.filter((i) => i.required).map((i) => i.fieldId));
       accumulateReports(buildFieldReports(traceForFill, writes, requiredIds, page));
       await api.postReport(b.taskId, allReports(), false);
@@ -908,7 +914,21 @@ export function FillPanel({
         res.descriptors.map((d) => [d.fieldId, d.currentValue ?? ""]),
       );
 
+      // Two different questions, and they used to share one answer.
+      //
+      // `pageSig` — every field id on the page — answers "did this page's
+      // layout change?", and a content signature is exactly right for that.
+      //
+      // `pageId` answers "which page of this application is this?", and the
+      // signature was catastrophically wrong for it: a report's merge key is
+      // (page + fieldId), so the moment a conditional field appeared or a
+      // validation error inserted a node, EVERY key on the page changed. The
+      // server then appended a second copy of the page instead of replacing
+      // it, stale needs-user rows lived forever, and the application stayed
+      // pinned at "needs you". Page identity has to survive the page changing
+      // shape — which is the one thing a field-set hash cannot do.
       const pageSig = res.descriptors.map((d) => d.fieldId).join("|");
+      const pageId = stablePageId(res.url, res.wizard);
       // Wizard steps retitle the page, so the ATS job id is the identity when present.
       const jobId = jobIdFromUrl(res.url);
       const jobKey = jobId ? `${res.company}|${jobId}` : `${res.company}|${res.title}`;
@@ -917,6 +937,7 @@ export function FillPanel({
       const jobChanged = prevJobKey !== null && jobKey !== prevJobKey;
       const pageChanged = prevPageSig !== null && pageSig !== prevPageSig;
       pageSigRef.current = pageSig;
+      pageIdRef.current = pageId;
       jobKeyRef.current = jobKey;
 
       if (jobChanged) {

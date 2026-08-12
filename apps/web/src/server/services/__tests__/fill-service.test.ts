@@ -384,6 +384,11 @@ describe("applyFillReport", () => {
       true,
     );
     const events = listEvents(db, applicationId);
+    // Note the counts below: the complete report carried only "phone", and a
+    // complete report REPLACES rather than merges, so "email" is gone. That is
+    // the intended semantics — the panel always sends its whole accumulated
+    // set on Done, so anything absent from it genuinely no longer exists.
+    //
     // The complete call additionally leaves the form-memory idempotency
     // marker (see rememberForm) — the reports these test fixtures use carry
     // no questionKey, so memory records nothing, but the marker still lands.
@@ -392,7 +397,7 @@ describe("applyFillReport", () => {
       "fill-reported",
       "form-memory-recorded",
     ]);
-    expect(events[1]?.payload).toEqual({ filled: 2, needsAttention: 0 });
+    expect(events[1]?.payload).toEqual({ filled: 1, needsAttention: 0 });
   });
 });
 
@@ -776,5 +781,114 @@ describe("startInstantFill", () => {
     expect(() => startInstantFill(db, { jobInfo: { ...JOB, applyLink: undefined } })).toThrow(
       /needs the page URL/,
     );
+  });
+});
+
+describe("report merge semantics (the stale needs-you defect)", () => {
+  const field = (over: Partial<FieldReport>): FieldReport => ({
+    fieldId: "f1",
+    label: "Field",
+    classifiedType: "unknown",
+    status: "filled",
+    source: "personal",
+    reason: "",
+    outcome: "filled",
+    required: false,
+    page: "boards.example.com/acme/apply",
+    ...over,
+  });
+
+  function parkedTask() {
+    const application = createApplication(db, {
+      jobInfo: { jobId: "j1", jobTitle: "Engineer", companyName: "Acme" },
+    });
+    const task = createPipelineTask(db, {
+      applicationId: application.id,
+      status: "awaiting_user",
+      step: PIPELINE_STEPS.findIndex((s) => s.key === "fill-form"),
+    });
+    return task.id;
+  }
+
+  it("replaces the whole set on a complete report, so nothing outlives the run", () => {
+    const taskId = parkedTask();
+    // An earlier run left a field needing the user.
+    applyFillReport(
+      db,
+      taskId,
+      [field({ fieldId: "why-us", outcome: "needs-user", required: true, status: "skipped" })],
+      false,
+    );
+    expect(getPipelineTask(db, taskId)!.applicationInfo?.status).toBe(2);
+
+    // The user answers it and finishes. The complete report is the panel's
+    // whole accumulated snapshot — anything absent from it no longer exists.
+    const after = applyFillReport(
+      db,
+      taskId,
+      [field({ fieldId: "why-us", outcome: "filled", required: true, value: "Because." })],
+      true,
+    );
+
+    expect(after.fieldReports).toHaveLength(1);
+    expect(after.fieldReports[0]!.outcome).toBe("filled");
+    expect(after.applicationInfo?.status).toBe(1);
+  });
+
+  it("heals rows left behind by the old unstable page key, with no migration", () => {
+    const taskId = parkedTask();
+    // What the old field-set-hash key produced: the same field recorded twice
+    // under two different "pages", the stale copy still needing the user.
+    applyFillReport(
+      db,
+      taskId,
+      [
+        field({ fieldId: "why-us", page: "f1|f2|f3", outcome: "needs-user", status: "skipped" }),
+        field({ fieldId: "why-us", page: "f1|f2|f3|f4", outcome: "needs-user", status: "skipped" }),
+      ],
+      false,
+    );
+    expect(getPipelineTask(db, taskId)!.fieldReports).toHaveLength(2);
+
+    // One complete fill with stable keys, and the duplicates are simply gone.
+    const after = applyFillReport(
+      db,
+      taskId,
+      [field({ fieldId: "why-us", outcome: "filled", value: "Because." })],
+      true,
+    );
+    expect(after.fieldReports).toHaveLength(1);
+    expect(after.fieldReports.every((r) => r.outcome === "filled")).toBe(true);
+    expect(after.applicationInfo?.status).toBe(1);
+  });
+
+  it("still merges an incremental report, so a wizard accumulates across pages", () => {
+    const taskId = parkedTask();
+    applyFillReport(db, taskId, [field({ fieldId: "name", page: "site/apply#step1" })], false);
+    const after = applyFillReport(
+      db,
+      taskId,
+      [field({ fieldId: "email", page: "site/apply#step2" })],
+      false,
+    );
+    expect(after.fieldReports).toHaveLength(2);
+  });
+
+  it("does not duplicate a field when the page changes shape between fills", () => {
+    // The regression itself: same page, same field, two scans. With a stable
+    // page id the second replaces the first instead of joining it.
+    const taskId = parkedTask();
+    applyFillReport(db, taskId, [field({ fieldId: "why-us", outcome: "needs-user" })], false);
+    const after = applyFillReport(
+      db,
+      taskId,
+      [
+        field({ fieldId: "why-us", outcome: "filled", value: "Because." }),
+        field({ fieldId: "conditional-extra", outcome: "filled", value: "Yes" }),
+      ],
+      false,
+    );
+    expect(after.fieldReports.filter((r) => r.fieldId === "why-us")).toHaveLength(1);
+    expect(after.fieldReports).toHaveLength(2);
   });
 });

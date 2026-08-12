@@ -434,7 +434,17 @@ export function applyFillReport(
   if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "fill-form") {
     throw new ServiceError("task is not awaiting fill");
   }
-  const merged = mergeFieldReports(task.fieldReports ?? [], reports);
+  // A COMPLETE report replaces; an incremental one merges.
+  //
+  // The panel accumulates every page's reports in one map and re-sends the
+  // whole set, so a complete report is an authoritative snapshot of the run —
+  // not a delta. Merging it left anything the snapshot no longer contains
+  // alive forever, which is how stale "needs you" rows outlived the fields
+  // that produced them and pinned applications at "needs you" permanently.
+  //
+  // This is also the repair: rows polluted by the old unstable page key
+  // disappear the next time the user completes a fill. No migration needed.
+  const merged = complete ? reports : mergeFieldReports(task.fieldReports ?? [], reports);
   const applicationInfo = deriveApplicationInfo(merged);
 
   let result: PipelineTask;
