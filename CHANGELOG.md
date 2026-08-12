@@ -19,6 +19,49 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-20
+
+### Added
+
+**A Documents page, holding every document.** Three kinds of the same thing were
+kept in three unrelated places: what OfferOS wrote for a job lived inside that
+job's workspace, the résumés you uploaded were a section of your Profile, and the
+cover-letter templates had a page of their own. They are now one page with three
+tabs — Generated, Base résumés, Templates — and the top nav is back to five
+items. The Generated tab is new work rather than a move: it lists every tailored
+résumé and cover letter across every application, with the job it belongs to, how
+many versions it has, whether it is still a draft or was accepted, and links to
+the workbench and the PDF. Deleting one is possible from there, and deleting a
+tailored résumé says what that does to the next form fill before you confirm it.
+
+**Generated documents have names.** They had none — a tailored résumé was an
+untitled thing inside an application, and its PDF arrived on your disk named
+after whatever the download code assembled at the time. Each is now named when it
+is written (resume_Acme_2026-08-12, cover_Acme_2026-08-12), can be renamed, and
+the download uses that name. Documents generated before this reads with the same
+default name they would have been given, so nothing needed converting.
+
+**The assistant can see all your documents at once.** Every question it could
+answer about documents was about the job in front of it, so "which résumés have I
+generated" or "where is that letter for Databricks" had nothing behind them. It
+can now read the whole list.
+
+### Fixed
+
+**A download whose name was not in the Latin alphabet lost its filename — and
+its attachment.** A company written in Chinese produced a header the browser
+rejected outright, so the file arrived unnamed instead of just untranslated. The
+name is now carried in the field made for it.
+
+### Changed
+
+**Where the résumé files live.** They moved from the Profile page to Documents.
+Profile is who you are; a file you uploaded is an asset. First-run setup is
+unchanged — it still takes your résumé and builds the profile from it. The old
+/templates address redirects to its new home.
+
+---
+
 ## 2026-08-19
 
 ### Fixed
