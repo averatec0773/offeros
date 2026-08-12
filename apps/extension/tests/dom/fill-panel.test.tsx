@@ -14,6 +14,7 @@ import type {
   AnswerEntry,
   ApiResult,
   ApplicationSummary,
+  FieldReport,
   FileFetchResult,
   FillTaskBundle,
   FillTicket,
@@ -1276,6 +1277,75 @@ describe("FillPanel", () => {
       });
 
       expect(await screen.findByText("nope")).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * Attaching the same file twice.
+   *
+   * On a real application three re-fills inside ninety seconds left three
+   * copies of the same résumé on the employer's form — which the applicant then
+   * has to notice and remove. Nothing checked whether the file was already
+   * there; the page reports it, and the page is the authority.
+   */
+  describe("a file that is already attached", () => {
+    const pdf = (): FileFetchResult => ({
+      ok: true,
+      bytes: new Uint8Array([37, 80, 68, 70]).buffer,
+      fileName: "Jordan_Rivera_Resume.pdf",
+      mimeType: "application/pdf",
+    });
+
+    const attachApi = (): FillApi => ({
+      ...emptyApi(),
+      getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+      claim: vi.fn(async () => ({
+        ok: true as const,
+        value: { ...bundle, attachResume: "tailored" as const },
+      })),
+      fetchArtifactPdf: vi.fn(async () => pdf()),
+    });
+
+    /** The résumé field, reporting what the page already holds in it. */
+    const scanHolding = (currentValue: string): ScanResponse => ({
+      ...scanWithResumeFile,
+      descriptors: [scanOk.descriptors[0]!, { ...resumeFileDescriptor, currentValue }],
+    });
+
+    const runFill = async (currentValue: string) => {
+      const api = attachApi();
+      const { attachFile } = renderPanel({ scan: async () => scanHolding(currentValue), api });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+      await waitFor(() => expect(api.postReport).toHaveBeenCalled());
+      return { api, attachFile };
+    };
+
+    it("is not attached a second time", async () => {
+      const { attachFile } = await runFill("Jordan_Rivera_Resume.pdf");
+      expect(attachFile).not.toHaveBeenCalled();
+    });
+
+    it("still reports the field as filled, saying it was left alone", async () => {
+      const { api } = await runFill("Jordan_Rivera_Resume.pdf");
+      const calls = (api.postReport as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      const reports = calls.at(-1)![1] as FieldReport[];
+      const row = reports.find((r) => r.fieldId === "r1")!;
+      expect(row.outcome).toBe("filled");
+      expect(row.reason).toMatch(/already attached/i);
+    });
+
+    it("attaches when the page holds a DIFFERENT file", async () => {
+      // Not "never attach twice" — "never attach what is already there".
+      const { attachFile } = await runFill("an-old-cv.pdf");
+      await waitFor(() => expect(attachFile).toHaveBeenCalled());
+    });
+
+    it("attaches when the field is empty", async () => {
+      const { attachFile } = await runFill("");
+      await waitFor(() => expect(attachFile).toHaveBeenCalled());
     });
   });
 

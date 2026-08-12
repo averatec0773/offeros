@@ -493,6 +493,18 @@ export function FillPanel({
       const reason = fetched.status === 400 ? RENDER_FAILED_REASON : NO_FILE_REASON;
       return { outcome: "needs-user", reason, source };
     }
+    // Already there. A re-fill used to attach again every time, so three runs
+    // in ninety seconds left three copies of the same résumé on the employer's
+    // form — which the applicant then has to notice and remove. The page's own
+    // report of the chosen file is the check: same name, nothing to do.
+    if (attachedFileName(fieldId) === fetched.fileName) {
+      return {
+        outcome: "filled",
+        value: fetched.fileName,
+        source,
+        reason: "Already attached — left as it was.",
+      };
+    }
     // The content-script call crosses the messaging boundary (tabs.sendMessage) —
     // a torn-down/invalidated extension context can reject it outright. Caught here
     // so that failure degrades to the same honest custom-uploader reason instead of
@@ -512,6 +524,18 @@ export function FillPanel({
     }
     return { outcome: "needs-user", reason: CUSTOM_UPLOADER_REASON, source };
   };
+
+  /**
+   * The file this upload field already holds, as the page reports it.
+   *
+   * `currentValue` on a file descriptor is the chosen file's name — the scan
+   * reads it from the input's own `files` list, so it is the page's account
+   * rather than ours.
+   */
+  const attachedFileName = (fieldId: string): string =>
+    (scanResult?.ok
+      ? scanResult.descriptors.find((d) => d.fieldId === fieldId)?.currentValue
+      : "") ?? "";
 
   /** This page's upload field for one of the two OfferOS-managed kinds, if the
    *  classifier found one. Both artifact lanes attach through it. */
