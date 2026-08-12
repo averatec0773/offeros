@@ -39,7 +39,7 @@ import {
 import { requestTabCapture } from "../../src/lib/tab-capture";
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
-import { requestEnableOnTab } from "../../src/lib/site-enable";
+import { requestEnableOnTab, requestSiteAccess } from "../../src/lib/site-enable";
 import { getFillBinding } from "../../src/lib/fill-binding";
 import { subscribeAgentEvents } from "../../src/lib/agent-events";
 import { ExternalLink, PlugZap } from "lucide-react";
@@ -111,13 +111,36 @@ export default function App() {
 
   const enableHere = useCallback(async () => {
     if (activeTabId === undefined) return { ok: false, error: "No page to enable yet." };
-    const res = await requestEnableOnTab(activeTabId);
-    if (res.ok) {
-      setEnabledTabs((prev) => new Map(prev).set(activeTabId, activeTabUrl));
-      // The engine has only just arrived; the panel's scan loop is idle by now.
-      setRescanNonce((n) => n + 1);
+    const succeed = (res: { ok: boolean; error?: string }) => {
+      if (res.ok) {
+        setEnabledTabs((prev) => new Map(prev).set(activeTabId, activeTabUrl));
+        // The engine has only just arrived; the panel's scan loop is idle by now.
+        setRescanNonce((n) => n + 1);
+      }
+      return res;
+    };
+
+    // Try first, ask second.
+    //
+    // The extension holds no standing permission for this site — that is the
+    // point — but it may already be allowed here: `activeTab` from opening the
+    // panel, or a grant the user gave on an earlier visit. Attempting the
+    // injection costs one message and succeeds silently when either is true,
+    // which is better than prompting someone who has already said yes.
+    const first = await requestEnableOnTab(activeTabId);
+    if (first.ok || first.needsPermission !== true) return succeed(first);
+
+    // Chrome refused for want of a permission. That is the one failure asking
+    // can fix, and asking has to happen here: `permissions.request` requires a
+    // user gesture, and the background worker never has one.
+    const granted = await requestSiteAccess(activeTabUrl);
+    if (!granted) {
+      return {
+        ok: false,
+        error: "OfferOS needs your permission for this site to read its form. Nothing changed.",
+      };
     }
-    return res;
+    return succeed(await requestEnableOnTab(activeTabId));
   }, [activeTabId, activeTabUrl]);
 
   const [apiBase, setApiBase] = useState("");

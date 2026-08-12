@@ -1,9 +1,25 @@
-// E2E: "Enable OfferOS on this page" against a site the manifest does NOT list.
+// E2E: "Enable OfferOS on this page", in two halves.
 //
-// The question this answers, which no unit test can: does injecting the engine
-// on request actually work on an arbitrary host, including the MAIN-world
-// driver? A synthetic host (ats.example.com) is routed to a local fixture, so
-// nothing here touches a real employer and nothing is ever submitted.
+// Since `<all_urls>` was removed the enable path has a permission boundary in
+// front of it, so this measures both sides of that boundary:
+//
+//   A. A host the extension holds nothing for. Injection must be REFUSED, with
+//      the message the panel turns into a one-site permission prompt. This is
+//      the new boundary, and it has to be real.
+//   B. A host the extension does hold — localhost, which is in host_permissions
+//      but NOT in the ATS content-script matches, so nothing auto-injects
+//      there. That is precisely the shape of an enabled site: permission
+//      granted, engine absent until asked. Inject on request, then drive the
+//      whole chain.
+//
+// What is NOT covered here, deliberately rather than by omission: the
+// permission PROMPT itself. `chrome.permissions.request` needs a user gesture
+// and Chrome renders the prompt as browser UI, neither of which automation can
+// supply. Part A proves the refusal that triggers it; a human has to see the
+// prompt itself.
+//
+// Everything is routed to local fixtures on synthetic hosts. Nothing is ever
+// submitted.
 import { chromium } from "playwright";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -70,6 +86,9 @@ try {
   await ctx.route("**://ats.example.com/**", (r) =>
     r.fulfill({ status: 200, contentType: "text/html", body: FORM }),
   );
+  await ctx.route("**://localhost/**", (r) =>
+    r.fulfill({ status: 200, contentType: "text/html", body: FORM }),
+  );
   await page.goto("https://ats.example.com/apply", { waitUntil: "load" });
   await page.waitForTimeout(1200);
 
@@ -79,7 +98,7 @@ try {
   log("service_worker", !!sw);
   if (!sw) throw new Error("no service worker — cannot drive the extension");
 
-  const tabId = await sw.evaluate(async () => {
+  let tabId = await sw.evaluate(async () => {
     const [t] = await chrome.tabs.query({ url: "*://ats.example.com/*" });
     return t?.id ?? null;
   });
@@ -96,9 +115,50 @@ try {
         .catch(() => "no-listener"),
     tabId,
   );
-  check("engine_absent_before_enable", before, "no-listener");
+  check("engine_absent_on_unpermitted_host", before, "no-listener");
 
-  // 2) The enable button's own work: inject both scripts, driver in MAIN.
+  // 2) THE BOUNDARY. With no permission for this host, Chrome must refuse —
+  //    and refuse in the words site-enable.ts reads to decide whether asking
+  //    the user would help.
+  const refused = await sw.evaluate(async (id) => {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: id },
+        files: ["content-scripts/ats.js"],
+      });
+      return "UNEXPECTEDLY ALLOWED";
+    } catch (e) {
+      return String(e?.message ?? e);
+    }
+  }, tabId);
+  log("unpermitted_host_refusal", refused);
+  check(
+    "refusal_is_the_askable_kind",
+    /must request permission|Cannot access contents of/i.test(refused),
+    true,
+  );
+  log("permission_prompt_coverage", "not automatable — needs a user gesture and browser UI");
+
+  // 3) The permitted-host half. localhost is in host_permissions and NOT in the
+  //    ATS matches, so nothing auto-injects: an enabled site's exact shape.
+  await page.goto("http://localhost/apply", { waitUntil: "load" });
+  await page.waitForTimeout(900);
+  tabId = await sw.evaluate(async () => {
+    const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return t?.id ?? null;
+  });
+
+  const beforeLocal = await sw.evaluate(
+    async (id) =>
+      await chrome.tabs
+        .sendMessage(id, { kind: "OFFEROS_ENGINE_SCAN" })
+        .then(() => "answered")
+        .catch(() => "no-listener"),
+    tabId,
+  );
+  check("engine_absent_before_enable", beforeLocal, "no-listener");
+
+  // 4) The enable button's own work: inject both scripts, driver in MAIN.
   //    Mirrors src/lib/site-enable.ts injectEngine exactly.
   const injected = await sw.evaluate(async (id) => {
     try {

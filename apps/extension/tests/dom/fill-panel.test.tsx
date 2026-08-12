@@ -186,6 +186,7 @@ const renderPanel = (
       file: { fileName: string; mimeType: string; bytesBase64: string },
     ) => Promise<AttachFileResponse>;
     scrollToField?: (fieldId: string) => Promise<unknown>;
+    captureTab?: () => Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }>;
     scanRetryTries?: number;
     scanRetryDelayMs?: number;
     api?: FillApi;
@@ -210,6 +211,7 @@ const renderPanel = (
       capture={capture}
       attachFile={attachFile}
       scrollToField={over.scrollToField}
+      captureTab={over.captureTab}
       scanRetryTries={over.scanRetryTries}
       scanRetryDelayMs={over.scanRetryDelayMs}
       api={api}
@@ -1120,6 +1122,96 @@ describe("FillPanel", () => {
         "repair-attempted",
         expect.objectContaining({ action: "user-picked-posting" }),
       );
+    });
+  });
+
+  /**
+   * Evidence screenshots after `<all_urls>` was removed.
+   *
+   * `captureVisibleTab` refuses a per-host permission — measured in real
+   * Chromium on a host the manifest covers: "Either the '<all_urls>' or
+   * 'activeTab' permission is required." So on a tab where `activeTab` was
+   * never activated, every capture now fails, and that has to cost the user
+   * nothing: evidence was always the third, optional witness to a fill.
+   */
+  describe("evidence capture with no permission to capture", () => {
+    const REFUSAL = "Either the '<all_urls>' or 'activeTab' permission is required.";
+
+    it("Done still completes, and the fill is still reported", async () => {
+      const api = {
+        ...emptyApi(),
+        getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+          ok: true,
+          value: [ticket],
+        })),
+        claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+      };
+      renderPanel({
+        api,
+        scrollToField: vi.fn(async () => ({})),
+        captureTab: vi.fn(async () => ({ ok: false as const, error: REFUSAL })),
+      });
+
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Done — save to OfferOS" }));
+      });
+
+      // The whole point: a refused screenshot is not a refused fill.
+      expect(api.postReport).toHaveBeenLastCalledWith("t1", expect.any(Array), true, "h1");
+      expect(await screen.findByText("Saved to OfferOS.")).toBeInTheDocument();
+    });
+
+    it("uploads nothing rather than uploading something it did not take", async () => {
+      const api = {
+        ...emptyApi(),
+        getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+          ok: true,
+          value: [ticket],
+        })),
+        claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+      };
+      renderPanel({
+        api,
+        scrollToField: vi.fn(async () => ({})),
+        captureTab: vi.fn(async () => ({ ok: false as const, error: REFUSAL })),
+      });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Done — save to OfferOS" }));
+      });
+      expect(api.postEvidence).not.toHaveBeenCalled();
+    });
+
+    it("shows the user nothing about it — a missing screenshot is not their problem", async () => {
+      const api = {
+        ...emptyApi(),
+        getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({
+          ok: true,
+          value: [ticket],
+        })),
+        claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
+      };
+      renderPanel({
+        api,
+        scrollToField: vi.fn(async () => ({})),
+        captureTab: vi.fn(async () => ({ ok: false as const, error: REFUSAL })),
+      });
+      const fillBtn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+      await act(async () => {
+        await userEvent.click(fillBtn);
+      });
+      await act(async () => {
+        await userEvent.click(screen.getByRole("button", { name: "Done — save to OfferOS" }));
+      });
+      expect(screen.queryByText(/permission is required/i)).toBeNull();
+      expect(screen.queryByText(/screenshot/i)).toBeNull();
     });
   });
 

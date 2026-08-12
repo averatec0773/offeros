@@ -28,6 +28,14 @@ export interface EnableOnTabResponse {
   ok: boolean;
   /** Present on failure — shown verbatim, never swallowed. */
   error?: string;
+  /**
+   * The injection was refused because the extension holds no permission for
+   * this site. Not an error to show: it is the cue to ask the user for that one
+   * site and try again. Distinguished from every other failure because those
+   * (an enterprise policy, a page whose CSP refuses the world injection) are not
+   * fixed by asking.
+   */
+  needsPermission?: boolean;
 }
 
 export function isEnableOnTabRequest(m: unknown): m is EnableOnTabRequest {
@@ -72,6 +80,28 @@ export function whyCannotEnable(url: string): string | null {
 /** True when the enable button should be offered for this URL. */
 export function canEnableUrl(url: string): boolean {
   return whyCannotEnable(url) === null;
+}
+
+/**
+ * The permission pattern for one site — scheme and host, nothing narrower.
+ *
+ * Chrome grants host permissions per origin, so this is the smallest thing that
+ * can be asked for. A path-scoped grant is not a thing Chrome offers; asking
+ * for `https://careers.example.com/*` is asking for that site.
+ */
+export function originPatternFor(url: string): string | null {
+  try {
+    const { protocol, host } = new URL(url);
+    if (protocol !== "http:" && protocol !== "https:") return null;
+    return `${protocol}//${host}/*`;
+  } catch {
+    return null;
+  }
+}
+
+/** Chrome's wording for "you have no permission for this host". */
+function readsAsMissingPermission(message: string): boolean {
+  return /must request permission|Cannot access contents of|not allowed to access/i.test(message);
 }
 
 /** Panel → background. Resolves `{ok:false}` (never rejects) when nobody answers. */
@@ -133,6 +163,35 @@ export async function enableOnTab(
     return { ok: true };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    // Measured, not guessed: without a permission for this host Chrome answers
+    // "Cannot access contents of url ... Extension manifest must request
+    // permission to access this host." That is answerable — the panel asks the
+    // user for this one site and calls back. Anything else is a real failure.
+    if (readsAsMissingPermission(detail)) {
+      return { ok: false, needsPermission: true, error: detail };
+    }
     return { ok: false, error: `Couldn't start OfferOS on this page: ${detail}` };
+  }
+}
+
+/**
+ * Ask Chrome for one site, from the panel.
+ *
+ * Must be called inside a user gesture — Chrome refuses otherwise, verbatim:
+ * "This function must be called during a user gesture". The panel's button
+ * click is one; the background worker never is, which is why this lives on the
+ * panel side of the bridge rather than next to the injection it unblocks.
+ */
+export async function requestSiteAccess(
+  url: string,
+  permissions: typeof chrome.permissions | undefined = globalThis.chrome?.permissions,
+): Promise<boolean> {
+  const origins = originPatternFor(url);
+  if (!origins || !permissions?.request) return false;
+  try {
+    if (await permissions.contains({ origins: [origins] })) return true;
+    return await permissions.request({ origins: [origins] });
+  } catch {
+    return false;
   }
 }

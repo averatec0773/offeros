@@ -19,6 +19,33 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-15
+
+### Security and privacy
+
+**OfferOS no longer asks to read and change your data on every website.** The
+browser extension used to request access to all sites at install time. It needed
+that for exactly one thing — taking a screenshot of a form after filling it, as
+a record of what happened — and Chrome has no narrower way to grant it. So the
+install prompt said the broadest possible thing about a product whose whole
+claim is that it runs only where you tell it to. That request is gone. What the
+extension asks for now is the five application platforms it fills automatically,
+plus the local app on your own machine.
+
+**Any other site is a question, asked once, about that site.** Pressing "Enable
+OfferOS on this page" on an ordinary careers page now asks Chrome for permission
+to that one site, and Chrome asks you, naming it. Say no and nothing happens.
+That was always the intent of the button; it is now what actually authorises it,
+rather than a boundary drawn on top of access the extension already had.
+
+**What that costs, stated plainly:** the screenshot taken after a fill needs
+permission Chrome only grants for the tab you invoked the extension on. When it
+is not available the screenshot is skipped — no upload, no record, and no
+pretending one was taken. It was always the least important of the three things
+OfferOS keeps about a fill (the field-by-field report and the decision trace are
+the other two, and neither depends on this), and a missing screenshot has never
+been allowed to affect the fill, the report, or marking an application done.
+
 ## 2026-08-14
 
 ### Fixed

@@ -8,31 +8,37 @@ export default defineConfig({
   manifest: {
     action: {},
     side_panel: { default_path: "sidepanel.html" },
-    // `activeTab` + `scripting` are what "Enable OfferOS on this page" runs on:
-    // the user presses a button on the page they are looking at, and the engine
-    // is injected into that tab for that visit. It is the permission model this
-    // feature is supposed to have — see the note on host_permissions below for
-    // what actually authorises the injection today.
     permissions: ["storage", "tabs", "sidePanel", "nativeMessaging", "scripting", "activeTab"],
-    host_permissions: [
-      // tabs.captureVisibleTab (fill-evidence screenshots) accepts ONLY
-      // "<all_urls>" or a user-gesture-activated "activeTab" — per-host
-      // patterns never satisfy it ("Either the '<all_urls>' or 'activeTab'
-      // permission is required."), and the overlay iframe / web-launched fill
-      // tabs get no extension gesture, so activeTab can never activate there.
-      //
-      // NOTE, and it matters: while this is here, the extension already holds
-      // permission for every site, and Chrome's install prompt says so ("Read
-      // and change all your data on all websites"). The enable button is
-      // therefore a UX boundary, not yet a permission boundary — it is the
-      // thing that decides where the engine goes, but it is not the thing that
-      // authorises it. Any public claim that OfferOS does not ask for full-site
-      // access is FALSE until this line is removed, which would mean giving up
-      // evidence screenshots on tabs with no extension gesture.
-      "<all_urls>",
-      "http://localhost/*",
-      ...atsMatches(),
-    ],
+    /**
+     * What the install prompt asks for: the five application platforms, and the
+     * local web app. Nothing else.
+     *
+     * `<all_urls>` used to be here for `tabs.captureVisibleTab`, which meant
+     * Chrome told every user OfferOS could "read and change all your data on
+     * all websites" — for a product whose whole claim is that it only runs
+     * where you asked. It is gone. What that costs is measured, not assumed:
+     *
+     *   - `captureVisibleTab` refuses a per-host permission. Verified in real
+     *     Chromium on a host this list covers: "Either the '<all_urls>' or
+     *     'activeTab' permission is required." So evidence screenshots now
+     *     depend on `activeTab`, and skip when it is not active. They were
+     *     always best-effort; now they are honestly so.
+     *   - injecting into a site the user enabled by hand also needs more than
+     *     this list: "Cannot access contents of url ... Extension manifest must
+     *     request permission to access this host." That is what
+     *     `optional_host_permissions` below is for.
+     */
+    host_permissions: ["http://localhost/*", ...atsMatches()],
+    /**
+     * Permission the user grants one site at a time, when they ask for it.
+     *
+     * Optional permissions are NOT part of the install prompt — Chrome asks at
+     * the moment of the request, naming the one site. So "Enable OfferOS on
+     * this page" is a real permission boundary now and not just a UX one: the
+     * button asks Chrome, Chrome asks the user, and the answer is about that
+     * site alone.
+     */
+    optional_host_permissions: ["*://*/*"],
     // The in-page overlay embeds sidepanel.html in an iframe on apply pages;
     // the page can only load extension resources that are declared here.
     web_accessible_resources: [
