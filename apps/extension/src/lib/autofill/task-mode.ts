@@ -1,4 +1,9 @@
-import { isCoverLetterLabel, type FieldDescriptor, type FieldTrace } from "@offeros/autofill";
+import {
+  isCoverLetterLabel,
+  type FieldDescriptor,
+  type FieldTrace,
+  type FillItem,
+} from "@offeros/autofill";
 import type { FieldReport, FieldReportOutcome, FillTicket } from "../offeros-api";
 
 /**
@@ -13,6 +18,12 @@ export type FieldReportSource =
   | "answer-bank"
   | "skills"
   | "ai-generated"
+  /** The VALUE came from the profile or the answer bank as usual; which field
+   *  it belongs in was decided by the AI fallback classifier rather than by the
+   *  deterministic vocabulary. Reported separately because it is a different
+   *  level of confidence, and the user should be able to see which fields it
+   *  touched. */
+  | "ai-classified"
   | "cover-letter"
   | "resume-file"
   | "cover-letter-file"
@@ -250,4 +261,84 @@ export function buildFieldReports(
       questionKey: t.questionKey,
     };
   });
+}
+
+/**
+ * One field, as the AI fallback classifier resolved it.
+ *
+ * Mirrors the server's `FieldResolution` structurally. The panel never
+ * constructs one of these — it only ever merges what the endpoint returned.
+ */
+export interface AiResolution {
+  fieldId: string;
+  status: "fillable" | "needs-answer" | "unknown";
+  value: string;
+  source: "personal" | "answerBank" | "generate" | "none";
+  confidence: number;
+  reason: string;
+  blockedBy?: "sensitive" | "truth";
+  answerId?: string;
+  generatable?: boolean;
+}
+
+/**
+ * Fold the classifier's resolutions into the plan the engine already built.
+ *
+ * The deterministic plan is the base and stays authoritative: a resolution is
+ * only ever applied to a field the engine left `unknown`. That rule is what
+ * keeps the fallback a fallback — a model cannot overrule a rule that fired,
+ * only speak where no rule did.
+ *
+ * The trace is updated in step, because the trace is what the field report is
+ * built from: without it a field filled through an AI mapping would report the
+ * engine's original "no classifier match → left unknown" as its reason, which
+ * would be a false account of what happened.
+ */
+export function applyAiResolutions(
+  plan: FillItem[],
+  trace: FieldTrace[],
+  resolutions: AiResolution[],
+): { plan: FillItem[]; trace: FieldTrace[]; applied: Set<string> } {
+  const byId = new Map(resolutions.map((r) => [r.fieldId, r]));
+  const applied = new Set<string>();
+
+  const nextPlan = plan.map((item): FillItem => {
+    const r = byId.get(item.fieldId);
+    if (!r || item.status !== "unknown" || r.status === "unknown") return item;
+    applied.add(item.fieldId);
+    return {
+      ...item,
+      status: r.status,
+      value: r.value,
+      source: r.source,
+      answerId: r.answerId,
+      generatable: r.generatable,
+    };
+  });
+
+  const nextTrace = trace.map((t): FieldTrace => {
+    if (!applied.has(t.fieldId)) return t;
+    const r = byId.get(t.fieldId)!;
+    return { ...t, status: r.status, chosenValue: r.value, source: r.source, reason: r.reason };
+  });
+
+  return { plan: nextPlan, trace: nextTrace, applied };
+}
+
+/**
+ * Fields still on the user: the classifier could not place them, or a guard
+ * refused to let anything place them. Returned in the order they appear on the
+ * page so the list reads top to bottom like the form does.
+ */
+export function stillOnTheUser(
+  plan: FillItem[],
+  resolutions: AiResolution[],
+): { fieldId: string; label: string; reason: string }[] {
+  const byId = new Map(resolutions.map((r) => [r.fieldId, r]));
+  return plan
+    .filter((i) => {
+      const r = byId.get(i.fieldId);
+      return r != null && (r.status === "unknown" || r.blockedBy != null);
+    })
+    .map((i) => ({ fieldId: i.fieldId, label: i.label, reason: byId.get(i.fieldId)!.reason }));
 }

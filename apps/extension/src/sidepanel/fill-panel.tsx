@@ -40,6 +40,7 @@ import {
   NO_FILE_REASON,
   RENDER_FAILED_REASON,
   FILE_KIND_SOURCE,
+  applyAiResolutions,
   type WriteOutcome,
 } from "../lib/autofill/task-mode";
 
@@ -60,6 +61,7 @@ import { FieldGroup } from "./panel/field-group";
 import { ArtifactCard } from "./panel/artifact-card";
 import { useArtifactLane } from "./panel/use-artifact-lane";
 import { AddJobCard } from "./panel/add-job-card";
+import { SpendMark, SPEND_TITLE } from "./spend-mark";
 
 /** Re-exported: the panel is what callers configure, so its contract lives
  *  under its name even though the declaration moved. */
@@ -206,6 +208,20 @@ export function FillPanel({
   const [aiAnswers, setAiAnswers] = useState<
     { fieldId: string; label: string; answer: string; options?: string[] }[]
   >([]);
+  /**
+   * The AI fallback classifier's last run on this page.
+   *
+   * `aiApplied` is the set of fields whose mapping came from the model rather
+   * than from the deterministic vocabulary — carried so the field report can
+   * say so, because "the profile filled this" and "a model decided this is
+   * where the profile value goes" are different claims.
+   */
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<{ considered: number; classified: number } | null>(
+    null,
+  );
+  const aiAppliedRef = useRef<Set<string>>(new Set());
   const [reported, setReported] = useState(false);
   /** Why a Done was refused, when it was. Shown rather than swallowed: a
    *  silently rejected Done is indistinguishable from a working one. */
@@ -543,7 +559,19 @@ export function FillPanel({
         fillable.map((i) => [i.fieldId, i.value ?? i.values?.join(", ") ?? ""]),
       );
       for (const [id, o] of res.outcomes ?? []) {
-        writes.set(id, o);
+        // A field the fallback classifier placed reports its own source, so the
+        // workspace can show which fields a model chose the home for. The value
+        // itself still came from the profile or the answer bank.
+        if (aiAppliedRef.current.has(id)) {
+          const norm = typeof o === "string" ? { outcome: o } : o;
+          writes.set(id, {
+            ...norm,
+            value: norm.outcome === "filled" ? (valueById.get(id) ?? "") : undefined,
+            source: "ai-classified",
+          });
+        } else {
+          writes.set(id, o);
+        }
         if (o === "filled") markWritten(id, valueById.get(id) ?? "");
       }
 
@@ -1205,6 +1233,60 @@ export function FillPanel({
     void scrollToField?.(fieldId)?.catch?.(() => {});
   };
 
+  /**
+   * Ask the web app what the fields the engine could not read are asking for,
+   * then fill with what comes back.
+   *
+   * User-pressed only, and the one button in the fill path that spends the
+   * user's API credit — hence the mark. What returns is a set of MAPPINGS the
+   * server has already resolved against the profile and run the guards over;
+   * the panel merges them into the plan a field at a time and then runs the
+   * ordinary fill, so every value still goes through the same verified DOM
+   * write as any other. Nothing the model wrote is typed into the page.
+   */
+  const runAiClassify = async () => {
+    const b = bundleRef.current;
+    if (!b || aiBusy || pendingRef.current || !scanResult.ok) return;
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      const descriptorById = new Map(scanResult.descriptors.map((d) => [d.fieldId, d]));
+      const fields = plan
+        .filter((i) => i.status === "unknown")
+        .map((i) => {
+          const d = descriptorById.get(i.fieldId);
+          return {
+            fieldId: i.fieldId,
+            label: i.label,
+            type: d?.type ?? "text",
+            options: d?.options,
+            currentStatus: i.status,
+            required: i.required,
+          };
+        });
+      if (fields.length === 0) {
+        setAiError("Nothing left for AI to read — every field here is already recognised.");
+        return;
+      }
+      const res = await api.classifyFields(b.taskId, fields);
+      if (!res.ok) {
+        setAiError(res.error);
+        return;
+      }
+      const { resolutions, considered, classified } = res.value;
+      const merged = applyAiResolutions(plan, traceRef.current, resolutions);
+      for (const id of merged.applied) aiAppliedRef.current.add(id);
+      setPlan(merged.plan);
+      traceRef.current = merged.trace;
+      setAiSummary({ considered, classified });
+      if (merged.applied.size > 0) {
+        await taskFillPage(merged.plan, scanResult, merged.trace);
+      }
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   const onFill = async () => {
     if (pendingRef.current || done || !scanResult.ok || !bundleRef.current) return;
     // Fields the page already holds are skipped inside taskFillPage — the one
@@ -1397,10 +1479,35 @@ export function FillPanel({
             openApplication={openApplication}
           />
         )}
-        {drift && (
-          <p className="mb-2 text-caption text-warning">
-            Most fields here weren't recognized — this platform's adapter may be out of date.
-          </p>
+        {bundle && (drift || aiSummary) && (
+          <div className="mb-2 space-y-1.5 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+            {drift && !aiSummary && (
+              <p className="text-caption text-warning">
+                Most fields here weren't recognized — this form doesn't look like one OfferOS knows.
+              </p>
+            )}
+            {aiSummary && (
+              <p className="text-caption text-text-secondary">
+                AI read {aiSummary.considered} unrecognised field
+                {aiSummary.considered === 1 ? "" : "s"} and placed {aiSummary.classified}.
+              </p>
+            )}
+            {aiError && <p className="text-caption text-warning">{aiError}</p>}
+            <button
+              type="button"
+              onClick={() => void runAiClassify()}
+              disabled={aiBusy || pending}
+              title={SPEND_TITLE}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle px-3 py-1 text-caption font-semibold text-text-primary transition-[color,transform] duration-fast ease-out-strong hover:bg-bg-base active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100"
+            >
+              <SpendMark />
+              {aiBusy
+                ? "Reading the form…"
+                : aiSummary
+                  ? "Read it again"
+                  : "Have AI read this form"}
+            </button>
+          </div>
         )}
         {plan.length > 0 && <CoverageBar coverage={fillCoverage(plan, satisfiedByPage)} />}
         <FieldGroup

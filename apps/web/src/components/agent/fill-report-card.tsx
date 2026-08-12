@@ -15,6 +15,27 @@ import { diagnoseFill, type CauseGroup, type FailureCause } from "@offeros/autof
  * says about the same fill, and a person can see the four reasons without
  * opening a conversation to be told them.
  */
+/**
+ * Where a filled value came from, in words rather than in the engine's slug.
+ *
+ * `ai-classified` is the one worth reading closely: the value still came from
+ * the profile or the answer bank, but which field it belongs in was a model's
+ * judgement rather than a rule. That is a different level of confidence, so it
+ * says so.
+ */
+const SOURCE_LABEL: Record<string, string> = {
+  personal: "from your profile",
+  "answer-bank": "from your saved answers",
+  skills: "from your skills",
+  "ai-generated": "AI-written",
+  "ai-classified": "AI-matched field",
+  "cover-letter": "your cover letter",
+};
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABEL[source] ?? source;
+}
+
 export function FillReportCard({ reports }: { reports: FieldReport[] }) {
   if (reports.length === 0) return null;
 
@@ -50,7 +71,7 @@ export function FillReportCard({ reports }: { reports: FieldReport[] }) {
                   ) : (
                     <span className="text-muted-foreground">
                       {" "}
-                      — {r.source}
+                      — {sourceLabel(r.source)}
                       {r.value ? `: ${r.value}` : ""}
                     </span>
                   )}

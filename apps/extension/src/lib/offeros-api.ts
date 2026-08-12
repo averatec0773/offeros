@@ -7,6 +7,7 @@ import type {
   FillHandoff,
   FitAnalysis,
 } from "@offeros/core";
+import type { AiResolution } from "./autofill/task-mode";
 import { settings } from "./settings";
 
 /**
@@ -255,6 +256,34 @@ export function generateAnswer(
   return call<{ answer: string }>(
     `/agent/tasks/${taskId}/fill/answer`,
     json("POST", body),
+    fetchImpl,
+  );
+}
+
+/**
+ * Ask the web app's AI fallback classifier what the fields the deterministic
+ * engine could not read are asking for.
+ *
+ * Sends descriptions, never values, and gets back MAPPINGS the server has
+ * already resolved against the profile — the panel writes the resolved values
+ * through its ordinary verified DOM path. Costs a model call, so it only ever
+ * runs from a button the user pressed.
+ */
+export function classifyFields(
+  taskId: string,
+  fields: {
+    fieldId: string;
+    label: string;
+    type: string;
+    options?: string[];
+    currentStatus: string;
+    required?: boolean;
+  }[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<ApiResult<{ resolutions: AiResolution[]; considered: number; classified: number }>> {
+  return call<{ resolutions: AiResolution[]; considered: number; classified: number }>(
+    `/agent/tasks/${taskId}/fill/classify`,
+    json("POST", { fields }),
     fetchImpl,
   );
 }

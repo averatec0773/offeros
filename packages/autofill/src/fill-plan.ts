@@ -29,7 +29,15 @@ function isOpenEnded(desc: FieldDescriptor, label: string): boolean {
   return label.trim().split(/\s+/).filter(Boolean).length > 6;
 }
 
-function personalValue(field: CanonicalField, profile: FillProfile): string {
+/**
+ * The value a canonical field takes from a profile.
+ *
+ * Exported because the AI fallback classifier resolves its mappings through
+ * this same function: a second implementation would be a second answer to
+ * "where does `phone` come from", and the two would drift the first time one
+ * of them learned about a new profile field.
+ */
+export function personalValue(field: CanonicalField, profile: FillProfile): string {
   const p = profile.personal;
   switch (field) {
     case "fullName":

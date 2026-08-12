@@ -14,6 +14,7 @@ export * from "./tasks/question-answer.task";
 export * from "./tasks/resume-parse.task";
 export * from "./tasks/fit-analysis.task";
 export * from "./tasks/style-distill.task";
+export * from "./tasks/field-classify.task";
 export * from "./style-notes";
 export * from "./untrusted";
 

@@ -8,6 +8,7 @@ import type {
   FillTicket,
   FitSummary,
 } from "../../lib/offeros-api";
+import type { AiResolution } from "../../lib/autofill/task-mode";
 
 /** The web-app fill API the panel talks to. Injected so tests can supply fakes. */
 export interface FillApi {
@@ -32,6 +33,22 @@ export interface FillApi {
       existingAnswer?: string;
     },
   ) => Promise<ApiResult<{ answer: string }>>;
+  /**
+   * The AI fallback classifier. Sends descriptions of the fields the
+   * deterministic engine could not read; gets back mappings the server has
+   * already resolved into values and run the guards over.
+   */
+  classifyFields: (
+    taskId: string,
+    fields: {
+      fieldId: string;
+      label: string;
+      type: string;
+      options?: string[];
+      currentStatus: string;
+      required?: boolean;
+    }[],
+  ) => Promise<ApiResult<{ resolutions: AiResolution[]; considered: number; classified: number }>>;
   findApplicationsByJobUrl: (jobUrl: string) => Promise<ApiResult<ApplicationSummary[]>>;
   createTaskFromJd: (input: {
     jobTitle: string;

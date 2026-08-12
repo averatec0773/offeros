@@ -106,6 +106,10 @@ const api = (): FillApi => ({
     ok: true as const,
     value: { answer: "Yes, I am authorized." },
   })),
+  classifyFields: vi.fn(async () => ({
+    ok: true as const,
+    value: { resolutions: [], considered: 0, classified: 0 },
+  })),
   findApplicationsByJobUrl: vi.fn(async (): Promise<ApiResult<ApplicationSummary[]>> => ({
     ok: true,
     value: [],

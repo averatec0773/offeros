@@ -360,23 +360,20 @@ function currentVersionContent(artifact: Artifact | null): string | null {
  * whole extension) reloads mid-fill; the same ticket must be recoverable or
  * the session strands as "no task". Only completed/cancelled tickets refuse.
  */
-export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
-  const handoff = getFillHandoff(db, handoffId);
-  if (!handoff) throw new ServiceError(`fill handoff ${handoffId} not found`);
-  if (handoff.status !== "pending" && handoff.status !== "claimed") {
-    throw new ServiceError(`fill handoff ${handoffId} is not open`);
-  }
-
-  const task = requireTask(db, handoff.taskId);
-  const application = getApplication(db, handoff.applicationId);
-  const jdAnalysis = getJdAnalysis(db, handoff.applicationId);
+/**
+ * The profile the fill engine resolves values from: the user's own facts, their
+ * stored answers, and the answers we derived for this specific job.
+ *
+ * Extracted from `claimHandoff` because the AI fallback classifier resolves its
+ * mappings against exactly this — the same profile, the same answer bank, the
+ * same precedence. Two assemblies would mean the fallback could fill from a
+ * bank the ordinary path does not have, which is the kind of divergence nobody
+ * notices until a value is wrong on a submitted application.
+ */
+export function buildFillProfile(db: Db, applicationId: string): FillProfile {
   const profile = getProfile(db);
-  const effectiveResume = resolveEffectiveResume(
-    { resumeId: application?.resumeId },
-    listResumes(db),
-  );
-
-  const fillProfile: FillProfile = {
+  const application = getApplication(db, applicationId);
+  return {
     personal: toFillPersonal(profile),
     skills: profile?.skills ?? [],
     // The stored bank first: an answer the user wrote always wins over one we
@@ -390,6 +387,24 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
       ),
     ],
   };
+}
+
+export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
+  const handoff = getFillHandoff(db, handoffId);
+  if (!handoff) throw new ServiceError(`fill handoff ${handoffId} not found`);
+  if (handoff.status !== "pending" && handoff.status !== "claimed") {
+    throw new ServiceError(`fill handoff ${handoffId} is not open`);
+  }
+
+  const task = requireTask(db, handoff.taskId);
+  const application = getApplication(db, handoff.applicationId);
+  const jdAnalysis = getJdAnalysis(db, handoff.applicationId);
+  const effectiveResume = resolveEffectiveResume(
+    { resumeId: application?.resumeId },
+    listResumes(db),
+  );
+
+  const fillProfile = buildFillProfile(db, handoff.applicationId);
 
   const coverLetter = task.skippedCoverLetter
     ? null

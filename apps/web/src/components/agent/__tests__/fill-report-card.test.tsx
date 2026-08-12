@@ -35,7 +35,8 @@ describe("FillReportCard", () => {
     render(<FillReportCard reports={reports} />);
 
     expect(screen.getByText("Full name")).toBeTruthy();
-    expect(screen.getByText(/personal/)).toBeTruthy();
+    // The source is shown in words, not as the engine's own slug.
+    expect(screen.getByText(/from your profile/)).toBeTruthy();
     expect(screen.getByText(/Jordan Rivera/)).toBeTruthy();
   });
 
