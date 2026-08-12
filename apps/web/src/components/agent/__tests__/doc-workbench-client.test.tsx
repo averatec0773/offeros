@@ -140,6 +140,15 @@ describe("a draft", () => {
     mount({ events: [approved] });
     expect(screen.getByText(/Accepted · v2/)).toBeTruthy();
   });
+
+  it("the header flips to Accepted right after clicking Accept, before any reload", async () => {
+    // The events prop is the server snapshot from render time — an accept made
+    // on this page is not in it. The header must not keep saying Draft.
+    mount({ events: [] });
+    expect(screen.getByText(/Draft · v2/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Accept/ }));
+    await waitFor(() => expect(screen.getByText(/Accepted · v2/)).toBeTruthy());
+  });
 });
 
 describe("history", () => {

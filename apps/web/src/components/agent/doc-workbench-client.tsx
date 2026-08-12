@@ -61,6 +61,10 @@ export function DocWorkbenchClient({
   const [pdfBusy, setPdfBusy] = useState(false);
 
   const status = docStatus(artifact, kind, events);
+  // `events` is the server snapshot from render time, so an accept made on
+  // THIS page is not in it — the local flag bridges until the next server
+  // render. Every path that creates a new version clears the flag.
+  const shownState = accepted && status.state === "draft" ? "accepted" : status.state;
   const version =
     artifact?.versions.find((v) => v.id === selectedId) ??
     artifact?.versions.find((v) => v.id === artifact.currentVersionId) ??
@@ -171,9 +175,9 @@ export function DocWorkbenchClient({
       <header className="mt-4 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-heading font-semibold text-foreground">{TITLE[kind]}</h1>
         <span className="text-caption text-muted-foreground">
-          {status.state === "none"
+          {shownState === "none"
             ? DOC_STATE_LABEL.none
-            : `${DOC_STATE_LABEL[status.state]} · v${status.version} · ${relativeTime(status.updatedAt)}`}
+            : `${DOC_STATE_LABEL[shownState]} · v${status.version} · ${relativeTime(status.updatedAt)}`}
         </span>
       </header>
 
@@ -295,7 +299,7 @@ export function DocWorkbenchClient({
                   <Download aria-hidden className="size-3.5" />
                   {pdfBusy ? "Rendering…" : "PDF"}
                 </button>
-                {(accepted || status.state === "accepted") && (
+                {shownState === "accepted" && (
                   <span className="text-caption text-success">Accepted</span>
                 )}
               </div>
