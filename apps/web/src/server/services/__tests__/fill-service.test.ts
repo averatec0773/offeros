@@ -944,11 +944,33 @@ describe("replaying Done after the panel reopens", () => {
     expect(twice.applicationInfo).toEqual(once.applicationInfo);
   });
 
-  it("still refuses an INCREMENTAL report once the run is finished", () => {
-    // Only a replayed complete snapshot is safe. A partial report arriving
-    // after the fact would silently rewrite a finished run.
+  it("accepts an INCREMENTAL report at the submit gate — the user is still working", () => {
+    // Between finishing a fill and pressing submit on the employer's page, the
+    // user refines an answer, accepts a better one, fixes a field by hand. The
+    // panel reports each as it happens. Refusing those because the task had
+    // moved to the submit gate meant the record stopped matching the page at
+    // exactly the moment it mattered most.
     const taskId = completedTask();
+    expect(PIPELINE_STEPS[getPipelineTask(db, taskId)!.step]?.key).toBe("submit");
+
+    const after = applyFillReport(db, taskId, [field({ fieldId: "late" })], false);
+
+    expect(after.fieldReports?.some((r) => r.fieldId === "late")).toBe(true);
+    // It stays at the submit gate: an incremental report is an update, not a
+    // statement that the run restarted.
+    expect(PIPELINE_STEPS[after.step]?.key).toBe("submit");
+  });
+
+  it("refuses any report once the user has said they submitted", () => {
+    // The line that still matters: a late report from a stale panel must not
+    // reopen a record the user has closed.
+    const taskId = completedTask();
+    const { applicationId } = { applicationId: getPipelineTask(db, taskId)!.applicationId };
+    markSubmitted(db, applicationId, "panel");
     expect(() => applyFillReport(db, taskId, [field({ fieldId: "late" })], false)).toThrow(
+      /not awaiting fill/,
+    );
+    expect(() => applyFillReport(db, taskId, [field({ fieldId: "late" })], true)).toThrow(
       /not awaiting fill/,
     );
   });
@@ -1130,5 +1152,62 @@ describe("taking a submission back, whichever door it came through", () => {
       jobInfo: { jobId: "j9", jobTitle: "Analyst", companyName: "Initech" },
     });
     expect(() => undoSubmittedForApplication(db, app.id)).toThrow(ServiceError);
+  });
+});
+
+/**
+ * Re-filling from the submit gate.
+ *
+ * A completely successful fill parks the task at submit. From there every route
+ * back used to be a 400 the page rendered as "Something went wrong": the task
+ * counted as already in position, while opening a ticket demanded the fill
+ * gate. There was no way out of a finished fill except to mark it submitted.
+ */
+describe("filling again after a fill that finished", () => {
+  const report = (over: Partial<FieldReport>): FieldReport => ({
+    fieldId: "email",
+    label: "Email",
+    classifiedType: "email",
+    status: "filled",
+    source: "personal",
+    reason: "",
+    outcome: "filled",
+    required: true,
+    page: "boards.example.com/acme/apply",
+    ...over,
+  });
+
+  const parkedAtSubmit = () => {
+    const { taskId } = seedTaskAtFillForm();
+    updatePipelineTask(db, taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    return taskId;
+  };
+
+  it("opening a ticket from the submit gate resets the task to the fill gate", () => {
+    const taskId = parkedAtSubmit();
+    const handoff = createHandoffForTask(db, taskId);
+    expect(handoff.status).toBe("pending");
+    expect(PIPELINE_STEPS[getPipelineTask(db, taskId)!.step]?.key).toBe("fill-form");
+  });
+
+  it("the reopened task accepts a report again", () => {
+    // The whole point: after the reset the ordinary fill path works, rather
+    // than the user meeting a second 400.
+    const taskId = parkedAtSubmit();
+    createHandoffForTask(db, taskId);
+    const after = applyFillReport(db, taskId, [report({ fieldId: "f1" })], false);
+    expect(after.fieldReports).toHaveLength(1);
+  });
+
+  it("still refuses a ticket for a task that is not waiting on the user at all", () => {
+    const { taskId } = seedTaskAtFillForm();
+    updatePipelineTask(db, taskId, { status: "running" });
+    expect(() => createHandoffForTask(db, taskId)).toThrow(/not awaiting fill/);
+  });
+
+  it("still refuses a ticket for a finished task", () => {
+    const taskId = parkedAtSubmit();
+    completeSubmitted(db, taskId);
+    expect(() => createHandoffForTask(db, taskId)).toThrow(/not awaiting fill/);
   });
 });

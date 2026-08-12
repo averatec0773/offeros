@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ExternalLink, MessageSquare, Search } from "lucide-react";
 import {
   APPLICATION_STATUSES,
+  PIPELINE_STEPS,
   type Application,
   type ApplicationEvent,
   type ApplicationStatus,
@@ -98,6 +99,9 @@ export function ApplicationDetailClient({
   const [savingJd, setSavingJd] = useState(false);
   const [fit, setFit] = useState<FitAnalysis | null>(initialFit);
   const [status, setStatus] = useState<ApplicationStatus>(application.status);
+  /** Whether the browser panel answered when the page was opened. Without it,
+   *  "the panel will fill it" is not true and must not be said. */
+  const [ticketViaExtension, setTicketViaExtension] = useState(true);
   const [resumes, setResumes] = useState<ResumeSummary[]>([]);
   const [resumeId, setResumeId] = useState<string | undefined>(application.resumeId);
   const [attachResume, setAttachResume] = useState<"tailored" | "original">(
@@ -298,6 +302,14 @@ export function ApplicationDetailClient({
   /** Open (or re-open) a fill ticket, then hand the ATS page to the extension.
    *  Unchanged from the workspace this replaced — the handoff is the one part
    *  of the old machinery the user still touches directly. */
+  // The fill finished with nothing outstanding, and the task is parked at the
+  // gate whose only remaining act is the user's. Read from the task rather than
+  // from a client flag so it survives a reload.
+  const readyToSubmit =
+    task?.status === "awaiting_user" &&
+    PIPELINE_STEPS[task.step]?.key === "submit" &&
+    status !== "applied";
+
   async function handleOpenAndFill() {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -309,6 +321,7 @@ export function ApplicationDetailClient({
     // treat the open as user-initiated.
     const knownApplyLink = application.jobInfo.applyLink;
     const viaExtension = extensionPresent();
+    setTicketViaExtension(viaExtension);
     if (!viaExtension && knownApplyLink) window.open(knownApplyLink, "_blank");
     try {
       const id = await ensureTask();
@@ -504,6 +517,9 @@ export function ApplicationDetailClient({
             incidents={initialIncidents}
             busy={busy}
             ticketCreated={ticketCreated}
+            extensionPresent={ticketViaExtension}
+            alreadyApplied={status === "applied"}
+            readyToSubmit={readyToSubmit}
             onOpenAndFill={() => void handleOpenAndFill()}
             onFixed={() => void handleFillResolve("fixed")}
             onApplied={() => void handleFillResolve("applied-manually")}

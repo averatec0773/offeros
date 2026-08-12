@@ -97,8 +97,18 @@ function persist(
  */
 export function createHandoffForTask(db: Db, taskId: string): FillHandoff {
   const task = requireTask(db, taskId);
-  if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "fill-form") {
+  const parkedAt = PIPELINE_STEPS[task.step]?.key;
+  if (task.status !== "awaiting_user" || (parkedAt !== "fill-form" && parkedAt !== "submit")) {
     throw new ServiceError("task is not awaiting fill");
+  }
+  // Re-filling from the submit gate: asking for a fill ticket IS the statement
+  // that the run is not finished after all, so the task goes back to the fill
+  // gate rather than refusing. It used to refuse — a completely successful fill
+  // parks at submit, and from there every route back was a 400 the page showed
+  // as "Something went wrong". There was no way out of a finished fill except
+  // to mark it submitted.
+  if (parkedAt === "submit") {
+    updatePipelineTask(db, taskId, { step: stepIndex("fill-form"), status: "awaiting_user" });
   }
   const application = getApplication(db, task.applicationId);
   const handoff = createFillHandoff(db, {
@@ -477,8 +487,19 @@ export function applyFillReport(
   //
   // Accepting it is safe precisely because a complete report REPLACES rather
   // than merges: the same snapshot twice lands the same state twice.
-  const replayingComplete = complete && task.status === "awaiting_user" && parkedAt === "submit";
-  if (!replayingComplete && (task.status !== "awaiting_user" || parkedAt !== "fill-form")) {
+  // Both gates accept a report, and for the same reason: between finishing a
+  // fill and actually pressing submit on the employer's page, the user is still
+  // working. They refine a generated answer, accept a better one, fix a field
+  // by hand — and the panel reports each of those as it happens. Refusing them
+  // because the task had moved to the submit gate meant the workspace's record
+  // of the fill silently stopped matching the page the moment it mattered most.
+  //
+  // A COMPLETE report replayed at the submit gate is safe for the same reason:
+  // complete replaces, so the same snapshot twice lands the same state twice.
+  // What is still refused is a report against a FINISHED task — once the user
+  // has said they submitted, a late report from a stale panel must not reopen
+  // the record.
+  if (task.status !== "awaiting_user" || (parkedAt !== "fill-form" && parkedAt !== "submit")) {
     throw new ServiceError("task is not awaiting fill");
   }
   // A COMPLETE report replaces; an incremental one merges.

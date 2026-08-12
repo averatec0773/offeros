@@ -186,9 +186,22 @@ describe("POST /agent/tasks/[id]/fill/report", () => {
     expect(res.status).toBe(400);
   });
 
-  it("400s when the task is no longer at the fill-form gate", async () => {
+  it("accepts a report at the submit gate — the user is still working on the page", async () => {
+    // Between a finished fill and actually pressing submit, the user refines an
+    // answer or fixes a field by hand, and the panel reports each as it
+    // happens. This used to 400, so the record stopped matching the page at
+    // exactly the moment it mattered most.
     const { taskId } = seedTaskAtFillForm();
     updatePipelineTask(getDb(), taskId, { step: SUBMIT_STEP, status: "awaiting_user" });
+    const res = await reportRoute.POST(post({ reports: [], complete: false }), idCtx(taskId));
+    expect(res.status).toBe(200);
+  });
+
+  it("400s once the task is finished", async () => {
+    // The line that still holds: a late report from a stale panel must not
+    // reopen a record the user has already closed.
+    const { taskId } = seedTaskAtFillForm();
+    updatePipelineTask(getDb(), taskId, { step: SUBMIT_STEP, status: "done" });
     const res = await reportRoute.POST(post({ reports: [], complete: false }), idCtx(taskId));
     expect(res.status).toBe(400);
   });
