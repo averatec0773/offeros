@@ -233,6 +233,10 @@ export function FillPanel({
   /** Why a Done was refused, when it was. Shown rather than swallowed: a
    *  silently rejected Done is indistinguishable from a working one. */
   const [doneError, setDoneError] = useState<string | null>(null);
+  /** Another panel has claimed this fill since we did. The report still landed
+   *  — throwing away work done on a real page would be worse — but two panels
+   *  writing the same record silently is worse still. */
+  const [supersededBy, setSuperseded] = useState(false);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
   // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
   // the caption never claims an unsaved edit was saved.
@@ -525,7 +529,8 @@ export function FillPanel({
         });
       }
     }
-    if (b && reportsRef.current.size > 0) await api.postReport(b.taskId, allReports(), false);
+    if (b && reportsRef.current.size > 0)
+      await api.postReport(b.taskId, allReports(), false, b.handoffId);
   };
 
   // Task-mode fill for one (wizard) page: classified/personal fields from the bundle
@@ -748,7 +753,7 @@ export function FillPanel({
       const page = pageIdRef.current ?? stablePageId(sr.url, sr.wizard);
       const requiredIds = new Set(planForFill.filter((i) => i.required).map((i) => i.fieldId));
       accumulateReports(buildFieldReports(traceForFill, writes, requiredIds, page));
-      await api.postReport(b.taskId, allReports(), false);
+      await api.postReport(b.taskId, allReports(), false, b.handoffId);
 
       setFilledOnce(true);
       setDone(true);
@@ -833,9 +838,11 @@ export function FillPanel({
       // The page already has the new text; what can still fail is the record.
       // Say so — a report that silently stays stale is how the workspace ends
       // up disagreeing with the form (the exact bug the Done fix was about).
-      const posted = await api.postReport(b.taskId, allReports(), false);
+      const posted = await api.postReport(b.taskId, allReports(), false, b.handoffId);
       if (!posted.ok) {
         fail(`The page has the new answer, but recording it failed: ${posted.error}`);
+      } else if (posted.value.staleClaim === true) {
+        setSuperseded(true);
       }
     } finally {
       setRefineBusy(null);
@@ -863,7 +870,7 @@ export function FillPanel({
           });
         }
       }
-      const posted = await api.postReport(b.taskId, allReports(), false);
+      const posted = await api.postReport(b.taskId, allReports(), false, b.handoffId);
       if (!posted.ok) {
         setAnswerError((prev) =>
           new Map(prev).set(entry.fieldId, `Accepted, but recording it failed: ${posted.error}`),
@@ -900,7 +907,7 @@ export function FillPanel({
     if (doneRef.current) return;
     doneRef.current = true;
     setDoneError(null);
-    const posted = await api.postReport(b.taskId, allReports(), true);
+    const posted = await api.postReport(b.taskId, allReports(), true, b.handoffId);
     if (!posted.ok) {
       doneRef.current = false; // a failed post may be retried
       // Say so. This used to return in silence, so a refused Done looked
@@ -908,6 +915,7 @@ export function FillPanel({
       setDoneError(posted.error ?? "Couldn't record that — try again.");
       return;
     }
+    if (posted.value.staleClaim === true) setSuperseded(true);
     setReported(true);
     // Evidence pass, strictly after the report and strictly best-effort: the
     // user pressed Done and IS done — a slow or failing screenshot changes
@@ -1860,6 +1868,12 @@ export function FillPanel({
               {/* A refused Done used to return in silence, which looked exactly
                   like a successful one. */}
               {doneError && <p className="text-caption text-warning">{doneError}</p>}
+              {supersededBy && (
+                <p className="text-caption text-warning">
+                  This job was opened somewhere else since you started here — what you did was
+                  saved, but check the other window before submitting.
+                </p>
+              )}
             </div>
           ))}
       </SectionCard>

@@ -251,6 +251,18 @@ export type FillTaskBundle = {
    * it, Done looked available and did nothing.
    */
   taskParkedAtSubmit: boolean;
+  /**
+   * When this claim was made.
+   *
+   * A ticket can legitimately be claimed twice — a reloaded panel has to be
+   * able to pick its own run back up, and refusing that would strand it. The
+   * cost is that two panels can hold the same ticket at once (the toolbar side
+   * panel and the in-page overlay are two shells of the same app), and both
+   * report against the same task. There is no lease here; this is only enough
+   * for a panel to find out it is no longer the current claimer instead of
+   * quietly overwriting the other one's work.
+   */
+  claimedAt: number;
 };
 
 const EMPTY_PERSONAL: FillPersonalInfo = { name: "", email: "", phone: "", address: "", links: {} };
@@ -454,6 +466,7 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
     resumeId: effectiveResume?.id,
     fieldReports: task.fieldReports ?? [],
     taskParkedAtSubmit: PIPELINE_STEPS[task.step]?.key === "submit",
+    claimedAt: Date.now(),
   };
 
   updateFillHandoff(db, handoff.id, { status: "claimed" });
@@ -669,6 +682,22 @@ export function resolveFill(
  * The "mark submitted" terminal action. Valid only when the task waits at the
  * submit gate; finishes the task and marks the application applied.
  */
+/**
+ * Is this ticket still the one this task is being filled through?
+ *
+ * Answers the two-panels case without introducing a lease: the newest open
+ * ticket for a task is the current one, and a report arriving on an older
+ * ticket comes from a panel that has been superseded. The report is still
+ * applied — throwing it away would lose real work the user did on a real page —
+ * but the panel is told, so it can say so instead of silently fighting the
+ * other one.
+ */
+export function isCurrentClaim(db: Db, taskId: string, handoffId: string): boolean {
+  const open = listOpenFillHandoffs(db).filter((h) => h.taskId === taskId);
+  if (open.length === 0) return true; // nothing open: nobody to conflict with
+  return open[0]?.id === handoffId;
+}
+
 /** Where a "I submitted this" came from. Recorded so the timeline can say. */
 export const SUBMISSION_SOURCES = ["panel", "web-card", "web-status", "agent"] as const;
 export type SubmissionSource = (typeof SUBMISSION_SOURCES)[number];

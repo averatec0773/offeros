@@ -117,10 +117,12 @@ describe("postReport", () => {
         required: true,
       },
     ];
-    const r = await postReport("t1", reports, true, f.fn);
+    const r = await postReport("t1", reports, true, "h1", f.fn);
     expect(r).toEqual({ ok: true, value: { id: "t1" } });
     const body = JSON.parse(String(f.calls[0]!.init.body));
-    expect(body).toEqual({ reports, complete: true });
+    // The ticket travels with the report so the server can tell this panel
+    // whether it is still the one driving this fill.
+    expect(body).toEqual({ reports, complete: true, handoffId: "h1" });
     expect(f.calls[0]!.url).toBe("http://localhost:3000/api/v1/agent/tasks/t1/fill/report");
   });
 });

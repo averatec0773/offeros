@@ -28,6 +28,7 @@ import {
   applyFillReport,
   resolveFill,
   completeSubmitted,
+  isCurrentClaim,
   markSubmitted,
   undoSubmitted,
   undoSubmittedForApplication,
@@ -1209,5 +1210,101 @@ describe("filling again after a fill that finished", () => {
     const taskId = parkedAtSubmit();
     completeSubmitted(db, taskId);
     expect(() => createHandoffForTask(db, taskId)).toThrow(/not awaiting fill/);
+  });
+});
+
+/**
+ * Ticket hygiene.
+ *
+ * A ticket was closed by exactly three things: a newer ticket for the same
+ * task, a completed report, or the user resolving the fill. A panel that sent
+ * one incremental report and then crashed left one open forever — and an open
+ * ticket keeps its application in the extension's pending list and in the inbox
+ * as "open the page to fill it", permanently, for a fill that ended weeks ago.
+ */
+describe("tickets that nobody ever closed", () => {
+  const EIGHT_DAYS = 8 * 24 * 60 * 60 * 1000;
+
+  const age = (handoffId: string, ms: number) => {
+    db.run(
+      sql`update fill_handoffs set created_at = ${Date.now() - ms}, updated_at = ${Date.now() - ms} where id = ${handoffId}`,
+    );
+  };
+
+  it("stops reporting a week-old open ticket as live", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    age(handoff.id, EIGHT_DAYS);
+
+    expect(listOpenFillHandoffs(db).some((h) => h.id === handoff.id)).toBe(false);
+    // And the expiry is written down, not merely filtered out of one read.
+    expect(getFillHandoff(db, handoff.id)!.status).toBe("cancelled");
+  });
+
+  it("leaves a ticket from yesterday alone", () => {
+    // An application opened Friday and finished Monday is an ordinary way to
+    // apply for a job, not an abandoned one.
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    age(handoff.id, 24 * 60 * 60 * 1000);
+    expect(listOpenFillHandoffs(db).some((h) => h.id === handoff.id)).toBe(true);
+  });
+
+  it("an expired ticket can no longer be claimed", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    age(handoff.id, EIGHT_DAYS);
+    expect(() => claimHandoff(db, handoff.id)).toThrow(/not open/);
+  });
+
+  it("expiring is idempotent — a cancelled ticket is not re-stamped", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    age(handoff.id, EIGHT_DAYS);
+    listOpenFillHandoffs(db);
+    const first = getFillHandoff(db, handoff.id)!.updatedAt;
+    listOpenFillHandoffs(db);
+    expect(getFillHandoff(db, handoff.id)!.updatedAt).toBe(first);
+  });
+});
+
+describe("two panels on one fill", () => {
+  it("a claim is still allowed twice — a reloaded panel must be able to resume", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    expect(claimHandoff(db, handoff.id).handoffId).toBe(handoff.id);
+    expect(claimHandoff(db, handoff.id).handoffId).toBe(handoff.id);
+  });
+
+  it("the bundle says when the claim was made", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    const bundle = claimHandoff(db, handoff.id);
+    expect(typeof bundle.claimedAt).toBe("number");
+    expect(bundle.claimedAt).toBeGreaterThan(0);
+  });
+
+  it("a panel holding the newest ticket is the current claimer", () => {
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    expect(isCurrentClaim(db, taskId, handoff.id)).toBe(true);
+  });
+
+  it("a panel holding a superseded ticket is told so", () => {
+    // Opening the fill again from the workspace cancels the old ticket and
+    // makes a new one; the panel still holding the old one is no longer driving.
+    const { taskId } = seedTaskAtFillForm();
+    const first = createHandoffForTask(db, taskId);
+    const second = createHandoffForTask(db, taskId);
+    expect(isCurrentClaim(db, taskId, first.id)).toBe(false);
+    expect(isCurrentClaim(db, taskId, second.id)).toBe(true);
+  });
+
+  it("says nothing when there is no open ticket to conflict with", () => {
+    // A report arriving after the run closed is not a conflict, it is late.
+    const { taskId } = seedTaskAtFillForm();
+    const handoff = createHandoffForTask(db, taskId);
+    applyFillReport(db, taskId, [], true);
+    expect(isCurrentClaim(db, taskId, handoff.id)).toBe(true);
   });
 });

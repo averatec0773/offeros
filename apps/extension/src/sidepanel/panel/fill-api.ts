@@ -7,6 +7,7 @@ import type {
   FillTaskBundle,
   FillTicket,
   FitSummary,
+  ReportResult,
 } from "../../lib/offeros-api";
 import type { AiResolution } from "../../lib/autofill/task-mode";
 
@@ -18,7 +19,10 @@ export interface FillApi {
     taskId: string,
     reports: FieldReport[],
     complete?: boolean,
-  ) => Promise<ApiResult<unknown>>;
+    /** The ticket this panel holds, so the server can say whether it is still
+     *  the current claimer. */
+    handoffId?: string,
+  ) => Promise<ApiResult<ReportResult>>;
   postEvidence: (
     applicationId: string,
     body: { label?: string; dataUrl: string },

@@ -839,14 +839,14 @@ describe("FillPanel", () => {
       label: "Why do you want to work here?",
       context: undefined,
     });
-    expect(api.postReport).toHaveBeenCalledWith("t1", expect.any(Array), false);
+    expect(api.postReport).toHaveBeenCalledWith("t1", expect.any(Array), false, "h1");
     expect(await screen.findByText("AI answers")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Because I build compilers.")).toBeInTheDocument();
 
     await act(async () => {
       await userEvent.click(screen.getByRole("button", { name: "Done — report to workspace" }));
     });
-    expect(api.postReport).toHaveBeenLastCalledWith("t1", expect.any(Array), true);
+    expect(api.postReport).toHaveBeenLastCalledWith("t1", expect.any(Array), true, "h1");
     expect(await screen.findByText("Reported — check the workspace.")).toBeInTheDocument();
   });
 
@@ -1720,6 +1720,7 @@ describe("FillPanel", () => {
           }),
         ]),
         false,
+        "h1",
       );
     });
 
@@ -1771,6 +1772,7 @@ describe("FillPanel", () => {
           expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: NO_FILE_REASON }),
         ]),
         false,
+        "h1",
       );
     });
 
@@ -1798,6 +1800,7 @@ describe("FillPanel", () => {
           expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: NO_FILE_REASON }),
         ]),
         false,
+        "h1",
       );
     });
 
@@ -1836,6 +1839,7 @@ describe("FillPanel", () => {
             }),
           ]),
           false,
+          "h1",
         ),
       );
     });
@@ -1868,6 +1872,7 @@ describe("FillPanel", () => {
           }),
         ]),
         false,
+        "h1",
       );
     });
 
@@ -1908,6 +1913,7 @@ describe("FillPanel", () => {
             }),
           ]),
           false,
+          "h1",
         ),
       );
     });
@@ -1981,6 +1987,7 @@ describe("FillPanel", () => {
           }),
         ]),
         false,
+        "h1",
       );
     });
 
@@ -2036,6 +2043,7 @@ describe("FillPanel", () => {
           }),
         ]),
         false,
+        "h1",
       );
     });
   });

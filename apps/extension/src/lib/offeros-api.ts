@@ -56,6 +56,8 @@ export type FillTaskBundle = {
    *  submit gate. Lets a re-opened panel show Done as already done instead of
    *  offering a button that quietly achieves nothing. */
   taskParkedAtSubmit?: boolean;
+  /** When this claim was made — see the server-side type. */
+  claimedAt?: number;
 };
 
 /** An application, trimmed to what the panel shows. */
@@ -215,15 +217,23 @@ export function claim(
   );
 }
 
+/** What a report comes back with. `staleClaim` means another panel has since
+ *  claimed this fill — the report still landed, but this panel is no longer the
+ *  one driving. */
+export interface ReportResult {
+  staleClaim?: boolean;
+}
+
 export function postReport(
   taskId: string,
   reports: FieldReport[],
   complete?: boolean,
+  handoffId?: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<ApiResult<unknown>> {
-  return call<unknown>(
+): Promise<ApiResult<ReportResult>> {
+  return call<ReportResult>(
     `/agent/tasks/${taskId}/fill/report`,
-    json("POST", { reports, complete }),
+    json("POST", { reports, complete, handoffId }),
     fetchImpl,
   );
 }
