@@ -60,10 +60,29 @@ function accessibleName(el: Element): string {
   return el.getAttribute("title")?.trim() ?? "";
 }
 
+/** Words that talk about rows of a form, as opposed to "Add to favorites". */
+const ROW_WORDS =
+  /\b(entry|entries|row|rows|another|more|item|record|history|education|experience|employment|reference)\b/i;
+
 function looksLikeAddControl(el: Element): boolean {
   const name = accessibleName(el);
   if (name === "") return false;
-  return ADD_PATTERNS.some((re) => re.test(name));
+  if (!ADD_PATTERNS.some((re) => re.test(name))) return false;
+  // "Add to favorites", "Add to calendar" — page furniture that starts with
+  // the right word and does the wrong thing. An "add to" is only a row-adder
+  // when it also talks about rows ("Add an entry to the Education section").
+  if (/\badd\s+to\b/i.test(name) && !ROW_WORDS.test(name)) return false;
+  return true;
+}
+
+/** closest("form"), but able to step out of shadow roots on the way up. */
+function insideForm(el: Element): boolean {
+  let node: Node | null = el;
+  while (node) {
+    if (node instanceof Element && node.tagName === "FORM") return true;
+    node = node instanceof ShadowRoot ? node.host : node.parentNode;
+  }
+  return false;
 }
 
 /**
@@ -103,6 +122,10 @@ function fieldsIn(region: ParentNode): HTMLElement[] {
 export function findRepeaters(root: ParentNode): RepeaterSection[] {
   const controls = deepQueryAll(root, 'button, [role="button"], a[href="#"]')
     .filter((el): el is HTMLElement => el instanceof HTMLElement)
+    // Only inside the form. A careers page is full of buttons that start with
+    // "Add" and have nothing to do with the application — clicking one is a
+    // side effect the user never asked for, even a harmless-looking one.
+    .filter(insideForm)
     .filter(looksLikeAddControl);
 
   const seen = new Set<HTMLElement>();

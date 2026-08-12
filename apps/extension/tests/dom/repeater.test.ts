@@ -70,6 +70,25 @@ describe("finding the sections that expand", () => {
     },
   );
 
+  it.each(["Add to favorites", "☆ Add to saved jobs", "Add to calendar", "Add to cart"])(
+    "%o is page furniture, not a row-adder — even inside the form",
+    (text) => {
+      document.body.innerHTML = `<main><form><section><button type="button">${text}</button></section></form></main>`;
+      expect(findRepeaters(document)).toHaveLength(0);
+    },
+  );
+
+  it('"Add an entry to the Education section" survives the add-to guard', () => {
+    document.body.innerHTML = `<main><form><section><button type="button" aria-label="Add an entry to the Education section. 0 of 10 entries added currently.">Add</button></section></form></main>`;
+    expect(findRepeaters(document)).toHaveLength(1);
+  });
+
+  it("a row-adder outside any form is never clicked material", () => {
+    // Same wording, no form around it — a repeater only lives in a form.
+    document.body.innerHTML = `<main><section><button type="button">+ Add</button></section></main>`;
+    expect(findRepeaters(document)).toHaveLength(0);
+  });
+
   it("reports one section per region, not one per button", () => {
     mountRepeater();
     const region = document.querySelector('[role="region"]')!;
