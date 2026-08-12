@@ -51,6 +51,10 @@ export type FillTaskBundle = {
   /** The task's accumulated per-field reports — present so a re-claiming
    *  panel (extension reloaded mid-fill) rehydrates instead of restarting. */
   fieldReports?: FieldReport[];
+  /** True when the run was already reported complete and the task sits at the
+   *  submit gate. Lets a re-opened panel show Done as already done instead of
+   *  offering a button that quietly achieves nothing. */
+  taskParkedAtSubmit?: boolean;
 };
 
 /** An application, trimmed to what the panel shows. */

@@ -207,6 +207,9 @@ export function FillPanel({
     { fieldId: string; label: string; answer: string; options?: string[] }[]
   >([]);
   const [reported, setReported] = useState(false);
+  /** Why a Done was refused, when it was. Shown rather than swallowed: a
+   *  silently rejected Done is indistinguishable from a working one. */
+  const [doneError, setDoneError] = useState<string | null>(null);
   // fieldIds whose current AI answer text has been accepted + persisted to the answer
   // bank — drives the "Saved to your answers." caption. Cleared on edit/regenerate so
   // the caption never claims an unsaved edit was saved.
@@ -316,6 +319,13 @@ export function FillPanel({
     // writtenValueFor), so a report from an earlier page layout (or the old
     // session-counter id era) can never decorate the wrong field.
     if (anyFilled) setFilledOnce(true);
+    // A task already past the fill gate was reported complete in an earlier
+    // session. Say so, rather than offering a Done that silently does nothing:
+    // the panel does not persist its own state, so this bundle is the only
+    // evidence that the run already finished.
+    const alreadyReported = b.taskParkedAtSubmit === true;
+    setReported(alreadyReported);
+    doneRef.current = alreadyReported;
   };
 
   // fieldId → the control's DOM value at the latest scan. Gates rehydrated
@@ -797,14 +807,19 @@ export function FillPanel({
     const b = bundleRef.current;
     if (!b) return;
     // Re-entry guard: `reported` state lands only after the await, so a
-    // double-click would post the complete report twice. The server is
-    // idempotent about it now, but the second request (and a duplicate
-    // evidence pass) is still pure waste.
+    // double-click would post the complete report twice. The server accepts a
+    // replayed complete report (it replaces rather than merges, so the same
+    // snapshot twice lands the same state), but the second request — and a
+    // duplicate evidence pass — is still pure waste.
     if (doneRef.current) return;
     doneRef.current = true;
+    setDoneError(null);
     const posted = await api.postReport(b.taskId, allReports(), true);
     if (!posted.ok) {
       doneRef.current = false; // a failed post may be retried
+      // Say so. This used to return in silence, so a refused Done looked
+      // exactly like a working one that had nothing left to do.
+      setDoneError(posted.error ?? "Couldn't record that — try again.");
       return;
     }
     setReported(true);
@@ -1581,13 +1596,18 @@ export function FillPanel({
               {submitError && <p className="text-caption text-warning">{submitError}</p>}
             </div>
           ) : (
-            <Button
-              className="mt-3 w-full rounded-full"
-              disabled={pending || !filledOnce}
-              onClick={() => void onDone()}
-            >
-              Done — report to workspace
-            </Button>
+            <div className="mt-3 space-y-2">
+              <Button
+                className="w-full rounded-full"
+                disabled={pending || !filledOnce}
+                onClick={() => void onDone()}
+              >
+                Done — report to workspace
+              </Button>
+              {/* A refused Done used to return in silence, which looked exactly
+                  like a successful one. */}
+              {doneError && <p className="text-caption text-warning">{doneError}</p>}
+            </div>
           ))}
       </SectionCard>
     </div>

@@ -892,3 +892,80 @@ describe("report merge semantics (the stale needs-you defect)", () => {
     expect(after.fieldReports).toHaveLength(2);
   });
 });
+
+describe("replaying Done after the panel reopens", () => {
+  const field = (over: Partial<FieldReport>): FieldReport => ({
+    fieldId: "email",
+    label: "Email",
+    classifiedType: "email",
+    status: "filled",
+    source: "personal",
+    reason: "",
+    outcome: "filled",
+    required: true,
+    page: "boards.example.com/acme/apply",
+    ...over,
+  });
+
+  function completedTask() {
+    const application = createApplication(db, {
+      jobInfo: { jobId: "j1", jobTitle: "Engineer", companyName: "Acme" },
+    });
+    const task = createPipelineTask(db, {
+      applicationId: application.id,
+      status: "awaiting_user",
+      step: PIPELINE_STEPS.findIndex((s) => s.key === "fill-form"),
+    });
+    // A complete run with nothing outstanding parks the task at submit.
+    applyFillReport(db, task.id, [field({})], true);
+    return task.id;
+  }
+
+  it("accepts the same complete report again instead of rejecting it", () => {
+    const taskId = completedTask();
+    expect(PIPELINE_STEPS[getPipelineTask(db, taskId)!.step]?.key).toBe("submit");
+
+    // The panel reopened, rehydrated from the bundle, and Done was pressed
+    // again. This used to throw, and the panel swallowed the failure.
+    const replayed = applyFillReport(db, taskId, [field({})], true);
+
+    expect(PIPELINE_STEPS[replayed.step]?.key).toBe("submit");
+    expect(replayed.fieldReports).toHaveLength(1);
+    expect(replayed.applicationInfo?.status).toBe(1);
+  });
+
+  it("lands the same state twice — replay is idempotent, not additive", () => {
+    const taskId = completedTask();
+    const once = getPipelineTask(db, taskId)!;
+    const twice = applyFillReport(db, taskId, [field({})], true);
+    expect(twice.fieldReports).toEqual(once.fieldReports);
+    expect(twice.applicationInfo).toEqual(once.applicationInfo);
+  });
+
+  it("still refuses an INCREMENTAL report once the run is finished", () => {
+    // Only a replayed complete snapshot is safe. A partial report arriving
+    // after the fact would silently rewrite a finished run.
+    const taskId = completedTask();
+    expect(() => applyFillReport(db, taskId, [field({ fieldId: "late" })], false)).toThrow(
+      /not awaiting fill/,
+    );
+  });
+
+  it("tells a re-claiming panel the run is already reported", () => {
+    const taskId = completedTask();
+    const task = getPipelineTask(db, taskId)!;
+    // The ticket has to be opened while the task is still at the fill gate —
+    // that guard is unchanged — then claimed once it has moved on, which is
+    // exactly the re-open case.
+    updatePipelineTask(db, taskId, {
+      step: PIPELINE_STEPS.findIndex((s) => s.key === "fill-form"),
+    });
+    const handoff = createHandoffForTask(db, taskId);
+    updatePipelineTask(db, taskId, {
+      step: PIPELINE_STEPS.findIndex((s) => s.key === "submit"),
+    });
+    const bundle = claimHandoff(db, handoff.id);
+    expect(bundle.taskParkedAtSubmit).toBe(true);
+    void task;
+  });
+});

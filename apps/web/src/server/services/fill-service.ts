@@ -223,6 +223,13 @@ export type FillTaskBundle = {
    *  reloaded mid-fill) rehydrates its cumulative report from these instead of
    *  restarting the session from zero. */
   fieldReports: FieldReport[];
+  /**
+   * True when this task already finished a fill and is parked at the submit
+   * gate. The panel keeps no state of its own across reloads, so this is the
+   * only way a re-opened panel can know the run is already reported — without
+   * it, Done looked available and did nothing.
+   */
+  taskParkedAtSubmit: boolean;
 };
 
 const EMPTY_PERSONAL: FillPersonalInfo = { name: "", email: "", phone: "", address: "", links: {} };
@@ -410,6 +417,7 @@ export function claimHandoff(db: Db, handoffId: string): FillTaskBundle {
         : "tailored",
     resumeId: effectiveResume?.id,
     fieldReports: task.fieldReports ?? [],
+    taskParkedAtSubmit: PIPELINE_STEPS[task.step]?.key === "submit",
   };
 
   updateFillHandoff(db, handoff.id, { status: "claimed" });
@@ -431,7 +439,20 @@ export function applyFillReport(
   complete: boolean,
 ): PipelineTask {
   const task = requireTask(db, taskId);
-  if (task.status !== "awaiting_user" || PIPELINE_STEPS[task.step]?.key !== "fill-form") {
+  const parkedAt = PIPELINE_STEPS[task.step]?.key;
+  // Replaying a complete report is allowed, and has to be.
+  //
+  // A status-1 complete report moves the task to the submit gate. The panel
+  // does not persist "I already reported", so re-opening it and pressing Done
+  // again sent the same complete report to a task that had moved on — and this
+  // guard rejected it with a 400. The panel then set doneRef=false and
+  // returned in silence: the user pressed Done, nothing happened, and nothing
+  // said why.
+  //
+  // Accepting it is safe precisely because a complete report REPLACES rather
+  // than merges: the same snapshot twice lands the same state twice.
+  const replayingComplete = complete && task.status === "awaiting_user" && parkedAt === "submit";
+  if (!replayingComplete && (task.status !== "awaiting_user" || parkedAt !== "fill-form")) {
     throw new ServiceError("task is not awaiting fill");
   }
   // A COMPLETE report replaces; an incremental one merges.
