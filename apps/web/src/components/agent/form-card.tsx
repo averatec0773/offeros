@@ -107,11 +107,17 @@ export function FormCard({
               : "Open the application and the browser panel fills it from your profile."}
           </p>
         </div>
+        {/* Secondary on purpose. The page's main entry to filling lives in the
+            header, where it is visible without scrolling; this one stays
+            because HERE it means something more specific — "that fill left
+            nine fields, run it again" — sitting right next to the report that
+            says so. Two buttons of equal weight for one action would be the
+            actual problem, so this one is quiet. */}
         <button
           type="button"
           onClick={onOpenAndFill}
           disabled={busy}
-          className="shrink-0 rounded-full bg-primary px-3.5 py-1.5 text-caption font-semibold text-primary-foreground press hover:bg-primary/85 disabled:opacity-50"
+          className="shrink-0 rounded-full border border-border px-3.5 py-1.5 text-caption font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
         >
           {hasFilled ? "Re-fill" : "Open & fill"}
         </button>

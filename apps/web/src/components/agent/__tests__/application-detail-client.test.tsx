@@ -229,7 +229,7 @@ describe("materials", () => {
 describe("the form", () => {
   it("opens a fill ticket, creating the task if there is not one yet", async () => {
     mount();
-    fireEvent.click(screen.getByRole("button", { name: /Open & fill/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Open & fill" }));
     await waitFor(() => expect(api.applications.ensureTask).toHaveBeenCalled());
     await waitFor(() => expect(api.pipelineTasks.fillHandoff).toHaveBeenCalledWith("t1"));
   });
@@ -254,7 +254,7 @@ describe("the form", () => {
     });
     // The summary is unasked; the field-by-field detail is one click in.
     expect(screen.getByText(/1 of 1 fillable fields filled/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Re-fill/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Re-fill" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Field by field/i }));
     expect(screen.getByText("Email")).toBeTruthy();
   });
@@ -307,5 +307,90 @@ describe("effectiveResumeId", () => {
 
   it("self-heals to primary when the selection is gone", () => {
     expect(effectiveResumeId("deleted", resumes)).toBe("r1");
+  });
+});
+
+describe("the header's main action", () => {
+  it("leads with filling — the thing this page exists to help you do", () => {
+    mount();
+    const primary = screen.getByRole("button", { name: /Open & fill this application/i });
+    // Visually dominant, and it says what pressing it will do.
+    expect(primary.className).toContain("bg-primary");
+    expect(primary.getAttribute("title")).toMatch(/opens the posting/i);
+    expect(screen.getByText(/lets the browser panel fill it/i)).toBeTruthy();
+  });
+
+  it("offers a re-fill once one has run", () => {
+    mount({
+      initialTask: task({
+        fieldReports: [
+          {
+            fieldId: "f1",
+            label: "Email",
+            classifiedType: "email",
+            status: "filled",
+            source: "personal",
+            reason: "",
+            outcome: "filled",
+            required: true,
+          },
+        ],
+      }),
+    });
+    expect(screen.getByRole("button", { name: /Re-fill this application/i })).toBeTruthy();
+  });
+
+  it("reaches the same handoff as everything else — one path, not a second one", async () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: /Open & fill this application/i }));
+    await waitFor(() => expect(api.applications.ensureTask).toHaveBeenCalledWith("app-1"));
+    await waitFor(() => expect(api.pipelineTasks.fillHandoff).toHaveBeenCalledWith("t1"));
+  });
+
+  it("keeps the ticket confirmation where the button that made it is", async () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: /Open & fill this application/i }));
+    expect(await screen.findAllByText(/Ticket created/)).not.toHaveLength(0);
+  });
+
+  it("is disabled, and says why, with no link to open", () => {
+    // Silently doing nothing is the failure mode worth avoiding here.
+    mount({
+      application: { ...application, jobInfo: { ...application.jobInfo, applyLink: undefined } },
+    });
+    const primary = screen.getByRole("button", { name: /Open & fill this application/i });
+    expect(primary.hasAttribute("disabled")).toBe(true);
+    expect(primary.getAttribute("title")).toMatch(/no application link/i);
+    expect(screen.getByText(/No application link saved for this job/i)).toBeTruthy();
+  });
+
+  it("disappears once the application has been sent — filling again means nothing", () => {
+    for (const status of ["applied", "interview", "offer", "rejected", "archived"] as const) {
+      cleanup();
+      mount({ application: { ...application, status } });
+      expect(screen.queryByRole("button", { name: /this application/i })).toBeNull();
+      // The quiet way back to the posting is still there.
+      expect(screen.getByRole("link", { name: /Original posting/i })).toBeTruthy();
+    }
+  });
+
+  it("still leads while the application is only saved or applying", () => {
+    for (const status of ["saved", "applying"] as const) {
+      cleanup();
+      mount({ application: { ...application, status } });
+      expect(screen.getByRole("button", { name: /this application/i })).toBeTruthy();
+    }
+  });
+
+  it("leaves exactly one dominant control in the header", () => {
+    // Check job and Ask agent were competing with it; the inversion this fixes
+    // was that Ask agent was the only primary-styled thing up here.
+    mount();
+    const header = document.querySelector("header")!;
+    const dominant = [...header.querySelectorAll("button, a")].filter((el) =>
+      el.className.includes("bg-primary "),
+    );
+    expect(dominant).toHaveLength(1);
+    expect(dominant[0]!.textContent).toMatch(/Open & fill this application/);
   });
 });
