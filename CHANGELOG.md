@@ -19,6 +19,54 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-13
+
+### Added
+
+**Any careers page, once you ask.** OfferOS reached a form by being present on
+the page, and it was only ever present on five application platforms. Most
+postings are not on those five — a company's own careers site, a smaller ATS, a
+form in another language — and there the panel had nothing to offer and no way
+to explain itself. The answer to a list that is too short is not a longer list.
+The panel now offers one button on any ordinary web page: press it, and OfferOS
+starts reading that page's form. It fills, reports, and asks for what it cannot
+answer, exactly as it does on a platform it knows.
+
+**It only runs where you called it.** Outside those five platforms OfferOS does
+not appear on a page by itself. Pressing the button turns it on for that tab and
+that visit; leaving the page ends it, and coming back means pressing again. It
+does not quietly restart itself behind you, because quietly restarting is the
+standing presence this is meant to avoid. Pages the browser puts off limits —
+its own settings, local files, the extension store — say so plainly instead of
+offering a button that could not work.
+
+**A page has to look like an application before OfferOS reads it.** A blog's
+comment box and a newsletter signup are both forms. The test is deliberately
+strict — a file upload, or at least three labelled questions — and deliberately
+wrong in the safe direction: a missed application form leaves you filling it
+yourself, which is where you already were, while a false positive would put your
+phone number in a box that never asked for it. A page that does not qualify gets
+the same "nothing to fill here" an unsupported site has always got.
+
+**Custom dropdowns work without anyone writing a driver for them.** Filling a
+non-standard control meant recognising the exact library it was built with, so a
+widget nobody had written code for was not filled badly — it was skipped in
+silence, and turned up empty at submit. There is now a fallback that reads what
+the page publishes about itself for screen readers: which control opens a list,
+which rows are its options, which choice is currently checked. Anything a site
+described well enough to be accessible is now something OfferOS can operate.
+
+### Changed
+
+**A control that ignores us is reported, not assumed.** The accessibility
+description a page publishes is a description, not a promise — a widget can
+carry every correct label and still ignore the click. So every dropdown and
+every choice ends with OfferOS asking the page whether the answer actually took,
+and one that cannot be confirmed is listed among the fields still yours, with
+the reason, and a click that jumps you to it.
+
+---
+
 ## 2026-08-12
 
 ### Added
