@@ -19,6 +19,52 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-16
+
+### Fixed
+
+**Forms that never label their fields can now be read.** Plenty of application
+forms put the question right next to the box and connect the two with nothing at
+all — no `for`, no wrapping, nothing a browser would call a label. OfferOS used
+to take the first text it could find near such a field, which on those forms is
+the field's internal name. The panel would list your questions as
+`rec-form_682152000000063542` and `-None-`, and the AI reader, handed those,
+correctly said it could not place a single one. It now works down a chain of
+ways a page can name a field — including a label whose id is built from the
+field's, and one that is simply in the same row — and refuses any answer that
+reads like a machine name or a widget's status text rather than a question. On
+the form that prompted this, the panel went from listing four internal ids to
+listing the four questions actually printed on the page.
+
+**A field the page truly never named now goes to the AI reader with the words
+around it,** instead of with its id. Asked what an id means, a model can only
+guess or decline; asked about the text a person sees standing in front of that
+box, it can answer.
+
+**A form's own machinery is no longer listed as questions.** A phone field's
+country picker was contributing "Search country with dial code" as though it
+were something you had been asked, and a dropdown caught mid-load contributed
+"Loading" and "No Results Found". Those are parts and states, not questions.
+
+**Fields that appear twice are counted once.** Some forms render every field a
+second time as a hidden template. Both copies carry the same name, and the
+hidden one comes first — which is why the visible one's label kept going
+unread.
+
+### Added
+
+**CAPTCHAs are named and handed straight back to you.** When a form asks you to
+prove a person is present, OfferOS marks it as yours and says so. It does not
+attempt them, and it never will: answering one on your behalf would be telling
+the employer something untrue about who is filling in the form. Nothing in
+OfferOS calls a solving service, by choice rather than by limitation.
+
+**Jobs added from the browser panel get checked on arrival,** the same as jobs
+added by pasting a link: is the posting still up, and what will the form ask?
+It runs behind the scenes so filling still starts immediately, and if it cannot
+read the page nothing breaks — the job is saved either way, and the check is a
+button away.
+
 ## 2026-08-15
 
 ### Security and privacy

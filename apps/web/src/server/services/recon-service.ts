@@ -363,3 +363,30 @@ function finish(db: Db, applicationId: string, result: ReconResult): ReconResult
   });
   return result;
 }
+
+/**
+ * Check a newly created application, without making anybody wait for it.
+ *
+ * Adding a job by pasting its link runs the check on arrival and shows the
+ * verdict. The two paths the browser panel creates through — "add this job"
+ * from a posting page, and the one-click instant fill — did not, so an
+ * application created that way arrived with no description, no verdict, and no
+ * requirements until the user found the button. The same check now runs for
+ * them; it just runs behind them, because the panel's whole promise on the
+ * instant lane is that filling starts immediately.
+ *
+ * Failure is silence by design: the application is already saved, and the page
+ * carries the same check on a button. A reconnaissance that could not read the
+ * page must not turn into an error about creating a job that was created fine.
+ *
+ * Fire-and-forget is safe here in a way it would not be on a serverless host:
+ * OfferOS runs as one long-lived local process, so nothing tears the promise
+ * down when the response returns.
+ */
+export function reconInBackground(db: Db, applicationId: string): void {
+  const application = getApplication(db, applicationId);
+  // Nothing to fetch, or the description already arrived with the record.
+  if (!application?.jobInfo.applyLink) return;
+  if ((application.jdText ?? "").trim() !== "") return;
+  void reconApplication(db, applicationId).catch(() => {});
+}

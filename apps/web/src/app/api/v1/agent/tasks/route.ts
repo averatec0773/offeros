@@ -3,6 +3,7 @@ import { jobInfoSchema } from "@offeros/core";
 import { getDb } from "@/server/db/client";
 import { createApplication } from "@/server/repositories/application-repo";
 import { createPipelineTask } from "@/server/repositories/pipeline-task-repo";
+import { reconInBackground } from "@/server/services/recon-service";
 import { handle, ok } from "@/server/http/envelope";
 
 export const runtime = "nodejs";
@@ -29,6 +30,10 @@ export async function POST(request: Request) {
       "applicationId" in input
         ? input.applicationId
         : createApplication(db, { jobInfo: input.jobInfo, jdText: input.jdText }).id;
-    return ok(createPipelineTask(db, { applicationId }));
+    const task = createPipelineTask(db, { applicationId });
+    // A job added from the browser panel gets the same check on arrival that
+    // one added by pasting a link does — it just runs behind the response.
+    if (!("applicationId" in input)) reconInBackground(db, applicationId);
+    return ok(task);
   });
 }
