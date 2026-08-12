@@ -10,6 +10,7 @@ import {
   scanFields,
   applyFillDetailed,
   attachFile as domAttachFile,
+  findFileInputNear,
   resolveFieldEl,
   highlight,
   type FillValue,
@@ -241,8 +242,11 @@ export function createEngine(doc: Document): Engine {
     mimeType: string,
     bytesBase64: string,
   ): Promise<AttachFileResponse> => {
-    const el = resolveFieldEl(edoc(), fieldId);
-    if (!(el instanceof HTMLInputElement) || el.type !== "file") return { ok: false };
+    const anchor = resolveFieldEl(edoc(), fieldId);
+    // The descriptor may point at a custom uploader's wrapper rather than at
+    // the native control it hides. Both end up at the same input.
+    const el = anchor ? findFileInputNear(anchor) : null;
+    if (!el) return { ok: false };
     const bytes = base64ToBytes(bytesBase64);
     // base64ToBytes always allocates a fresh, exactly-sized buffer (never a
     // subview) — .buffer is safe to hand to File as-is. Cast only to satisfy

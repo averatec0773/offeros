@@ -426,10 +426,53 @@ function isScannable(el: HTMLElement): boolean {
   // label lookup.
   if (el.closest('template, [is="component"]')) return false;
   const style = el.ownerDocument.defaultView?.getComputedStyle(el);
-  if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+  const hidden = style ? style.display === "none" || style.visibility === "hidden" : false;
+  // A file input is the one control routinely hidden ON PURPOSE: a custom
+  // uploader hides the real `<input type="file">` and renders its own button
+  // over it, because the native control cannot be styled. Rejecting it for
+  // being invisible means the résumé upload on every such form is a field
+  // OfferOS cannot see — which is exactly what happened. Everything else
+  // hidden is still skipped.
+  if (hidden && !isFileInput(el)) return false;
   // A widget's own machinery, not a question the applicant was asked.
   if (isInsideComposite(el) || isWidgetSearchBox(el)) return false;
   return true;
+}
+
+function isFileInput(el: Element): el is HTMLInputElement {
+  return el instanceof HTMLInputElement && el.type === "file";
+}
+
+/**
+ * The real file input behind a custom uploader.
+ *
+ * Custom uploaders wrap the native control in a component and hide it, so the
+ * element a descriptor points at is often the wrapper rather than the input.
+ * Search inside it first, then widen a few ancestors — stopping as soon as a
+ * scope holds more than one, because two uploads in one region is a choice
+ * this cannot make.
+ */
+export function findFileInputNear(el: HTMLElement): HTMLInputElement | null {
+  if (isFileInput(el)) return el;
+  // An ordinary control is a field in its own right, not a wrapper around
+  // something else. Widening from a text box would let "attach to the name
+  // field" quietly attach to whatever upload happens to be nearby.
+  if (
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLSelectElement ||
+    el instanceof HTMLTextAreaElement
+  ) {
+    return null;
+  }
+  const within = deepQueryAll(el, 'input[type="file"]').filter(isFileInput);
+  if (within.length === 1) return within[0]!;
+  let node: HTMLElement | null = el.parentElement;
+  for (let depth = 0; depth < ANCESTOR_BUDGET && node; depth += 1, node = node.parentElement) {
+    const found = deepQueryAll(node, 'input[type="file"]').filter(isFileInput);
+    if (found.length === 1) return found[0]!;
+    if (found.length > 1) return null;
+  }
+  return null;
 }
 
 /** The question/title text that precedes a control: walk up from it and take
