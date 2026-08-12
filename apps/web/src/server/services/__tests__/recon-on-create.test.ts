@@ -30,6 +30,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * Wait for a background check to land.
+ *
+ * A fixed sleep was enough when this file ran alone and not enough under the
+ * full suite, where the host guard's DNS resolution competes with everything
+ * else on the event loop. Polling for the outcome is the only version that is
+ * about the behaviour rather than about the machine.
+ */
+async function waitForEvent(applicationId: string, kind: string, budgetMs = 3000) {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (listEvents(db, applicationId).some((e) => e.kind === kind)) return true;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return false;
+}
+
 const seed = (over: { applyLink?: string; jdText?: string } = {}) =>
   createApplication(db, {
     jobInfo: {
@@ -78,9 +95,7 @@ describe("checking a newly created application", () => {
     // check ran at all.
     const id = seed();
     reconInBackground(db, id);
-    await new Promise((r) => setTimeout(r, 50));
-    const events = listEvents(db, id);
-    expect(events.some((e) => e.kind === "job-checked")).toBe(true);
+    expect(await waitForEvent(id, "job-checked")).toBe(true);
   });
 
   it("a failed check never becomes an error about creating the job", async () => {
@@ -94,7 +109,7 @@ describe("checking a newly created application", () => {
       }),
     );
     expect(() => reconInBackground(db, id)).not.toThrow();
-    await new Promise((r) => setTimeout(r, 20));
+    await waitForEvent(id, "job-checked");
     // The record is intact, and still the one that was created.
     expect(getApplication(db, id)!.jobInfo.jobTitle).toBe("Engineer");
   });
