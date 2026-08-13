@@ -23,6 +23,20 @@ Notable changes only; not every commit is an entry.
 
 ### Fixed
 
+**Turning OfferOS on for a new site asks straight away, instead of hanging.**
+On a site OfferOS had not been given access to, pressing "Enable OfferOS on this
+page" left the button reading "Starting…" and stayed there — no permission
+prompt, no error, nothing to press. Chrome only opens that prompt if it is asked
+for during the click itself, and OfferOS was checking a few other things first,
+which is enough to lose the moment; the request it made afterwards was never
+answered and never refused, so the button waited on it indefinitely. It now
+works out whether a site is already allowed when you switch tabs, and asks
+during the click when it is not, so the prompt appears immediately. A site you
+have already allowed is still never asked about twice. And nothing in that flow
+can wait forever any more: if a prompt or the browser goes quiet for fifteen
+seconds, the button comes back and tells you that you can allow the site from
+chrome://extensions and try again.
+
 **The Fill button no longer goes dead with fields still to fill.** After a round
 that left some fields unwritten, the button greyed out while its own label went
 on counting them — "Fill 3 fields", unclickable, with three empty boxes on the
