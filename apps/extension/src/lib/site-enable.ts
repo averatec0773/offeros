@@ -17,6 +17,8 @@
  * avoids.
  */
 
+import { withTimeout } from "./with-timeout";
+
 export const ENABLE_ON_TAB = "OFFEROS_ENABLE_ON_TAB" as const;
 
 export interface EnableOnTabRequest {
@@ -177,21 +179,144 @@ export async function enableOnTab(
 /**
  * Ask Chrome for one site, from the panel.
  *
- * Must be called inside a user gesture — Chrome refuses otherwise, verbatim:
- * "This function must be called during a user gesture". The panel's button
- * click is one; the background worker never is, which is why this lives on the
- * panel side of the bridge rather than next to the injection it unblocks.
+ * MUST be called inside a user gesture, and a gesture does not survive an
+ * await. Chrome's rule is verbatim "This function must be called during a user
+ * gesture", and what counts is the synchronous run of the click handler: the
+ * moment control returns to the event loop — one `await`, one `.then`, one
+ * message round-trip — the gesture is spent, and `permissions.request` is no
+ * longer answerable. A prompt that is never shown does not reject either. It
+ * simply never resolves, and the button that was waiting on it says "Starting…"
+ * until the panel is closed. That is not a hypothetical; it is what a user got.
+ *
+ * So the ordering is the contract, and it is enforced by shape rather than by
+ * memory:
+ *
+ *   - this function is NOT `async`. An async function is free to grow an await
+ *     above the request one day and nothing would look wrong;
+ *   - it does not check `permissions.contains` first, however sensible that
+ *     reads. That check is an await, and it would spend the gesture before the
+ *     request it was meant to inform. Ask the question earlier instead —
+ *     `hasSiteAccess` exists for that, and the panel calls it when the tab
+ *     changes, where there is no gesture to lose.
+ *
+ * The one thing before the request is a synchronous URL parse.
  */
-export async function requestSiteAccess(
+export function requestSiteAccess(
   url: string,
   permissions: typeof chrome.permissions | undefined = globalThis.chrome?.permissions,
 ): Promise<boolean> {
   const origins = originPatternFor(url);
-  if (!origins || !permissions?.request) return false;
+  if (!origins || !permissions?.request) return Promise.resolve(false);
   try {
-    if (await permissions.contains({ origins: [origins] })) return true;
-    return await permissions.request({ origins: [origins] });
+    // Nothing may be awaited above this line.
+    return Promise.resolve(permissions.request({ origins: [origins] })).catch(() => false);
   } catch {
-    return false;
+    return Promise.resolve(false);
   }
+}
+
+/** What the panel knows about this site before anybody clicks anything. */
+export type SiteAccess = "granted" | "missing" | "unknown";
+
+/**
+ * Do we already hold permission for this site?
+ *
+ * `permissions.contains` needs no gesture, so this is asked when the tab
+ * changes — early, off the click path, and at leisure. Knowing the answer in
+ * advance is what lets the click go straight to the request without an await
+ * in front of it, and equally what keeps a user who already said yes from being
+ * asked a second time.
+ */
+export async function hasSiteAccess(
+  url: string,
+  permissions: typeof chrome.permissions | undefined = globalThis.chrome?.permissions,
+): Promise<SiteAccess> {
+  const origins = originPatternFor(url);
+  if (!origins || !permissions?.contains) return "unknown";
+  try {
+    return (await permissions.contains({ origins: [origins] })) ? "granted" : "missing";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** How long the whole enable flow may take before the panel gives up on it.
+ *  Generous on purpose: most of it is a person reading a permission prompt. */
+export const ENABLE_TIMEOUT_MS = 15_000;
+
+export const ENABLE_TIMED_OUT =
+  "Chrome didn't answer the permission request. You can allow this site from chrome://extensions → OfferOS → Site access, then try again.";
+
+export const ENABLE_REFUSED =
+  "OfferOS needs your permission for this site to read its form. Nothing changed.";
+
+/** Told to someone whose first click taught us the permission was missing. */
+export const ENABLE_ASK_AGAIN =
+  "OfferOS needs your permission for this site — press Enable again and Chrome will ask.";
+
+export interface EnableResult {
+  ok: boolean;
+  error?: string;
+  /** The permission state this attempt learned, when it learned one. */
+  learned?: SiteAccess;
+}
+
+export interface EnableDeps {
+  /** What the tab-change precheck found. */
+  siteAccess: SiteAccess;
+  /** `permissions.request`, wrapped. Called before anything is awaited. */
+  askForSite: (url: string) => Promise<boolean>;
+  /** Panel → background injection. */
+  inject: () => Promise<EnableOnTabResponse>;
+  timeoutMs?: number;
+}
+
+/**
+ * The enable button's whole flow, arranged around the gesture.
+ *
+ * NOT `async`, and the branch order is deliberate. When the precheck says the
+ * permission is missing, the request goes out on the click's own stack frame,
+ * before any message to the background — the previous arrangement asked the
+ * background first and only reached for the permission after that round-trip,
+ * by which time no prompt could open.
+ *
+ * When the precheck says the permission is held, nothing is asked at all: the
+ * injection is attempted directly, and a user who has already said yes to this
+ * site never sees a second prompt.
+ *
+ * "unknown" is the honest middle — no permissions API, or a precheck that has
+ * not landed. It tries the injection, and if Chrome says the permission is what
+ * is missing it reports back what it learned and asks the user to press again.
+ * A second press is one gesture; guessing and prompting someone who had already
+ * granted the site would cost more.
+ */
+export function beginEnable(url: string, deps: EnableDeps): Promise<EnableResult> {
+  const timeoutMs = deps.timeoutMs ?? ENABLE_TIMEOUT_MS;
+  const timedOut = (): EnableResult => ({ ok: false, error: ENABLE_TIMED_OUT });
+
+  if (deps.siteAccess === "missing") {
+    // Nothing may be awaited above this line: this IS the user gesture.
+    const asked = deps.askForSite(url);
+    return withTimeout(
+      asked.then((granted) =>
+        granted
+          ? deps.inject().then((res) => ({ ...res, learned: "granted" as SiteAccess }))
+          : { ok: false, error: ENABLE_REFUSED, learned: "missing" as SiteAccess },
+      ),
+      timeoutMs,
+      timedOut,
+    );
+  }
+
+  return withTimeout(
+    deps.inject().then((res): EnableResult => {
+      if (res.ok || res.needsPermission !== true) return res;
+      // Chrome refused for want of a permission we did not know was missing.
+      // Asking now is not possible — the gesture went with the round-trip
+      // above — so the next press is set up to ask first.
+      return { ok: false, error: ENABLE_ASK_AGAIN, learned: "missing" };
+    }),
+    timeoutMs,
+    timedOut,
+  );
 }

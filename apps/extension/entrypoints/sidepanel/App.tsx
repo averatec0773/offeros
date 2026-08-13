@@ -41,7 +41,14 @@ import {
 import { requestTabCapture } from "../../src/lib/tab-capture";
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
-import { requestEnableOnTab, requestSiteAccess } from "../../src/lib/site-enable";
+import { withTimeout } from "../../src/lib/with-timeout";
+import {
+  beginEnable,
+  hasSiteAccess,
+  requestEnableOnTab,
+  requestSiteAccess,
+  type SiteAccess,
+} from "../../src/lib/site-enable";
 import { getFillBinding } from "../../src/lib/fill-binding";
 import { subscribeAgentEvents } from "../../src/lib/agent-events";
 import { ExternalLink, PlugZap } from "lucide-react";
@@ -75,6 +82,9 @@ const api = {
 // The reads the off-ATS dashboard needs, kept separate so HomePanel's surface
 // stays the one call it actually makes.
 const homeApi = { getInbox: () => getInbox() };
+
+/** How long to wait on the background worker before handing the button back. */
+const START_TIMEOUT_MS = 15_000;
 
 export default function App() {
   const activeTab = useActiveTab();
@@ -112,39 +122,52 @@ export default function App() {
     });
   }, [activeTabId, activeTabUrl]);
 
-  const enableHere = useCallback(async () => {
-    if (activeTabId === undefined) return { ok: false, error: "No page to enable yet." };
-    const succeed = (res: { ok: boolean; error?: string }) => {
+  /**
+   * Whether this site is already allowed, worked out when the tab changes.
+   *
+   * Off the click path on purpose. `permissions.contains` needs no user
+   * gesture, and knowing the answer in advance is what lets the click reach
+   * `permissions.request` with nothing awaited in front of it — which is the
+   * whole fix. It also keeps a user who has already granted this site from
+   * being asked again.
+   */
+  const [siteAccess, setSiteAccess] = useState<SiteAccess>("unknown");
+  useEffect(() => {
+    let cancelled = false;
+    setSiteAccess("unknown");
+    if (!activeTabUrl) return;
+    void hasSiteAccess(activeTabUrl).then((state) => {
+      if (!cancelled) setSiteAccess(state);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTabUrl]);
+
+  // NOT async, and it must stay that way: the first thing this does on a site
+  // we know we lack permission for is ask Chrome for it, and that call only
+  // works on the click's own stack frame. See `requestSiteAccess`.
+  const enableHere = useCallback((): Promise<{ ok: boolean; error?: string }> => {
+    if (activeTabId === undefined) {
+      return Promise.resolve({ ok: false, error: "No page to enable yet." });
+    }
+    const tabId = activeTabId;
+    return beginEnable(activeTabUrl, {
+      siteAccess,
+      askForSite: requestSiteAccess,
+      inject: () => requestEnableOnTab(tabId),
+    }).then((res) => {
+      // What the attempt learned about the permission, so a second press can
+      // go straight to the prompt.
+      if (res.learned) setSiteAccess(res.learned);
       if (res.ok) {
-        setEnabledTabs((prev) => new Map(prev).set(activeTabId, activeTabUrl));
+        setEnabledTabs((prev) => new Map(prev).set(tabId, activeTabUrl));
         // The engine has only just arrived; the panel's scan loop is idle by now.
         setRescanNonce((n) => n + 1);
       }
       return res;
-    };
-
-    // Try first, ask second.
-    //
-    // The extension holds no standing permission for this site — that is the
-    // point — but it may already be allowed here: `activeTab` from opening the
-    // panel, or a grant the user gave on an earlier visit. Attempting the
-    // injection costs one message and succeeds silently when either is true,
-    // which is better than prompting someone who has already said yes.
-    const first = await requestEnableOnTab(activeTabId);
-    if (first.ok || first.needsPermission !== true) return succeed(first);
-
-    // Chrome refused for want of a permission. That is the one failure asking
-    // can fix, and asking has to happen here: `permissions.request` requires a
-    // user gesture, and the background worker never has one.
-    const granted = await requestSiteAccess(activeTabUrl);
-    if (!granted) {
-      return {
-        ok: false,
-        error: "OfferOS needs your permission for this site to read its form. Nothing changed.",
-      };
-    }
-    return succeed(await requestEnableOnTab(activeTabId));
-  }, [activeTabId, activeTabUrl]);
+    });
+  }, [activeTabId, activeTabUrl, siteAccess]);
 
   const [apiBase, setApiBase] = useState("");
   const [webReachable, setWebReachable] = useState(true);
@@ -186,7 +209,17 @@ export default function App() {
     setStarting(true);
     setStartError(null);
     try {
-      const res = await requestStartWebApp();
+      // Same shape as the enable button's fault, same button text: a message to
+      // the background worker with nothing behind it if the worker never
+      // answers, and a busy flag cleared only when it does. Bounded here so
+      // "Starting…" can always end. (Deliberately NOT applied to the fill
+      // messages or the web API: a fill legitimately runs for minutes on a long
+      // form, and the generation routes wait on a model. A timeout short enough
+      // to help would abandon real work — see the audit note in progress.md.)
+      const res = await withTimeout(requestStartWebApp(), START_TIMEOUT_MS, () => ({
+        ok: false as const,
+        error: "the background worker didn't answer — reopen the panel and try again",
+      }));
       if (!res.ok) {
         setStartError(res.error ?? "couldn't start");
         return;

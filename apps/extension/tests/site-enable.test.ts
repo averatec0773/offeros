@@ -1,13 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  beginEnable,
   canEnableUrl,
   enableOnTab,
+  hasSiteAccess,
   injectEngine,
   isEnableOnTabRequest,
   originPatternFor,
   requestSiteAccess,
   whyCannotEnable,
+  ENABLE_ASK_AGAIN,
   ENABLE_ON_TAB,
+  ENABLE_REFUSED,
+  ENABLE_TIMED_OUT,
 } from "../src/lib/site-enable";
 
 /**
@@ -164,27 +169,33 @@ describe("asking for one site", () => {
     }
   });
 
-  it("does not ask again for a site already granted", () => {
-    // Prompting someone who has already said yes is its own kind of rude.
-    const permissions = {
-      contains: vi.fn(async () => true),
-      request: vi.fn(async () => false),
-    } as unknown as typeof chrome.permissions;
-    return requestSiteAccess("https://careers.example.com/apply", permissions).then((ok) => {
-      expect(ok).toBe(true);
-      expect(permissions.request).not.toHaveBeenCalled();
-    });
-  });
-
-  it("asks for exactly the one site when it does not hold it", async () => {
+  /**
+   * NOTE — a limit these tests cannot cross.
+   *
+   * `permissions.request` only works inside a user gesture, and a gesture is a
+   * property of a real browser's event loop: it does not exist in a fake
+   * `permissions` object, and every assertion below would pass just as happily
+   * against the arrangement that shipped broken. What CAN be checked here is
+   * the thing the gesture rule reduces to — that nothing is awaited before the
+   * request — and that is what these check. Whether Chrome then opens the
+   * prompt is for a person with a browser to confirm.
+   */
+  it("asks for exactly the one site, with nothing awaited first", async () => {
     const permissions = {
       contains: vi.fn(async () => false),
       request: vi.fn(async () => true),
     } as unknown as typeof chrome.permissions;
-    expect(await requestSiteAccess("https://careers.example.com/apply", permissions)).toBe(true);
+
+    const pending = requestSiteAccess("https://careers.example.com/apply", permissions);
+    // Asserted before a single microtask has run: the request must already be
+    // out. An await above it — `contains`, a message to the background, any of
+    // it — spends the gesture, and the prompt that never opens never rejects
+    // either. The button waits on it forever, which is what a user got.
     expect(permissions.request).toHaveBeenCalledWith({
       origins: ["https://careers.example.com/*"],
     });
+    expect(permissions.contains).not.toHaveBeenCalled();
+    expect(await pending).toBe(true);
   });
 
   it("takes no for an answer", async () => {
@@ -238,5 +249,162 @@ describe("telling apart the failure that asking can fix", () => {
   it("does not flag a page it refused before touching the browser", async () => {
     const res = await enableOnTab(1, "chrome://extensions", refusing("unused"));
     expect(res.needsPermission).toBeUndefined();
+  });
+});
+
+/**
+ * The precheck, which is what makes the click affordable.
+ *
+ * It runs on a tab change, where there is no gesture to spend, so it is free to
+ * await — and its answer is what lets the click go straight to the prompt.
+ */
+describe("knowing about the site before anybody clicks", () => {
+  const perms = (contains: boolean) =>
+    ({
+      contains: vi.fn(async () => contains),
+      request: vi.fn(async () => true),
+    }) as unknown as typeof chrome.permissions;
+
+  it("reports a site we hold", async () => {
+    expect(await hasSiteAccess("https://careers.example.com/apply", perms(true))).toBe("granted");
+  });
+
+  it("reports a site we do not hold", async () => {
+    expect(await hasSiteAccess("https://careers.example.com/apply", perms(false))).toBe("missing");
+  });
+
+  it("says it does not know rather than guessing, on a browser without the API", async () => {
+    expect(await hasSiteAccess("https://careers.example.com/apply", undefined)).toBe("unknown");
+  });
+
+  it("says it does not know for a page that has no origin to ask about", async () => {
+    expect(await hasSiteAccess("chrome://extensions", perms(true))).toBe("unknown");
+  });
+});
+
+describe("the enable button's flow", () => {
+  const URL_ = "https://careers.example.com/apply";
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("injects without asking when the site is already granted", async () => {
+    const askForSite = vi.fn(async () => true);
+    const inject = vi.fn(async () => ({ ok: true }));
+
+    const res = await beginEnable(URL_, { siteAccess: "granted", askForSite, inject });
+
+    expect(res.ok).toBe(true);
+    // Someone who has already said yes is not asked a second time.
+    expect(askForSite).not.toHaveBeenCalled();
+    expect(inject).toHaveBeenCalled();
+  });
+
+  it("asks BEFORE anything else when the site is known to be missing", async () => {
+    const order: string[] = [];
+    const askForSite = vi.fn(() => {
+      order.push("ask");
+      return Promise.resolve(true);
+    });
+    const inject = vi.fn(async () => {
+      order.push("inject");
+      return { ok: true };
+    });
+
+    const pending = beginEnable(URL_, { siteAccess: "missing", askForSite, inject });
+    // Before a microtask has run. The whole failure was that a message to the
+    // background went first and spent the gesture on the way.
+    expect(order).toEqual(["ask"]);
+
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ ok: true, learned: "granted" });
+    expect(order).toEqual(["ask", "inject"]);
+  });
+
+  it("says plainly when the user declines, and injects nothing", async () => {
+    const inject = vi.fn(async () => ({ ok: true }));
+    const pending = beginEnable(URL_, {
+      siteAccess: "missing",
+      askForSite: async () => false,
+      inject,
+    });
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toMatchObject({ ok: false, error: ENABLE_REFUSED, learned: "missing" });
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it("gives up and hands the button back when the prompt never answers", async () => {
+    // The real shape of the fault: `permissions.request` outside a gesture
+    // neither resolves nor rejects, so every wait behind it is forever.
+    const pending = beginEnable(URL_, {
+      siteAccess: "missing",
+      askForSite: () => new Promise<boolean>(() => {}),
+      inject: async () => ({ ok: true }),
+    });
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    const res = await pending;
+    expect(res.ok).toBe(false);
+    // Something to do, not just "something went wrong".
+    expect(res.error).toBe(ENABLE_TIMED_OUT);
+    expect(res.error).toMatch(/chrome:\/\/extensions/);
+  });
+
+  it("gives up on an injection that never answers either", async () => {
+    const pending = beginEnable(URL_, {
+      siteAccess: "granted",
+      askForSite: async () => true,
+      inject: () => new Promise(() => {}),
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await pending).toMatchObject({ ok: false, error: ENABLE_TIMED_OUT });
+  });
+
+  it("learns from a refusal it could not have predicted, and says to press again", async () => {
+    // No precheck answer — no permissions API, or the tab changed a moment ago.
+    // It tries, and Chrome answers that the permission is what is missing. The
+    // gesture is gone by then, so the honest move is to say so and set the next
+    // press up to ask first.
+    const askForSite = vi.fn(async () => true);
+    const pending = beginEnable(URL_, {
+      siteAccess: "unknown",
+      askForSite,
+      inject: async () => ({ ok: false, needsPermission: true, error: "Cannot access contents" }),
+    });
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toMatchObject({ ok: false, error: ENABLE_ASK_AGAIN, learned: "missing" });
+    expect(askForSite).not.toHaveBeenCalled();
+  });
+
+  it("passes a real failure through untouched — asking would not fix it", async () => {
+    const pending = beginEnable(URL_, {
+      siteAccess: "unknown",
+      askForSite: async () => true,
+      inject: async () => ({
+        ok: false,
+        error: "Chrome does not let extensions run on the Web Store.",
+      }),
+    });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({
+      ok: false,
+      error: "Chrome does not let extensions run on the Web Store.",
+    });
+  });
+
+  it("a rejected injection ends the wait rather than hanging on it", async () => {
+    const pending = beginEnable(URL_, {
+      siteAccess: "granted",
+      askForSite: async () => true,
+      inject: () => Promise.reject(new Error("worker gone")),
+    });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ ok: false, error: ENABLE_TIMED_OUT });
   });
 });
