@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, configure, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
 import type {
@@ -25,6 +25,18 @@ import {
   CUSTOM_UPLOADER_REASON,
   RENDER_FAILED_REASON,
 } from "../../src/lib/autofill/task-mode";
+
+/**
+ * These tests wait on real async chains — claim, scan, fetch bytes, fill, post
+ * the report — not on timers. Testing Library's default 1s budget is enough
+ * when this file runs alone and not when the whole gate suite is running
+ * beside it: two different waits here went red on the pre-push hook and passed
+ * on every standalone run.
+ *
+ * A longer budget weakens nothing. Every wait is still on its condition, so a
+ * genuine failure fails — it just takes five seconds to do it instead of one.
+ */
+configure({ asyncUtilTimeout: 5000 });
 
 const scanOk: ScanResponse = {
   ok: true,
@@ -1283,12 +1295,7 @@ describe("FillPanel", () => {
       await act(async () => {
         await userEvent.click(fillBtn);
       });
-      // The chain behind this includes fetching PDF bytes, so it is real work
-      // rather than a timer. Testing Library's default 1s budget is enough
-      // alone and not enough under the full gate suite, where this went red
-      // once on the pre-push hook — the wait is on the condition, so the only
-      // thing a longer budget buys is not failing for being busy.
-      await waitFor(() => expect(api.postReport).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(api.postReport).toHaveBeenCalled());
       return { api, attachFile };
     };
 

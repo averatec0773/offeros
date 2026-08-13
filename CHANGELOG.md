@@ -21,6 +21,35 @@ Notable changes only; not every commit is an entry.
 
 ## 2026-08-13
 
+### Added
+
+**The questions your applications keep asking that you have never answered.**
+OfferOS has been recording what every form asked it, application after
+application. That record is now a list: the questions that come up most often
+and that neither your profile nor your saved answers can cover, most-asked
+first, in Profile under "Questions you haven't answered". Answer one there and
+it leaves the list — every future form fills it in from then on. It costs
+nothing to look at: the whole thing is computed from your own history, on your
+own machine, with no AI involved.
+
+It is careful about what it claims. "Asked on 3 of your applications" is only
+said where the records can actually name those applications; where they cannot,
+it says how many times it saw the question and nothing more. Questions OfferOS
+will not answer for you — self-identification, work authorisation, anything that
+is a statement about you rather than a fact — are kept in their own group with
+the reason, instead of sitting on a to-do list you are failing to clear.
+
+**A résumé checkup that costs nothing.** Nine checks — length, missing sections,
+contact details, bullets per role, bullet length, first-person phrasing,
+punctuation consistency, tense, date formats — each a plain rule rather than an
+opinion, run on your machine with no API credit spent. It appears beside a
+résumé in the document workbench and, in short form, next to each résumé on the
+Documents page. Anything it cannot judge it stays quiet about rather than
+guessing: a résumé we only hold as a PDF's text gets the checks that text
+supports and no others. It will not tell you your summary is weak or your
+bullets lack impact — a rule cannot know that, and a checklist that pretends to
+is one you would be right to ignore.
+
 ### Removed
 
 **The screenshot OfferOS used to take after filling a form.** It was meant as an

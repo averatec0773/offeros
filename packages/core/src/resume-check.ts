@@ -213,9 +213,12 @@ const firstPersonRule: ResumeRule = {
   title: "First person",
   run({ resume }) {
     const pattern = /(^|[.;]\s+)(i|my|me|we|our)\b/i;
-    const hits = resume.experience
-      .flatMap((job) => job.bullets)
-      .filter((bullet) => pattern.test(bullet.trim()));
+    const bullets = resume.experience.flatMap((job) => job.bullets).filter((b) => b.trim() !== "");
+    // Nothing to judge is not a pass. A résumé we hold only as text has no
+    // bullets, and a green tick for "no first-person pronouns" there would be
+    // a tick for having looked at nothing.
+    if (bullets.length === 0) return [];
+    const hits = bullets.filter((bullet) => pattern.test(bullet.trim()));
     if (hits.length === 0) {
       return [finding(firstPersonRule, true, "No first-person pronouns at the start of a bullet.")];
     }

@@ -144,6 +144,16 @@ describe("first person", () => {
     expect(failed("first-person", input)[0]!.detail).toMatch(/2 bullets/);
   });
 
+  it("says nothing when there are no bullets to judge", () => {
+    // Found on the real data: a résumé held only as text has no bullets, and
+    // this was handing it a green tick for having looked at nothing.
+    const input: ResumeCheckInput = {
+      resume: { summary: "", experience: [], education: [], skills: [] },
+      text: "some text",
+    };
+    expect(only("first-person", input)).toHaveLength(0);
+  });
+
   it("leaves a bullet alone that merely contains those letters", () => {
     // "AI", "Interface", "Migrated" all contain an i; the rule looks at the
     // subject position, not at the alphabet.
