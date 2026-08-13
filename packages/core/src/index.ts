@@ -13,3 +13,13 @@ export * from "./application-event";
 export type { ApplicationTracking, TrackingStage, TrackingInput } from "./tracking";
 export { trackApplication, describeTracking } from "./tracking";
 export * from "./jd-quality";
+
+export type {
+  QuestionOrigin,
+  ObservedQuestion,
+  CoverageState,
+  CoveredQuestion,
+  CoverageScope,
+  AnswerGap,
+  AnswerGaps,
+} from "./question-coverage";
