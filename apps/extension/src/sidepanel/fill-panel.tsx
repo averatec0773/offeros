@@ -492,6 +492,10 @@ export function FillPanel({
     // the wrong company's form.
     setSuggestions(new Map());
     setDraftHints(new Map());
+    // Same reasoning, same hazard: "the page changed this after we wrote it"
+    // carries the value we wrote on the PREVIOUS job, and its Fill-again
+    // button would write it into whatever form is here now.
+    setOverwritten([]);
     setSavedFieldIds(new Set());
     setReported(false);
     setFilledOnce(false);
@@ -1281,6 +1285,7 @@ export function FillPanel({
         setPolicyAnswers([]);
         setSuggestions(new Map());
         setDraftHints(new Map());
+        setOverwritten([]);
       }
 
       // Auto-claim: one attempt per job while no bundle is held. An explicit

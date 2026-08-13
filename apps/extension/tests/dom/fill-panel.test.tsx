@@ -2904,4 +2904,56 @@ describe("what the page is already showing", () => {
     await waitFor(() => expect(fill.mock.calls.length).toBeGreaterThan(before));
     await waitFor(() => expect(reportFor(api, "Email")?.outcome).toBe("filled"));
   });
+
+  it("forgets what the page rewrote once the tab is on a different job", async () => {
+    // The list carries the values written on the PREVIOUS posting, and its
+    // Fill-again button would write them into whatever form is here now —
+    // fieldId is a content hash, so two companies on one ATS template share
+    // ids. Same hazard the suggestions list had.
+    let pageParsed = false;
+    const fill = vi.fn(async (v: FillValue[]) => {
+      pageParsed = true;
+      return okFill(v);
+    });
+    const api = claimedApi();
+    const props = {
+      fill,
+      capture: vi.fn(async () => captureOk),
+      attachFile: vi.fn(okAttach),
+      api,
+      openWebApp: vi.fn(),
+      openApplication: vi.fn(),
+      webReachable: true,
+      tabUrl: scanOk.url,
+      recheckDelayMs: 5,
+      recheckTries: 2,
+    };
+    const view = render(
+      <FillPanel
+        scan={async () =>
+          pageParsed
+            ? scanShowing({ currentValue: "parsed.from.resume@example.com" })
+            : scanShowing({ currentValue: "" })
+        }
+        rescanNonce={0}
+        {...props}
+      />,
+    );
+    const btn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(btn);
+    });
+    expect(await screen.findByText("The page changed these after filling")).toBeInTheDocument();
+
+    view.rerender(
+      <FillPanel
+        scan={async () => ({ ...scanShowing({ currentValue: "" }), company: "Globex" })}
+        rescanNonce={1}
+        {...props}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("The page changed these after filling")).toBeNull(),
+    );
+  });
 });
