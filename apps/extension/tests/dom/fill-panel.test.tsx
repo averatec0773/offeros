@@ -1283,7 +1283,12 @@ describe("FillPanel", () => {
       await act(async () => {
         await userEvent.click(fillBtn);
       });
-      await waitFor(() => expect(api.postReport).toHaveBeenCalled());
+      // The chain behind this includes fetching PDF bytes, so it is real work
+      // rather than a timer. Testing Library's default 1s budget is enough
+      // alone and not enough under the full gate suite, where this went red
+      // once on the pre-push hook — the wait is on the condition, so the only
+      // thing a longer budget buys is not failing for being busy.
+      await waitFor(() => expect(api.postReport).toHaveBeenCalled(), { timeout: 5000 });
       return { api, attachFile };
     };
 

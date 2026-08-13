@@ -201,7 +201,10 @@ export function looksLikeHumanLabel(text: string | null | undefined): boolean {
  * what it is, and the fill moves on.
  */
 const CAPTCHA_PATTERNS =
-  /captcha|recaptcha|hcaptcha|turnstile|are you (a )?human|type (the )?(below )?image text|enter the (characters|text|code) (you see|shown|above|below)|security check|i'?m not a robot|verification code shown/i;
+  // "IF you are a human, type ALAN below" — the same check as "are you human",
+  // phrased as a condition rather than a question. Met on a real application,
+  // where the AI answering lane obligingly typed the word.
+  /captcha|recaptcha|hcaptcha|turnstile|(are you|if you are) (a )?human|type (the )?(below )?image text|enter the (characters|text|code) (you see|shown|above|below)|security check|i'?m not a robot|verification code shown/i;
 
 export function looksLikeCaptcha(subject: {
   label?: string;

@@ -17,7 +17,18 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
     ...actual,
     api: {
       profile: { get: vi.fn(), save: vi.fn(), parseResume: vi.fn() },
-      answers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+      answers: {
+        list: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        remove: vi.fn(),
+        gaps: vi.fn(async () => ({
+          gaps: [],
+          notOurs: [],
+          total: 0,
+          hasUnattributedSightings: false,
+        })),
+      },
       resumes: { list: vi.fn(), upload: vi.fn(), setPrimary: vi.fn(), remove: vi.fn() },
       settings: { get: vi.fn(), llmKeys: vi.fn() },
     },

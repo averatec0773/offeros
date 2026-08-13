@@ -1,4 +1,5 @@
 import type {
+  AnswerGaps,
   AnswerEntry,
   Application,
   PipelineTask,
@@ -244,6 +245,8 @@ export const api = {
     update: (id: string, patch: Partial<Omit<AnswerEntry, "id">>) =>
       request<AnswerEntry>(`/answers/${id}`, json("PUT", patch)),
     remove: (id: string) => request<{ id: string }>(`/answers/${id}`, { method: "DELETE" }),
+    /** Questions your applications keep asking that you have no answer for. */
+    gaps: () => request<AnswerGaps>("/answers/gaps"),
   },
   /** Generated documents (tailored résumés, cover letters). Keyed by the task
    *  that produced them plus the kind — the same pair the workbench and the PDF

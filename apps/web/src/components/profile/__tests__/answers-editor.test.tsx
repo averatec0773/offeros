@@ -12,7 +12,20 @@ function AnswersHost() {
 }
 
 vi.mock("@/lib/api-client", () => ({
-  api: { answers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } },
+  api: {
+    answers: {
+      list: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      remove: vi.fn(),
+      gaps: vi.fn(async () => ({
+        gaps: [],
+        notOurs: [],
+        total: 0,
+        hasUnattributedSightings: false,
+      })),
+    },
+  },
 }));
 
 afterEach(() => {

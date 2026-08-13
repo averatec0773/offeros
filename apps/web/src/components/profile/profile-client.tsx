@@ -12,6 +12,7 @@ import { SkillsEditor } from "./skills-editor";
 import { AnswersEditor } from "./answers-editor";
 import { EeoEditor } from "./eeo-editor";
 import { useAnswerBank } from "./use-answer-bank";
+import { AnswerGapsCard } from "./answer-gaps";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 
 const SECTIONS: SectionNavItem[] = [
@@ -19,6 +20,7 @@ const SECTIONS: SectionNavItem[] = [
   { id: "education", label: "Education" },
   { id: "experience", label: "Work experience" },
   { id: "skills", label: "Skills" },
+  { id: "gaps", label: "Unanswered" },
   { id: "answers", label: "Answers" },
   { id: "eeo", label: "Equal Employment" },
 ];
@@ -264,6 +266,14 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
 
         <SectionCard id="skills" title="Skills">
           <SkillsEditor value={draft.skills} onChange={(v) => patch("skills", v)} />
+        </SectionCard>
+
+        <SectionCard
+          id="gaps"
+          title="Questions you haven't answered"
+          description="Worked out from your own application history — no AI, nothing to spend."
+        >
+          <AnswerGapsCard bank={answerBank} />
         </SectionCard>
 
         <SectionCard id="answers" title="Answers">

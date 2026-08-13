@@ -11,6 +11,7 @@ import { getProfile } from "../repositories/profile-repo";
 import { listResumes, getResumeText } from "../services/resume-service";
 import { getArtifact } from "../repositories/artifact-repo";
 import { listDocuments } from "../services/document-service";
+import { answerGaps } from "../services/question-coverage-service";
 import { resolveEffectiveResume } from "../pipeline/steps/grounding";
 import { formMemorySummary, listIncidents } from "../repositories/form-memory-repo";
 import { buildInbox } from "../services/attention-service";
@@ -713,6 +714,65 @@ export const listDocumentsTool: Tool<
   verify: async () => null,
 };
 
+/**
+ * The questions the user's applications keep asking that they cannot answer.
+ *
+ * Reads the coverage read model — the same one the profile page and the
+ * per-application Requirements card read — so the agent cannot tell them a
+ * different story about the same question. Free: a database read, no model
+ * call, and no network.
+ */
+export const readAnswerGapsTool: Tool<
+  { limit?: number } | void,
+  {
+    total: number;
+    shown: number;
+    gaps: {
+      question: string;
+      askedOnApplications: number;
+      required: boolean;
+      platforms: string[];
+    }[];
+    weWillNotAnswer: string[];
+  }
+> = {
+  id: "read_answer_gaps",
+  description:
+    'List the questions the user\'s applications keep asking that they have no saved answer for, most-asked first, with how many of their applications asked each one. Use for "what have I not answered", "what keeps costing me time", "what should I fill in next". Free.',
+  parse: (input) => {
+    const limit = (input as Record<string, unknown> | null)?.limit;
+    return typeof limit === "number" && limit > 0
+      ? { limit: Math.min(limit, ROW_BUDGET) }
+      : undefined;
+  },
+  run: async (ctx, input) => {
+    const { gaps, notOurs, total } = answerGaps(ctx.db, { limit: input?.limit ?? ROW_BUDGET });
+    return {
+      ok: true,
+      summary:
+        total === 0
+          ? "every question their applications have asked has an answer"
+          : `${total} unanswered question${total === 1 ? "" : "s"}, most-asked first`,
+      result: {
+        // `total` is the real count; `shown` is what fitted. Saying "you have
+        // 6" off a capped list would be wrong by however many were cut.
+        total,
+        shown: gaps.length,
+        gaps: gaps.map((g) => ({
+          question: g.question,
+          askedOnApplications: g.seenOnApplications,
+          required: g.required,
+          platforms: g.vendors,
+        })),
+        // Named separately so the agent never suggests answering these FOR
+        // them: identity and legal-status questions are the user's own to make.
+        weWillNotAnswer: notOurs.map((g) => g.question),
+      },
+    };
+  },
+  verify: async () => null,
+};
+
 /** Every read the agent may perform, by id. */
 export const READ_TOOLS = {
   [listApplicationsTool.id]: listApplicationsTool,
@@ -727,6 +787,7 @@ export const READ_TOOLS = {
   [listDocumentsTool.id]: listDocumentsTool,
   [readFormMemoryTool.id]: readFormMemoryTool,
   [readInboxTool.id]: readInboxTool,
+  [readAnswerGapsTool.id]: readAnswerGapsTool,
 } as const;
 
 /** A tool's id and description, which is all the model needs to choose one. */

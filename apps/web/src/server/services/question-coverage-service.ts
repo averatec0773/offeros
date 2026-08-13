@@ -1,4 +1,11 @@
-import { classifyField, guardClassOf, matchAnswer } from "@offeros/autofill";
+import {
+  classifyField,
+  guardClassOf,
+  isCoverLetterLabel,
+  looksLikeCaptcha,
+  matchAnswer,
+  matchHistoryField,
+} from "@offeros/autofill";
 import type {
   AnswerGap,
   AnswerGaps,
@@ -126,6 +133,20 @@ export function isCovered(
   profile: Profile | null,
 ): boolean {
   if (matchAnswer(question.question, answers)) return true;
+
+  // Questions another flow owns. Measured against the real history, leaving
+  // these in made the gaps list actively misleading: "Cover Letter" was the
+  // single most-asked "unanswered question" at 11 applications, and "Company"
+  // and "Summary" — the columns of a work-history row — sat above real ones.
+  // None of the three is something you answer once and reuse, which is the
+  // only kind of thing this list should ever ask you to do.
+  if (question.control === "file" || isCoverLetterLabel(question.question)) return true;
+  const row = matchHistoryField(question.question);
+  if (row) {
+    // A history row is answered from the profile's own entries, per row.
+    const entries = row.kind === "education" ? profile?.education : profile?.experience;
+    return (entries?.length ?? 0) > 0;
+  }
   const canonical = classifyField({
     fieldId: "",
     label: question.question,
@@ -196,7 +217,14 @@ export function buildCoverage(
     // reported a question they had answered as one nobody can answer, and
     // dropped it out of the readiness count on its way past.
     const covered = isCovered(m, answers, profile);
-    const guard = covered ? null : guardClassOf({ label: m.question });
+    // A CAPTCHA is never ours, by a policy older than this file: OfferOS does
+    // not attempt them at all. Listing one as a question the user could
+    // usefully answer once would be nonsense — the answer changes every time.
+    const guard = covered
+      ? null
+      : looksLikeCaptcha({ label: m.question })
+        ? ("policy" as const)
+        : guardClassOf({ label: m.question });
     const state = covered ? "answered" : guard ? "not-ours" : "unanswered";
     return {
       questionKey: m.questionKey,
