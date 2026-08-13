@@ -40,6 +40,28 @@ describe("FillReportCard", () => {
     expect(screen.getByText(/Jordan Rivera/)).toBeTruthy();
   });
 
+  it('a value the page already held reads "already on the page", never the raw token', () => {
+    render(
+      <FillReportCard
+        reports={[
+          {
+            fieldId: "f9",
+            label: "Phone",
+            classifiedType: "phone",
+            status: "fillable",
+            value: "555-0142",
+            source: "page",
+            reason: "the page already held this value",
+            outcome: "filled",
+            required: false,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/already on the page/)).toBeTruthy();
+    expect(screen.queryByText(/— page/)).toBeNull();
+  });
+
   /**
    * What did not fill is grouped by cause rather than listed row by row with
    * the engine's own wording. Eighteen rows on a real form is a wall; the

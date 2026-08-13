@@ -30,6 +30,9 @@ const SOURCE_LABEL: Record<string, string> = {
   "ai-generated": "AI-written",
   "ai-classified": "AI-matched field",
   "cover-letter": "your cover letter",
+  // The page already held this value; OfferOS left it alone and says whose
+  // it was. Without this entry the raw internal token leaked into the UI.
+  page: "already on the page",
 };
 
 function sourceLabel(source: string): string {

@@ -33,7 +33,7 @@ export const fieldReportSchema = z.object({
   classifiedType: z.string(), // CanonicalField | "unknown" — string here; core must not depend on @offeros/autofill
   status: z.string(), // FillStatus from the engine, as reported
   value: z.string().optional(),
-  source: z.string(), // "personal" | "answer-bank" | "skills" | "ai-generated" | "ai-classified" | "cover-letter" | "resume-file" | "cover-letter-file" | "none"
+  source: z.string(), // "personal" | "answer-bank" | "skills" | "ai-generated" | "ai-classified" | "cover-letter" | "resume-file" | "cover-letter-file" | "page" | "none"
   reason: z.string(),
   outcome: z.enum(FIELD_REPORT_OUTCOMES),
   required: z.boolean(),
