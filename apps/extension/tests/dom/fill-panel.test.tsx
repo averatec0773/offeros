@@ -9,7 +9,7 @@ import type {
   CaptureJdResponse,
   AttachFileResponse,
 } from "../../src/lib/autofill/autofill-messaging";
-import type { FillValue } from "../../src/lib/autofill/dom-fill";
+import type { FillOutcome, FillValue } from "../../src/lib/autofill/dom-fill";
 import type {
   AnswerEntry,
   ApiResult,
@@ -179,6 +179,54 @@ const captureOk: CaptureJdResponse = {
 };
 
 const okAttach = async (): Promise<AttachFileResponse> => ({ ok: true });
+
+/** Three plain profile fields, so a partial round leaves something to retry. */
+const scanThreeProfileFields: ScanResponse = {
+  ...scanOk,
+  descriptors: [
+    {
+      fieldId: "f1",
+      label: "Email",
+      name: "email",
+      autocomplete: "email",
+      type: "email",
+      placeholder: "",
+      ariaLabel: "",
+    },
+    {
+      fieldId: "f2",
+      label: "City",
+      name: "city",
+      autocomplete: "address-level2",
+      type: "text",
+      placeholder: "",
+      ariaLabel: "",
+    },
+    {
+      fieldId: "f3",
+      label: "Phone",
+      name: "phone",
+      autocomplete: "tel",
+      type: "tel",
+      placeholder: "",
+      ariaLabel: "",
+    },
+  ],
+};
+
+const bundleWithAddress: FillTaskBundle = {
+  ...bundle,
+  fillProfile: {
+    ...bundle.fillProfile,
+    personal: {
+      name: "Jordan Rivera",
+      email: "jordan@example.com",
+      phone: "555-0100",
+      address: "12 Example Street, Springfield, IL 62704",
+      links: {},
+    },
+  },
+};
 
 const renderPanel = (
   over: {
@@ -2490,5 +2538,80 @@ describe("FillPanel", () => {
       expect(await screen.findByRole("button", { name: "Add this job" })).toBeInTheDocument();
       expect(screen.queryByText("Added — tracked in OfferOS.")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("re-filling what a round left behind", () => {
+  /** A round that lands `filled` only, and reports the rest as failed. */
+  const fillOnly = (filled: string[]) =>
+    vi.fn(async (values: FillValue[]): Promise<FillResponse> => ({
+      ok: true,
+      filled: values.filter((v) => filled.includes(v.fieldId)).length,
+      outcomes: values.map((v) =>
+        filled.includes(v.fieldId)
+          ? ([v.fieldId, "filled"] as [string, FillOutcome])
+          : ([v.fieldId, { outcome: "failed", reason: "this dropdown didn't open" }] as [
+              string,
+              FillOutcome,
+            ]),
+      ),
+    }));
+
+  const claimedApi = (): FillApi => ({
+    ...emptyApi(),
+    getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+    claim: vi.fn(async () => ({ ok: true as const, value: bundleWithAddress })),
+  });
+
+  it("leaves the button clickable when a round did not land everything", async () => {
+    const fill = fillOnly(["f1"]);
+    renderPanel({ scan: async () => scanThreeProfileFields, api: claimedApi(), fill });
+
+    const before = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(before);
+    });
+
+    // The phone did not land, so one is left — and the button says so instead
+    // of going grey while still counting work it refuses to do.
+    const after = await screen.findByRole("button", { name: "Fill 1 remaining" });
+    expect(after).toBeEnabled();
+  });
+
+  it("a retry sends only the fields that did not land", async () => {
+    const fill = fillOnly(["f1"]);
+    renderPanel({ scan: async () => scanThreeProfileFields, api: claimedApi(), fill });
+
+    // Resolved BEFORE act: findByRole polls on timers, and act holds them.
+    const first = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(first);
+    });
+    const retry = await screen.findByRole("button", { name: "Fill 1 remaining" });
+    await act(async () => {
+      await userEvent.click(retry);
+    });
+
+    await waitFor(() => expect(fill).toHaveBeenCalledTimes(2));
+    const second = fill.mock.calls[1]![0].map((v) => v.fieldId);
+    // The email landed the first time. Writing it again would either waste the
+    // keystrokes or clobber a correction the user made in between.
+    expect(second).not.toContain("f1");
+    expect(second).toContain("f3");
+  });
+
+  it("disables the button only once nothing is left to write", async () => {
+    const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+    renderPanel({ scan: async () => scanThreeProfileFields, api: claimedApi(), fill });
+
+    const btn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(btn);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Fill \d+ remaining$/ })).toBeDisabled(),
+    );
+    expect(screen.getByRole("button", { name: "Fill 0 remaining" })).toBeInTheDocument();
   });
 });

@@ -1348,7 +1348,19 @@ export function FillPanel({
   const satisfiedByPage = new Set(
     [...pageValuesRef.current].filter(([, v]) => v.trim() !== "").map(([id]) => id),
   );
-  const fillable = plan.filter((i) => i.status === "fillable" && !satisfiedByPage.has(i.fieldId));
+  /**
+   * Fields this run has already written and verified.
+   *
+   * `writtenFields` is only set after a write the page confirmed, so it is the
+   * honest answer to "did that one land". A retry after a partial round has to
+   * skip these: re-typing a value that is already in the box is at best waste
+   * and at worst clobbers something the user corrected in between.
+   */
+  const alreadyWritten = (fieldId: string) => writtenFields.has(fieldId);
+  const outstandingOnPage = (fieldId: string) =>
+    !satisfiedByPage.has(fieldId) && !alreadyWritten(fieldId);
+
+  const fillable = plan.filter((i) => i.status === "fillable" && outstandingOnPage(i.fieldId));
   // What a run would actually DO, not just what the profile can type in. A
   // page whose remaining work is all AI-answerable (open-ended questions, or
   // choice groups the answer bank missed) used to read "Fill 0 fields" with
@@ -1357,7 +1369,7 @@ export function FillPanel({
   const descriptorFor = (fieldId: string) =>
     scanResult.ok ? scanResult.descriptors.find((d) => d.fieldId === fieldId) : undefined;
   const answerable = plan.filter((i) => {
-    if (i.status !== "needs-answer" || satisfiedByPage.has(i.fieldId)) return false;
+    if (i.status !== "needs-answer" || !outstandingOnPage(i.fieldId)) return false;
     const desc = descriptorFor(i.fieldId);
     if (!desc || isAutoAnswerForbidden(guardSubject(i.label, desc))) return false;
     const isGroup = desc.type === "radio-group" || desc.type === "checkbox-group";
@@ -1621,10 +1633,14 @@ export function FillPanel({
   };
 
   const onFill = async () => {
-    if (pendingRef.current || done || !scanResult.ok || !bundleRef.current) return;
-    // Fields the page already holds are skipped inside taskFillPage — the one
-    // place every fill path passes through.
-    await taskFillPage(plan, scanResult, traceRef.current);
+    if (pendingRef.current || !scanResult.ok || !bundleRef.current) return;
+    // A retry runs on what is LEFT. Fields this round already wrote and
+    // verified are dropped here rather than inside taskFillPage, because that
+    // function decides from the scan's own `currentValue` — which is as old as
+    // the last scan and therefore blind to what this round just did.
+    // Fields the page already holds are still skipped in there, as ever.
+    const remaining = plan.filter((i) => !alreadyWritten(i.fieldId));
+    await taskFillPage(remaining, scanResult, traceRef.current);
   };
 
   // The instant lane: capture this page's JD, ask the web app to park + claim
@@ -1762,10 +1778,16 @@ export function FillPanel({
           <Button
             variant="primary"
             className="mb-3 w-full rounded-full py-2.5 text-body font-semibold"
-            disabled={plannedActions === 0 || pending || done}
+            // `done` used to disable this too, which made a button reading
+            // "Fill 3 fields" permanently grey after a round that left three
+            // fields unwritten — counting work it refused to do. What decides
+            // whether there is anything to press is whether anything is left.
+            disabled={plannedActions === 0 || pending}
             onClick={() => void onFill()}
           >
-            {`Fill ${plannedActions} ${plannedActions === 1 ? "field" : "fields"}`}
+            {done
+              ? `Fill ${plannedActions} remaining`
+              : `Fill ${plannedActions} ${plannedActions === 1 ? "field" : "fields"}`}
           </Button>
         ) : webReachable ? (
           <div className="mb-3 rounded-xl bg-bg-base p-3">
