@@ -23,6 +23,31 @@ Notable changes only; not every commit is an entry.
 
 ### Fixed
 
+**A dropdown showing "-None-" is no longer counted as answered.** OfferOS
+skipped any field that had something in it, on the grounds that someone had
+answered it — and then reported it as filled. But a form showing "-None-",
+"Select…", "Unknown", or a phone box showing the dial code of the country it
+defaulted to has not been answered by anyone. On a real application that meant
+every voluntary self-identification question, the salutation, the "how did you
+hear about us" and the opt-in all went in as placeholders with a tick beside
+them, while the answers saved in the profile were never used. Those fields are
+now recognised as empty and filled from your profile, and the progress count no
+longer treats them as done.
+
+**A field that really is answered is shown to you instead of being passed over
+in silence.** Where the page already holds a value that differs from yours,
+OfferOS still will not overwrite it — it cannot tell your own typing from the
+site's résumé parser, and several ATSs fill the form in for you and ask you to
+check it. It now lists those fields with both readings, "the page has X, yours
+is Y", with a button per field and one for all of them to put your answer in.
+The record of the application says the same thing rather than claiming the field
+was filled.
+
+**If the site rewrites a field after OfferOS fills it, you are told.** Sites
+that parse your résumé do it in the background, so their values can land a
+moment after ours and replace them. OfferOS now looks again shortly after
+filling, reports any field the page changed, and offers to fill it back in.
+
 **Requests to the extension's background always come back now.** The panel asks
 its background worker to do several things it cannot do itself — start the local
 app, photograph a page as a record of a fill, open an apply tab and remember
