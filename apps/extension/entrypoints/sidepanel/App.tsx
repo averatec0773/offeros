@@ -41,13 +41,7 @@ import {
 import { requestTabCapture } from "../../src/lib/tab-capture";
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
-import {
-  beginEnable,
-  hasSiteAccess,
-  requestEnableOnTab,
-  requestSiteAccess,
-  type SiteAccess,
-} from "../../src/lib/site-enable";
+import { canEnableUrl, requestEnableOnTab, whyCannotEnable } from "../../src/lib/site-enable";
 import { getFillBindingResult } from "../../src/lib/fill-binding";
 import { subscribeAgentEvents } from "../../src/lib/agent-events";
 import { ExternalLink, PlugZap } from "lucide-react";
@@ -95,75 +89,52 @@ export default function App() {
    * drops the id the moment the page changes, which puts the button back where
    * an honest panel would put it — in front of the user.
    */
-  const [enabledTabs, setEnabledTabs] = useState<Map<number, string>>(new Map());
   const activeTabId = activeTab?.id;
   const activeTabUrl = activeTab?.url ?? "";
-  const enabledHere =
-    activeTabId !== undefined &&
-    enabledTabs.get(activeTabId) === activeTabUrl &&
-    activeTabUrl !== "";
-  const supported = (activeTab !== null && matchAts(activeTab.url) !== null) || enabledHere;
-
-  // A navigation ends the grant. Chrome tears the injected scripts down with
-  // the document; keeping the entry would leave the panel showing a fill view
-  // over a page with no engine in it.
-  useEffect(() => {
-    if (activeTabId === undefined) return;
-    setEnabledTabs((prev) => {
-      const remembered = prev.get(activeTabId);
-      if (remembered === undefined || remembered === activeTabUrl) return prev;
-      const next = new Map(prev);
-      next.delete(activeTabId);
-      return next;
-    });
-  }, [activeTabId, activeTabUrl]);
 
   /**
-   * Whether this site is already allowed, worked out when the tab changes.
+   * Put the engine on this page, as soon as the panel is looking at it.
    *
-   * Off the click path on purpose. `permissions.contains` needs no user
-   * gesture, and knowing the answer in advance is what lets the click reach
-   * `permissions.request` with nothing awaited in front of it — which is the
-   * whole fix. It also keeps a user who has already granted this site from
-   * being asked again.
+   * The five platforms in the manifest are injected by Chrome already; a ping
+   * in the background settles that, so asking here is safe on every page and
+   * safe to ask twice. Everywhere else this is what makes the panel work at
+   * all — and it is automatic because the alternative, which shipped, was a
+   * button the user had to find, backed by a permission prompt that never
+   * appeared.
+   *
+   * One attempt per tab-and-URL. A navigation tears the injected scripts down
+   * with the document, which is exactly when the effect runs again.
    */
-  const [siteAccess, setSiteAccess] = useState<SiteAccess>("unknown");
+  const [engineError, setEngineError] = useState<string | null>(null);
+  const [engineReady, setEngineReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    setSiteAccess("unknown");
-    if (!activeTabUrl) return;
-    void hasSiteAccess(activeTabUrl).then((state) => {
-      if (!cancelled) setSiteAccess(state);
+    setEngineError(null);
+    setEngineReady(false);
+    if (activeTabId === undefined || activeTabUrl === "") return;
+    const blocked = whyCannotEnable(activeTabUrl);
+    if (blocked) {
+      setEngineError(blocked);
+      return;
+    }
+    void requestEnableOnTab(activeTabId).then((res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        setEngineReady(true);
+        // The engine may have only just arrived; the panel's scan loop is idle.
+        setRescanNonce((n) => n + 1);
+      } else {
+        setEngineError(res.error ?? "OfferOS couldn't start on this page.");
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [activeTabUrl]);
+  }, [activeTabId, activeTabUrl]);
 
-  // NOT async, and it must stay that way: the first thing this does on a site
-  // we know we lack permission for is ask Chrome for it, and that call only
-  // works on the click's own stack frame. See `requestSiteAccess`.
-  const enableHere = useCallback((): Promise<{ ok: boolean; error?: string }> => {
-    if (activeTabId === undefined) {
-      return Promise.resolve({ ok: false, error: "No page to enable yet." });
-    }
-    const tabId = activeTabId;
-    return beginEnable(activeTabUrl, {
-      siteAccess,
-      askForSite: requestSiteAccess,
-      inject: () => requestEnableOnTab(tabId),
-    }).then((res) => {
-      // What the attempt learned about the permission, so a second press can
-      // go straight to the prompt.
-      if (res.learned) setSiteAccess(res.learned);
-      if (res.ok) {
-        setEnabledTabs((prev) => new Map(prev).set(tabId, activeTabUrl));
-        // The engine has only just arrived; the panel's scan loop is idle by now.
-        setRescanNonce((n) => n + 1);
-      }
-      return res;
-    });
-  }, [activeTabId, activeTabUrl, siteAccess]);
+  const supported =
+    (activeTab !== null && matchAts(activeTab.url) !== null) ||
+    (engineReady && canEnableUrl(activeTabUrl));
 
   const [apiBase, setApiBase] = useState("");
   const [webReachable, setWebReachable] = useState(true);
@@ -390,7 +361,7 @@ export default function App() {
             openWebApp={openWebApp}
             openApplication={openApplication}
             tabUrl={activeTab?.url}
-            onEnableHere={enableHere}
+            engineError={engineError}
           />
         )}
       </div>

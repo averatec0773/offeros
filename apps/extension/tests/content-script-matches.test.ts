@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import atsContent from "../entrypoints/ats.content";
 import atsDriverContent from "../entrypoints/ats-driver.content";
-import config from "../wxt.config";
 import { RECIPES, type AtsId } from "../src/lib/autofill/recipes";
 
 // `matches` is typed as `string[] | Record<string, string[]>` (WXT's
@@ -77,17 +76,19 @@ const SAMPLE_URL: Record<MatchableAtsId, string> = {
   myworkday: "https://acme.wd1.myworkdayjobs.com/en-US/careers/job/Widget-Wrangler",
 };
 
-function hostPermissions(): string[] {
-  const manifest = config.manifest;
-  if (typeof manifest !== "object" || manifest === null || manifest instanceof Promise) {
-    throw new Error("expected manifest to be a plain object");
-  }
-  const hosts = manifest.host_permissions;
-  if (!Array.isArray(hosts)) throw new Error("expected host_permissions to be a plain array");
-  // <all_urls> is present for tabs.captureVisibleTab and would satisfy every
-  // assertion below on its own, which would make this test prove nothing.
-  return hosts.filter((h) => h !== "<all_urls>");
-}
+/*
+ * There used to be a "host permissions cover it" assertion per platform here,
+ * with a helper that filtered `<all_urls>` out of the manifest first — because
+ * back then `<all_urls>` was present only for `tabs.captureVisibleTab`, and
+ * letting it satisfy these would have made them prove nothing.
+ *
+ * The manifest now asks for `<all_urls>` outright (see
+ * tests/manifest-permissions.test.ts for why), so every one of those assertions
+ * would be true by construction. They are gone rather than kept as decoration.
+ * What is left below still carries weight: the content scripts have to MATCH
+ * each platform to be injected automatically, and permission alone does not do
+ * that.
+ */
 
 describe("every supported ATS is reachable by every script that needs it", () => {
   it("names a sample URL for every recipe", () => {
@@ -123,17 +124,6 @@ describe("every supported ATS is reachable by every script that needs it", () =>
       const url = SAMPLE_URL[atsId];
       expect(
         matchList(atsDriverContent.matches).some((p) => matchesUrl(p, url)),
-        url,
-      ).toBe(true);
-    },
-  );
-
-  it.each(RECIPES.map((r) => r.atsId as MatchableAtsId))(
-    "%s: host permissions cover it",
-    (atsId) => {
-      const url = SAMPLE_URL[atsId];
-      expect(
-        hostPermissions().some((p) => matchesUrl(p, url)),
         url,
       ).toBe(true);
     },

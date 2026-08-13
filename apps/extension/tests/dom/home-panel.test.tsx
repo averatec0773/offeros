@@ -27,7 +27,7 @@ function mount(
     ok?: boolean;
     webReachable?: boolean;
     tabUrl?: string;
-    onEnableHere?: () => Promise<{ ok: boolean; error?: string }>;
+    engineError?: string | null;
   } = {},
 ) {
   const api: HomePanelApi = {
@@ -46,7 +46,7 @@ function mount(
       openWebApp={openWebApp}
       openApplication={openApplication}
       tabUrl={over.tabUrl}
-      onEnableHere={over.onEnableHere}
+      engineError={over.engineError}
     />,
   );
   return { api, openWebApp, openApplication };
@@ -123,67 +123,35 @@ describe("HomePanel (the off-ATS dashboard)", () => {
 });
 
 /**
- * "Enable OfferOS on this page."
+ * There is no button here any more.
  *
- * The engine reaches a page by being injected, and injection follows the
- * manifest's five-platform match list. Everywhere else the panel had nothing to
- * offer. The button is the answer — but it must only appear where it can
- * actually work, because a button that does nothing reads as a broken
- * extension rather than a restricted one.
+ * OfferOS puts its engine on whatever page the panel is open on, by itself —
+ * the manifest asks for every site, so there is nothing left to grant and
+ * nothing to press. What remains is the one honest thing to say: the pages
+ * Chrome keeps every extension out of, where an extension that appears to do
+ * nothing reads as broken rather than restricted.
  */
-describe("enabling OfferOS on an ordinary site", () => {
-  const enable = () => vi.fn(async () => ({ ok: true }));
-
-  it("offers the button on an ordinary web page", async () => {
-    mount({ tabUrl: "https://careers.example.com/jobs/1", onEnableHere: enable() });
-    expect(
-      await screen.findByRole("button", { name: /Enable OfferOS on this page/ }),
-    ).toBeInTheDocument();
+describe("pages OfferOS cannot read", () => {
+  it("offers nothing to press on an ordinary page — it is already working", async () => {
+    mount({ tabUrl: "https://careers.example.com/jobs/1" });
+    await screen.findByText("Always on here");
+    expect(screen.queryByRole("button", { name: /Enable OfferOS on this page/ })).toBeNull();
+    expect(screen.queryByText("Not this page")).toBeNull();
   });
 
-  it("says the grant is for this page and this visit", async () => {
-    mount({ tabUrl: "https://careers.example.com/jobs/1", onEnableHere: enable() });
-    // The promise the button makes is the whole privacy posture of the feature;
-    // it has to be in front of the user at the moment they press it.
-    expect(await screen.findByText(/this page, this visit/i)).toBeInTheDocument();
-  });
-
-  it("injects on click", async () => {
-    const onEnableHere = enable();
-    mount({ tabUrl: "https://careers.example.com/jobs/1", onEnableHere });
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Enable OfferOS on this page/ }),
-    );
-    expect(onEnableHere).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a refused injection instead of doing nothing", async () => {
-    const onEnableHere = vi.fn(async () => ({
-      ok: false,
-      error: "Couldn't start OfferOS on this page: Cannot access contents of the page",
-    }));
-    mount({ tabUrl: "https://careers.example.com/jobs/1", onEnableHere });
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Enable OfferOS on this page/ }),
-    );
-    expect(await screen.findByText(/Cannot access contents of the page/)).toBeInTheDocument();
-  });
-
-  it("explains a browser page instead of offering a button that cannot work", async () => {
-    mount({ tabUrl: "chrome://extensions", onEnableHere: enable() });
+  it("explains a browser page rather than failing silently", async () => {
+    mount({
+      tabUrl: "chrome://extensions",
+      engineError: "OfferOS can only read ordinary web pages, not browser or local-file pages.",
+    });
     expect(await screen.findByText(/ordinary web pages/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Enable OfferOS on this page/ })).toBeNull();
   });
 
-  it("explains the Web Store, which Chrome forbids outright", async () => {
-    mount({ tabUrl: "https://chromewebstore.google.com/detail/abc", onEnableHere: enable() });
-    expect(await screen.findByText(/Web Store/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Enable OfferOS on this page/ })).toBeNull();
-  });
-
-  it("offers nothing while the tab is still resolving", async () => {
-    mount({ onEnableHere: enable() });
-    await screen.findByText("Nothing is waiting on you.");
-    expect(screen.queryByText(/Use OfferOS on this page/)).toBeNull();
+  it("passes a real injection failure through in the page's own words", async () => {
+    mount({
+      tabUrl: "https://careers.example.com/jobs/1",
+      engineError: "Couldn't start OfferOS on this page: Cannot access contents of the page",
+    });
+    expect(await screen.findByText(/Cannot access contents of the page/)).toBeInTheDocument();
   });
 });
