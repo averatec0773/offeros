@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api-client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { AnswerEntry } from "@offeros/core";
 import { LabeledInput, LabeledSelect } from "./fields";
+import type { AnswerBank } from "./use-answer-bank";
 
 export type EeoPreset = {
   /** The question label — shown to the user. */
@@ -164,83 +165,33 @@ const OTHER = "__other__";
 
 type RowStatus = "idle" | "saving" | "saved" | "error";
 
-type RowState = {
-  value: string;
-  entryId: string | null;
-  patterns: string[];
-  status: RowStatus;
-  /** Enum preset in "Other…" custom-value mode (value isn't one of the standard options). */
-  other: boolean;
-};
-
-function initialRow(): RowState {
-  return { value: "", entryId: null, patterns: [], status: "idle", other: false };
-}
-
 /** How long a typed custom value settles before it is written. Picking an
  *  option writes immediately — there is nothing to wait for. */
 const TYPING_SETTLE_MS = 700;
 
+/** The bank entry answering this preset, if there is one. */
+function entryFor(entries: AnswerEntry[], preset: EeoPreset): AnswerEntry | undefined {
+  return entries.find(
+    (entry) =>
+      entry.category === "eeo" && preset.patterns.some((p) => entry.questionPatterns.includes(p)),
+  );
+}
+
 /**
  * The 10 standard Equal Employment questions, each backed by its own answer-bank
- * entry (`category: "eeo"`) matched by pattern. Self-contained: fetches and
- * persists directly against `api.answers`, independent of the Profile document.
+ * entry (`category: "eeo"`) matched by pattern.
+ *
+ * What a row shows comes from the shared bank rather than from a copy taken at
+ * mount, so an entry deleted anywhere on the page stops looking saved here
+ * immediately. `draft` holds only what the user is in the middle of typing.
  */
-export function EeoEditor() {
-  const [rows, setRows] = useState<Record<string, RowState>>(() =>
-    Object.fromEntries(EEO_PRESETS.map((p) => [p.pattern, initialRow()])),
-  );
+export function EeoEditor({ bank }: { bank: AnswerBank }) {
+  const entries = useMemo(() => bank.entries ?? [], [bank.entries]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [statuses, setStatuses] = useState<Record<string, RowStatus>>({});
+  const [others, setOthers] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.answers
-      .list()
-      .then((entries) => {
-        setRows((prev) => {
-          const next = { ...prev };
-          for (const preset of EEO_PRESETS) {
-            const match = entries.find(
-              (entry) =>
-                entry.category === "eeo" &&
-                preset.patterns.some((p) => entry.questionPatterns.includes(p)),
-            );
-            if (match) {
-              next[preset.pattern] = {
-                value: match.answer,
-                entryId: match.id,
-                patterns: match.questionPatterns,
-                status: "idle",
-                other:
-                  preset.type === "enum" &&
-                  !!preset.options &&
-                  !preset.options.includes(match.answer),
-              };
-              boundRef.current[preset.pattern] = {
-                entryId: match.id,
-                patterns: match.questionPatterns,
-              };
-            }
-          }
-          return next;
-        });
-      })
-      .catch(() => setError("Couldn't load Equal Employment answers."));
-  }, []);
-
-  /**
-   * The entry each row is bound to, updated the moment a write returns.
-   *
-   * State cannot serve here: two edits to the same row can overlap, and the
-   * second would still read `entryId: null` from a render that has not
-   * happened yet — creating a second answer-bank entry for a question that
-   * already had one. The ref is written synchronously, and `pending` keeps a
-   * row's writes in order so the second one updates what the first created.
-   */
-  const boundRef = useRef<Record<string, { entryId: string | null; patterns: string[] }>>(
-    Object.fromEntries(
-      EEO_PRESETS.map((preset) => [preset.pattern, { entryId: null, patterns: [] }]),
-    ),
-  );
   const pendingRef = useRef<Record<string, Promise<unknown>>>({});
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -253,6 +204,9 @@ export function EeoEditor() {
     };
   }, []);
 
+  const setStatus = (pattern: string, status: RowStatus) =>
+    setStatuses((s) => ({ ...s, [pattern]: status }));
+
   /**
    * Write a value, or clear the answer when the value is empty.
    *
@@ -262,52 +216,45 @@ export function EeoEditor() {
    * created in one click was permanent. "No saved answer" is also a real
    * choice: it leaves the question blank on the form and lets the user decide
    * on the page, which is the sensible default for a voluntary question.
+   *
+   * Which entry this row owns is read from the bank at write time, not from a
+   * ref filled in at mount: two edits to the same row can overlap, and the
+   * second must not act on what the first has already changed.
    */
   const commit = (preset: EeoPreset, value: string) => {
-    setRows((r) => ({ ...r, [preset.pattern]: { ...r[preset.pattern]!, status: "saving" } }));
+    setStatus(preset.pattern, "saving");
     setError(null);
     const run = async () => {
-      const bound = boundRef.current[preset.pattern]!;
+      const existing = entryFor(bank.current(), preset);
       try {
         if (!value.trim()) {
-          if (bound.entryId) await api.answers.remove(bound.entryId);
-          boundRef.current[preset.pattern] = { entryId: null, patterns: [] };
-          setRows((r) => ({
-            ...r,
-            [preset.pattern]: { ...r[preset.pattern]!, entryId: null, status: "saved" },
-          }));
+          if (existing) await bank.remove(existing.id);
+          setDrafts((d) => ({ ...d, [preset.pattern]: "" }));
+          setStatus(preset.pattern, "saved");
           return;
         }
-        // On update, preserve any other patterns already on the shared entry and
-        // union in this preset's full variant set. Never truncate to just our own.
-        const patterns = bound.entryId
-          ? [...new Set([...bound.patterns, ...preset.patterns])]
+        // Preserve any other patterns already on the entry and union in this
+        // preset's full variant set. Never truncate to just our own.
+        const patterns = existing
+          ? [...new Set([...existing.questionPatterns, ...preset.patterns])]
           : preset.patterns;
-        const input = {
+        // save() upserts by question on the server, so a row that raced with
+        // another surface still ends up as one entry rather than two.
+        await bank.save({
           questionPatterns: patterns,
           answer: value,
           type: preset.type,
           category: "eeo" as const,
-        };
-        const saved = bound.entryId
-          ? await api.answers.update(bound.entryId, input)
-          : await api.answers.create(input);
-        boundRef.current[preset.pattern] = {
-          entryId: saved.id,
-          patterns: saved.questionPatterns,
-        };
-        setRows((r) => ({
-          ...r,
-          [preset.pattern]: {
-            ...r[preset.pattern]!,
-            entryId: saved.id,
-            patterns: saved.questionPatterns,
-            status: "saved",
-          },
-        }));
+        });
+        setDrafts((d) => {
+          const next = { ...d };
+          delete next[preset.pattern];
+          return next;
+        });
+        setStatus(preset.pattern, "saved");
       } catch {
         setError("Couldn't save that answer. Your other answers are unaffected.");
-        setRows((r) => ({ ...r, [preset.pattern]: { ...r[preset.pattern]!, status: "error" } }));
+        setStatus(preset.pattern, "error");
       }
     };
     // Chain behind whatever this row is already writing, so an update can never
@@ -318,7 +265,8 @@ export function EeoEditor() {
 
   /** A typed custom value: write once typing settles. */
   function setValue(preset: EeoPreset, value: string) {
-    setRows((r) => ({ ...r, [preset.pattern]: { ...r[preset.pattern]!, value, status: "idle" } }));
+    setDrafts((d) => ({ ...d, [preset.pattern]: value }));
+    setStatus(preset.pattern, "idle");
     clearTimeout(timersRef.current[preset.pattern]);
     timersRef.current[preset.pattern] = setTimeout(() => commit(preset, value), TYPING_SETTLE_MS);
   }
@@ -328,16 +276,13 @@ export function EeoEditor() {
     clearTimeout(timersRef.current[preset.pattern]);
     if (selected === OTHER) {
       // Reveal the text box; there is no value to save until something is typed.
-      setRows((r) => ({
-        ...r,
-        [preset.pattern]: { ...r[preset.pattern]!, other: true, status: "idle" },
-      }));
+      setOthers((o) => ({ ...o, [preset.pattern]: true }));
+      setStatus(preset.pattern, "idle");
       return;
     }
-    setRows((r) => ({
-      ...r,
-      [preset.pattern]: { ...r[preset.pattern]!, other: false, value: selected, status: "idle" },
-    }));
+    setOthers((o) => ({ ...o, [preset.pattern]: false }));
+    setDrafts((d) => ({ ...d, [preset.pattern]: selected }));
+    setStatus(preset.pattern, "idle");
     // An empty selection means "forget my answer", which commit handles.
     commit(preset, selected);
   }
@@ -347,7 +292,19 @@ export function EeoEditor() {
       {error && <p className="text-caption text-destructive">{error}</p>}
 
       {EEO_PRESETS.map((preset) => {
-        const row = rows[preset.pattern]!;
+        const saved = entryFor(entries, preset);
+        const status = statuses[preset.pattern] ?? "idle";
+        const other = others[preset.pattern] ?? false;
+        // What the user is typing, else what is actually stored. The stored
+        // value is the fallback rather than a copy taken at mount, so a row
+        // never keeps showing an answer the bank no longer holds.
+        const value = drafts[preset.pattern] ?? saved?.answer ?? "";
+        const custom =
+          other ||
+          (preset.type === "enum" &&
+            !!preset.options &&
+            value !== "" &&
+            !preset.options.includes(value));
         return (
           <div
             key={preset.pattern}
@@ -356,42 +313,47 @@ export function EeoEditor() {
             <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
               <LabeledSelect
                 label={preset.label}
-                value={row.other ? OTHER : row.value}
+                value={custom ? OTHER : value}
                 onChange={(v) => selectOption(preset, v)}
                 options={[
                   // Named for what it does, not for what it is: this option
                   // removes a saved answer, and "Select…" reads like a no-op.
-                  { value: "", label: row.entryId ? "— leave blank —" : "Select…" },
+                  { value: "", label: saved ? "— leave blank —" : "Select…" },
                   ...(preset.options ?? []).map((o) => ({ value: o, label: o })),
                   { value: OTHER, label: "Other…" },
                 ]}
                 className="flex-1"
               />
-              {row.other && (
+              {custom && (
                 <LabeledInput
                   label="Custom value"
-                  value={row.value}
+                  value={value}
                   onChange={(v) => setValue(preset, v)}
                   className="flex-1"
                 />
               )}
             </div>
-            {/* Status, not a control. The row saves itself; this only says what
-                happened, and stays a fixed width so a select does not shift
-                sideways when the word under it changes. */}
+            {/* Status, not a control. The row saves itself; this only says
+                what happened, and stays a fixed width so a select does not
+                shift sideways when the word under it changes.
+                At rest it states what is STORED, not what was last done here:
+                "Saved" used to be a fading acknowledgement of the last click,
+                which meant a row whose entry had been deleted elsewhere looked
+                exactly like a row that was fine. Showing a value and being set
+                are now the same thing. */}
             <span
               aria-live="polite"
-              className={`w-16 shrink-0 pb-2 text-caption ${
-                row.status === "error" ? "text-destructive" : "text-muted-foreground"
+              className={`w-20 shrink-0 pb-2 text-caption ${
+                status === "error" ? "text-destructive" : "text-muted-foreground"
               }`}
             >
-              {row.status === "saving"
+              {status === "saving"
                 ? "Saving…"
-                : row.status === "saved"
-                  ? "Saved"
-                  : row.status === "error"
-                    ? "Failed"
-                    : ""}
+                : status === "error"
+                  ? "Failed"
+                  : saved
+                    ? "Saved"
+                    : "Not set"}
             </span>
           </div>
         );

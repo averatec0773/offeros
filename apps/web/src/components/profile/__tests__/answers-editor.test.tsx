@@ -3,7 +3,13 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { AnswerEntry } from "@offeros/core";
 import { AnswersEditor } from "../answers-editor";
+import { useAnswerBank } from "../use-answer-bank";
 import { api } from "@/lib/api-client";
+
+/** The editor reads the page's one answer bank; the page is what owns it. */
+function AnswersHost() {
+  return <AnswersEditor bank={useAnswerBank()} />;
+}
 
 vi.mock("@/lib/api-client", () => ({
   api: { answers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } },
@@ -25,13 +31,13 @@ const entry: AnswerEntry = {
 describe("AnswersEditor", () => {
   it("shows an empty-state message when there are no answers yet", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     expect(await screen.findByText(/no answers/i)).toBeTruthy();
   });
 
   it("renders a description of what the answer bank is for", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     expect(
       await screen.findByText(/reusable answers to common application questions/i),
     ).toBeTruthy();
@@ -39,7 +45,7 @@ describe("AnswersEditor", () => {
 
   it("renders suggested-question chips headed by Expected salary", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     await screen.findByText(/no answers/i);
     const chips = screen.getAllByRole("button", {
       name: /Expected salary|Notice period|Years of experience|Why this company|Work authorization/,
@@ -63,7 +69,7 @@ describe("AnswersEditor", () => {
       category: "screening",
     });
 
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     await screen.findByText(/no answers/i);
     fireEvent.click(screen.getByRole("button", { name: "Expected salary" }));
 
@@ -87,7 +93,7 @@ describe("AnswersEditor", () => {
         category: "screening",
       },
     ]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     await screen.findByText("$150k");
     expect(screen.queryByRole("button", { name: "Expected salary" })).toBeNull();
     expect(screen.getByRole("button", { name: "Notice period" })).toBeTruthy();
@@ -95,7 +101,7 @@ describe("AnswersEditor", () => {
 
   it("lists existing answer entries with joined patterns", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([entry]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     expect(await screen.findByText("Why do you want to work here?")).toBeTruthy();
     expect(screen.getByText("I love the mission.")).toBeTruthy();
   });
@@ -110,10 +116,10 @@ describe("AnswersEditor", () => {
       category: "custom",
     });
 
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     await screen.findByText(/no answers/i);
 
-    fireEvent.change(screen.getByLabelText("New question patterns"), {
+    fireEvent.change(screen.getByLabelText("Which questions will this answer?"), {
       target: { value: "Salary expectations, Expected salary" },
     });
     fireEvent.change(screen.getByLabelText("New answer"), { target: { value: "$150k" } });
@@ -133,7 +139,7 @@ describe("AnswersEditor", () => {
     vi.mocked(api.answers.list).mockResolvedValue([entry]);
     vi.mocked(api.answers.update).mockResolvedValue({ ...entry, answer: "Updated answer" });
 
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     fireEvent.click(await screen.findByLabelText("Edit answer"));
 
     fireEvent.change(screen.getByLabelText("Answer"), { target: { value: "Updated answer" } });
@@ -152,21 +158,23 @@ describe("AnswersEditor", () => {
 
   it("blocks saving an edit with empty question patterns instead of hitting the server", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([entry]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     fireEvent.click(await screen.findByLabelText("Edit answer"));
 
-    fireEvent.change(screen.getByLabelText("Question patterns"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Which questions does this answer?"), {
+      target: { value: "" },
+    });
     fireEvent.click(screen.getByText("Save"));
 
     await new Promise((r) => setTimeout(r, 0));
     expect(api.answers.update).not.toHaveBeenCalled();
     // Edit mode stays open since the save was a no-op.
-    expect(screen.getByLabelText("Question patterns")).toBeTruthy();
+    expect(screen.getByLabelText("Which questions does this answer?")).toBeTruthy();
   });
 
   it("blocks saving an edit with an empty answer instead of hitting the server", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([entry]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
     fireEvent.click(await screen.findByLabelText("Edit answer"));
 
     fireEvent.change(screen.getByLabelText("Answer"), { target: { value: "   " } });
@@ -178,7 +186,7 @@ describe("AnswersEditor", () => {
 
   it("deletes an entry after an inline confirm", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([entry]);
-    render(<AnswersEditor />);
+    render(<AnswersHost />);
 
     fireEvent.click(await screen.findByLabelText("Delete answer"));
     fireEvent.click(screen.getByText("Confirm"));

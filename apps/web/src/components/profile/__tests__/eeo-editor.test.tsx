@@ -2,7 +2,13 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { EeoEditor, EEO_PRESETS } from "../eeo-editor";
+import { useAnswerBank } from "../use-answer-bank";
 import { api } from "@/lib/api-client";
+
+/** The editor reads the page's one answer bank; the page is what owns it. */
+function EeoHost() {
+  return <EeoEditor bank={useAnswerBank()} />;
+}
 
 vi.mock("@/lib/api-client", () => ({
   api: { answers: { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() } },
@@ -81,7 +87,7 @@ describe("EeoEditor", () => {
   });
 
   it("renders all 10 preset questions", async () => {
-    render(<EeoEditor />);
+    render(<EeoHost />);
     for (const preset of EEO_PRESETS) {
       expect(await screen.findByText(preset.label)).toBeTruthy();
     }
@@ -96,7 +102,7 @@ describe("EeoEditor", () => {
       category: "eeo",
     });
 
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const select = (await screen.findByLabelText("Are you a veteran?")) as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "I am not a protected veteran" } });
 
@@ -110,7 +116,7 @@ describe("EeoEditor", () => {
     expect(await screen.findByText("Saved")).toBeTruthy();
   });
 
-  it("hydrates an existing eeo entry by matching pattern and updates instead of creating", async () => {
+  it("hydrates an existing eeo entry by matching pattern, and saves it as that same question", async () => {
     vi.mocked(api.answers.list).mockResolvedValue([
       {
         id: "existing1",
@@ -120,33 +126,37 @@ describe("EeoEditor", () => {
         category: "eeo",
       },
     ]);
-    vi.mocked(api.answers.update).mockResolvedValue({
+    vi.mocked(api.answers.create).mockResolvedValue({
       id: "existing1",
-      questionPatterns: ["Are you a veteran?"],
+      questionPatterns: ["Are you a veteran?", "veteran"],
       answer: "I am not a protected veteran",
       type: "enum",
       category: "eeo",
     });
 
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const select = (await screen.findByLabelText("Are you a veteran?")) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("I don't wish to answer"));
 
     fireEvent.change(select, { target: { value: "I am not a protected veteran" } });
 
+    // The row no longer decides create-vs-update. It posts the question and its
+    // patterns, and the server updates the entry that already answers it —
+    // which is what makes the panel's accept-an-answer path dedupe too, without
+    // every surface reimplementing the rule. (See answer-service tests.)
     await waitFor(() =>
-      expect(api.answers.update).toHaveBeenCalledWith("existing1", {
+      expect(api.answers.create).toHaveBeenCalledWith({
         questionPatterns: ["Are you a veteran?", "veteran"],
         answer: "I am not a protected veteran",
         type: "enum",
         category: "eeo",
       }),
     );
-    expect(api.answers.create).not.toHaveBeenCalled();
+    expect(api.answers.create).toHaveBeenCalledTimes(1);
   });
 
   it("offers documented choices for pronouns and orientation rather than a blank box", async () => {
-    render(<EeoEditor />);
+    render(<EeoHost />);
     for (const label of ["What are your pronouns?", "Sexual orientation"]) {
       const control = await screen.findByLabelText(label);
       expect(control.tagName, `${label} should be a select`).toBe("SELECT");
@@ -158,7 +168,7 @@ describe("EeoEditor", () => {
   });
 
   it("writes nothing for a row the user never answered", async () => {
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const select = (await screen.findByLabelText("Are you a veteran?")) as HTMLSelectElement;
     // Re-selecting the placeholder is still not an answer.
     fireEvent.change(select, { target: { value: "" } });
@@ -179,22 +189,23 @@ describe("EeoEditor", () => {
         category: "eeo",
       },
     ]);
-    vi.mocked(api.answers.update).mockResolvedValue({
+    vi.mocked(api.answers.create).mockResolvedValue({
       id: "shared1",
-      questionPatterns: ["Are you a veteran?", "Have you served in the U.S. military?"],
+      questionPatterns: ["Are you a veteran?", "Have you served in the U.S. military?", "veteran"],
       answer: "I am not a protected veteran",
       type: "enum",
       category: "eeo",
     });
 
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const select = (await screen.findByLabelText("Are you a veteran?")) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("I don't wish to answer"));
 
     fireEvent.change(select, { target: { value: "I am not a protected veteran" } });
 
+    // A form's own wording, picked up on some earlier application, is kept.
     await waitFor(() =>
-      expect(api.answers.update).toHaveBeenCalledWith("shared1", {
+      expect(api.answers.create).toHaveBeenCalledWith({
         questionPatterns: [
           "Are you a veteran?",
           "Have you served in the U.S. military?",
@@ -216,7 +227,7 @@ describe("EeoEditor", () => {
       category: "eeo",
     });
 
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const raceSelect = (await screen.findByLabelText(
       "How would you identify your race?",
     )) as HTMLSelectElement;
@@ -237,34 +248,41 @@ describe("EeoEditor", () => {
   /**
    * The hazard autosave introduces and a Save button did not.
    *
-   * Two quick changes to one row both start before either finishes. Reading
-   * `entryId` from React state would give both of them `null` — the second
-   * would create a SECOND answer-bank entry for a question that already had
-   * one, and the fill engine would then have two competing answers.
+   * Two quick changes to one row both start before either finishes. They must
+   * not race: the second write has to leave the row holding the second answer,
+   * not whichever request happened to land last.
    */
-  it("two fast edits to one row update a single entry instead of creating two", async () => {
-    type CreateResult = Awaited<ReturnType<typeof api.answers.create>>;
-    let resolveCreate!: (v: CreateResult) => void;
-    vi.mocked(api.answers.create).mockReturnValue(
-      new Promise<CreateResult>((r) => {
-        resolveCreate = r;
-      }),
-    );
-    vi.mocked(api.answers.update).mockResolvedValue({
-      id: "v1",
-      questionPatterns: ["Are you a veteran?", "veteran"],
-      answer: "I don't wish to answer",
-      type: "enum",
-      category: "eeo",
+  it("two fast edits to one row are written in order, last answer winning", async () => {
+    type SaveResult = Awaited<ReturnType<typeof api.answers.create>>;
+    const saved: string[] = [];
+    let resolveFirst!: (v: SaveResult) => void;
+    vi.mocked(api.answers.create).mockImplementation(async (input) => {
+      saved.push(input.answer);
+      if (saved.length === 1) {
+        return new Promise<SaveResult>((r) => {
+          resolveFirst = r;
+        });
+      }
+      return {
+        id: "v1",
+        questionPatterns: ["Are you a veteran?", "veteran"],
+        answer: input.answer,
+        type: "enum",
+        category: "eeo",
+      };
     });
 
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const select = (await screen.findByLabelText("Are you a veteran?")) as HTMLSelectElement;
 
     fireEvent.change(select, { target: { value: "I am not a protected veteran" } });
-    // Second change lands while the create is still in flight.
+    // Second change lands while the first write is still in flight.
     fireEvent.change(select, { target: { value: "I don't wish to answer" } });
-    resolveCreate({
+    // The second write must not have started yet — it is chained behind. (The
+    // first is a microtask away, so this waits rather than asserting on the
+    // same tick as the click.)
+    await waitFor(() => expect(saved).toEqual(["I am not a protected veteran"]));
+    resolveFirst({
       id: "v1",
       questionPatterns: ["Are you a veteran?", "veteran"],
       answer: "I am not a protected veteran",
@@ -272,13 +290,8 @@ describe("EeoEditor", () => {
       category: "eeo",
     });
 
-    await waitFor(() => expect(api.answers.update).toHaveBeenCalled());
-    expect(api.answers.create).toHaveBeenCalledTimes(1);
-    expect(api.answers.update).toHaveBeenCalledWith(
-      "v1",
-      expect.objectContaining({
-        answer: "I don't wish to answer",
-      }),
+    await waitFor(() =>
+      expect(saved).toEqual(["I am not a protected veteran", "I don't wish to answer"]),
     );
   });
 
@@ -302,7 +315,7 @@ describe("EeoEditor", () => {
     ]);
     vi.mocked(api.answers.remove).mockResolvedValue({ id: "pronouns-1" });
 
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const select = (await screen.findByLabelText("What are your pronouns?")) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("Prefer not to say"));
 
@@ -315,7 +328,7 @@ describe("EeoEditor", () => {
   });
 
   it("does not call the API to clear a question that was never answered", async () => {
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const select = (await screen.findByLabelText("What are your pronouns?")) as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "" } });
     await new Promise((r) => setTimeout(r, 900));
@@ -348,7 +361,7 @@ describe("EeoEditor", () => {
       },
     ]);
 
-    render(<EeoEditor />);
+    render(<EeoHost />);
     const raceSelect = (await screen.findByLabelText(
       "How would you identify your race?",
     )) as HTMLSelectElement;

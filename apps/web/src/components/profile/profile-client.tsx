@@ -11,6 +11,7 @@ import { ExperienceList } from "./experience-list";
 import { SkillsEditor } from "./skills-editor";
 import { AnswersEditor } from "./answers-editor";
 import { EeoEditor } from "./eeo-editor";
+import { useAnswerBank } from "./use-answer-bank";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 
 const SECTIONS: SectionNavItem[] = [
@@ -107,6 +108,12 @@ const AUTOSAVE_DELAY_MS = 600;
 
 export function ProfileClient({ initialProfile }: { initialProfile: Profile | null }) {
   const [draft, setDraft] = useState<Profile | null>(initialProfile);
+  // One answer bank for the whole page. The Answers list and the Equal
+  // Employment section are two views of it, and they each used to hold their
+  // own copy — so deleting an entry in one left the other still showing it as
+  // saved, which is how a set of EEO answers was destroyed without anything on
+  // screen changing.
+  const answerBank = useAnswerBank();
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [resumeWarning, setResumeWarning] = useState<string | null>(null);
 
@@ -260,7 +267,7 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
         </SectionCard>
 
         <SectionCard id="answers" title="Answers">
-          <AnswersEditor />
+          <AnswersEditor bank={answerBank} />
         </SectionCard>
 
         <SectionCard
@@ -268,7 +275,7 @@ export function ProfileClient({ initialProfile }: { initialProfile: Profile | nu
           title="Equal Employment"
           description="Standard EEO/compliance questions collected on most job applications."
         >
-          <EeoEditor />
+          <EeoEditor bank={answerBank} />
         </SectionCard>
       </div>
     </main>

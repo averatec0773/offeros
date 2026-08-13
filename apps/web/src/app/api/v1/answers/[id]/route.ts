@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getDb } from "@/server/db/client";
-import { updateAnswer, deleteAnswer } from "@/server/repositories/answer-repo";
+import { editAnswer, removeAnswer } from "@/server/services/answer-service";
 import { handle, ok, notFound } from "@/server/http/envelope";
 
 export const runtime = "nodejs";
@@ -18,7 +18,7 @@ export async function PUT(request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
     const patch = putSchema.parse(await request.json());
-    const updated = updateAnswer(getDb(), id, patch);
+    const updated = editAnswer(getDb(), id, patch);
     return updated ? ok(updated) : notFound("answer");
   });
 }
@@ -26,7 +26,7 @@ export async function PUT(request: Request, ctx: Ctx) {
 export async function DELETE(_request: Request, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
-    const removed = deleteAnswer(getDb(), id);
+    const removed = removeAnswer(getDb(), id);
     return removed ? ok({ id }) : notFound("answer");
   });
 }

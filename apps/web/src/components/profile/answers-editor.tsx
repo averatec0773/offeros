@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import type { AnswerEntry } from "@offeros/core";
-import { api } from "@/lib/api-client";
 import { LabeledInput, LabeledSelect } from "./fields";
+import type { AnswerBank } from "./use-answer-bank";
 
 type Draft = {
   questionPatterns: string;
@@ -16,7 +16,10 @@ type Draft = {
 const EMPTY_DRAFT: Draft = { questionPatterns: "", answer: "", type: "text", category: "custom" };
 
 const TYPE_OPTIONS = ["text", "enum", "number", "boolean"].map((v) => ({ value: v, label: v }));
-const CATEGORY_OPTIONS = ["custom", "screening", "eeo"].map((v) => ({ value: v, label: v }));
+// No "eeo": those questions are managed in the Equal Employment section, and
+// an entry created here under that category would vanish from this list on the
+// next load, which is precisely the confusion this file is being fixed for.
+const CATEGORY_OPTIONS = ["custom", "screening"].map((v) => ({ value: v, label: v }));
 
 /**
  * One-click starter entries for common application questions, headed by
@@ -53,32 +56,31 @@ function fromDraft(draft: Draft): Omit<AnswerEntry, "id"> {
 }
 
 /**
- * Full CRUD over the answer bank (any category — EEO entries also show up
- * here since `EeoEditor` writes through the same API). Self-contained: fetches
- * and persists directly against `api.answers`, independent of the Profile document.
+ * Full CRUD over the answer bank, minus the Equal Employment questions.
+ *
+ * Those used to be listed here too — same storage, second front-end — and they
+ * looked exactly like duplicates of the section above. A user deleted them from
+ * this list to tidy up and destroyed the only copy: the EEO rows went on
+ * displaying the old values, so nothing suggested anything was wrong until an
+ * application went out with the work-authorization question blank. One set of
+ * data, one place to edit it.
  */
-export function AnswersEditor() {
-  const [entries, setEntries] = useState<AnswerEntry[] | null>(null);
+export function AnswersEditor({ bank }: { bank: AnswerBank }) {
+  // EEO entries are still IN the bank — matching and filling read the whole
+  // bank — they are simply not editable from here.
+  const entries = bank.entries === null ? null : bank.entries.filter((e) => e.category !== "eeo");
   const [error, setError] = useState<string | null>(null);
   const [newDraft, setNewDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY_DRAFT);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.answers
-      .list()
-      .then(setEntries)
-      .catch(() => setError("Couldn't load answers."));
-  }, []);
-
   async function add() {
     const input = fromDraft(newDraft);
     if (input.questionPatterns.length === 0 || !input.answer.trim()) return;
     setError(null);
     try {
-      const created = await api.answers.create(input);
-      setEntries((e) => [...(e ?? []), created]);
+      await bank.save(input);
       setNewDraft(EMPTY_DRAFT);
     } catch {
       setError("Couldn't save the answer.");
@@ -95,8 +97,7 @@ export function AnswersEditor() {
     if (input.questionPatterns.length === 0 || !input.answer.trim()) return;
     setError(null);
     try {
-      const updated = await api.answers.update(id, input);
-      setEntries((e) => (e ?? []).map((x) => (x.id === id ? updated : x)));
+      await bank.update(id, input);
       setEditingId(null);
     } catch {
       setError("Couldn't save the answer.");
@@ -106,8 +107,7 @@ export function AnswersEditor() {
   async function remove(id: string) {
     setError(null);
     try {
-      await api.answers.remove(id);
-      setEntries((e) => (e ?? []).filter((x) => x.id !== id));
+      await bank.remove(id);
       setConfirmId(null);
     } catch {
       setError("Couldn't delete the answer.");
@@ -117,13 +117,12 @@ export function AnswersEditor() {
   async function addSuggested(question: { pattern: string; type: AnswerEntry["type"] }) {
     setError(null);
     try {
-      const created = await api.answers.create({
+      await bank.save({
         questionPatterns: [question.pattern],
         answer: "",
         type: question.type,
         category: "screening",
       });
-      setEntries((e) => [...(e ?? []), created]);
     } catch {
       setError("Couldn't add that starter answer.");
     }
@@ -134,6 +133,9 @@ export function AnswersEditor() {
       <p className="text-body text-muted-foreground">
         Reusable answers to common application questions — autofill drops these into matching fields
         on ATS forms.
+      </p>
+      <p className="text-caption text-muted-foreground">
+        Equal Employment answers are managed in the section below, not here.
       </p>
 
       {error && <p className="text-caption text-destructive">{error}</p>}
@@ -162,10 +164,10 @@ export function AnswersEditor() {
           <div key={entry.id} className="rounded-xl border border-border bg-background p-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <LabeledInput
-                label="Question patterns"
+                label="Which questions does this answer?"
                 value={editDraft.questionPatterns}
                 onChange={(v) => setEditDraft((d) => ({ ...d, questionPatterns: v }))}
-                placeholder="Comma-separated, e.g. Salary expectations, Expected salary"
+                placeholder="Separate with commas, e.g. Expected salary, salary"
                 className="sm:col-span-2"
               />
               <LabeledInput
@@ -268,10 +270,10 @@ export function AnswersEditor() {
       <div className="rounded-xl border border-dashed border-border p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <LabeledInput
-            label="New question patterns"
+            label="Which questions will this answer?"
             value={newDraft.questionPatterns}
             onChange={(v) => setNewDraft((d) => ({ ...d, questionPatterns: v }))}
-            placeholder="Comma-separated, e.g. Salary expectations, Expected salary"
+            placeholder="Separate with commas, e.g. Expected salary, salary"
             className="sm:col-span-2"
           />
           <LabeledInput
