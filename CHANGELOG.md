@@ -68,45 +68,6 @@ machine a 1 MB database had grown a 4 MB log. Exporting a backup, and opening
 the database, now collect it. Backups were always complete — this is about the
 disk the log was holding.
 
----
-
-## 2026-08-20
-
-### Added
-
-**The fields OfferOS cannot fill can be handed to the agent.** Until now the
-fallback for an unrecognised field was a narrow one: a model was asked which
-standard field it looked like, and was shown nothing at all about you. That can
-recognise "Telefonnummer" and can do nothing with "which of your projects is
-most relevant to this role?" — a question you answer by having read your own
-résumé and the posting. The agent now gets both, along with your profile and the
-answers you have saved before, and works through what is left in one pass.
-
-**Every suggestion arrives with its source and its reason,** and none of them is
-written for you. You see the value, a line saying where it came from — your
-profile, your résumé, the job description, an answer you saved — and you apply
-them one at a time or all at once. A value you apply is recorded as the agent's,
-with that reason, so the record of the application says how each answer got
-there.
-
-**An answer that cannot be traced back to your own material is thrown away
-before you see it.** The agent has to quote the words its answer rests on, and
-OfferOS checks that quote is genuinely in the source named. This is what stops a
-plausible invention — a job you never held, a date that was never true — from
-reaching an employer's form. It is a check, not an instruction.
-
-**Long answers can be drafted one at a time,** with a word from you about what
-to emphasise: "lead with the Docker work". Your instruction is treated as yours,
-not as text scraped off the page.
-
-**Identity, work authorisation and consent questions are never answered for
-you** — the panel says plainly that they are yours, and offers no AI button at
-all.
-
-## 2026-08-19
-
-### Fixed
-
 **Your work history fills in as your work history.** Forms that ask for several
 jobs or several schools were getting the same answer in every row — three
 employers came out as one company three times, and each row's description was
@@ -141,52 +102,10 @@ fresh upload.
 input inside a group called "Educational Details" was being labelled
 "Educational Details".
 
-## 2026-08-20
-
-### Added
-
-**A Documents page, holding every document.** Three kinds of the same thing were
-kept in three unrelated places: what OfferOS wrote for a job lived inside that
-job's workspace, the résumés you uploaded were a section of your Profile, and the
-cover-letter templates had a page of their own. They are now one page with three
-tabs — Generated, Base résumés, Templates — and the top nav is back to five
-items. The Generated tab is new work rather than a move: it lists every tailored
-résumé and cover letter across every application, with the job it belongs to, how
-many versions it has, whether it is still a draft or was accepted, and links to
-the workbench and the PDF. Deleting one is possible from there, and deleting a
-tailored résumé says what that does to the next form fill before you confirm it.
-
-**Generated documents have names.** They had none — a tailored résumé was an
-untitled thing inside an application, and its PDF arrived on your disk named
-after whatever the download code assembled at the time. Each is now named when it
-is written (resume_Acme_2026-08-12, cover_Acme_2026-08-12), can be renamed, and
-the download uses that name. Documents generated before this reads with the same
-default name they would have been given, so nothing needed converting.
-
-**The assistant can see all your documents at once.** Every question it could
-answer about documents was about the job in front of it, so "which résumés have I
-generated" or "where is that letter for Databricks" had nothing behind them. It
-can now read the whole list.
-
-### Fixed
-
 **A download whose name was not in the Latin alphabet lost its filename — and
 its attachment.** A company written in Chinese produced a header the browser
 rejected outright, so the file arrived unnamed instead of just untranslated. The
 name is now carried in the field made for it.
-
-### Changed
-
-**Where the résumé files live.** They moved from the Profile page to Documents.
-Profile is who you are; a file you uploaded is an asset. First-run setup is
-unchanged — it still takes your résumé and builds the profile from it. The old
-/templates address redirects to its new home.
-
----
-
-## 2026-08-19
-
-### Fixed
 
 **The assistant told a user it had not done something it had just done.** Asked
 to fine-tune a résumé that did not exist yet, it generated one — and then
@@ -203,28 +122,6 @@ not settled on a job — no class, no way out — and the assistant retried them
 until it ran out of turn. They now refuse the way everything else in OfferOS
 refuses: with the reason and the fix (find the application first, or ask which
 one is meant).
-
-### Changed
-
-**A clear request gets done, not questioned.** "Change my résumé" when there is
-no draft yet means write the first one; that is the first step of the change,
-not a different request. The assistant now acts when the intent is clear, and
-saves its questions for real forks — several jobs it could be, or something only
-you know.
-
-**A finished chat turn reads as what came of it.** The fold under an answer used
-to say "6 steps · 1 did · 3 failed"; it now leads with the outcome ("Generated a
-tailored résumé") and keeps the tally inside, for when you want to see exactly
-what ran. A document the assistant produced links straight to that document's
-workbench instead of the application page. And "Stopped at the step limit"
-appears only when the turn produced nothing — printed above a résumé it had just
-written, it was apologising for the work.
-
----
-
-## 2026-08-18
-
-### Fixed
 
 **"23/73 required fields filled" was not about required fields.** The progress
 line on an application counted every field OfferOS filled over every control it
@@ -251,27 +148,6 @@ back to whatever the page calls it internally, and some pages call everything
 something generic. Several different questions were arriving named "value". A
 label that fits every field names none, so those now count as no label and the
 field goes to the AI reader with its surrounding text.
-
-### Added
-
-**Education and work history sections open themselves.** Plenty of forms start
-these as an empty table with an "Add" button — the rows do not exist until
-something presses it, so there was nothing to fill and nothing to show. OfferOS
-can now open them, stopping at whatever limit the page states and saying so
-honestly when a press produces no row.
-
-**The description can be read from the page you are looking at.** When a posting
-only exists once a browser has drawn it, the panel can now send what it sees to
-OfferOS, replacing a description that came back as a fragment.
-
-**The AI reader is always one press away.** It used to appear only when a form
-had gone badly wrong, which meant that on a form OfferOS mostly understood, the
-two or three fields that most needed a second opinion could not reach it. It now
-sits on the fill card with the number of fields it would actually look at.
-
-## 2026-08-17
-
-### Fixed
 
 **Forms whose fields have no id at all can now be read.** Some form builders
 leave the visible box with an empty id and keep the field's identity somewhere
@@ -303,10 +179,6 @@ and offers to fetch it again or let you paste it yourself.
 long link has no spaces to wrap at, and was pushing the description, the field
 report and the requirements list past the edge of their cards.
 
-## 2026-08-16
-
-### Fixed
-
 **Forms that never label their fields can now be read.** Plenty of application
 forms put the question right next to the box and connect the two with nothing at
 all — no `for`, no wrapping, nothing a browser would call a label. OfferOS used
@@ -334,51 +206,6 @@ were something you had been asked, and a dropdown caught mid-load contributed
 second time as a hidden template. Both copies carry the same name, and the
 hidden one comes first — which is why the visible one's label kept going
 unread.
-
-### Added
-
-**CAPTCHAs are named and handed straight back to you.** When a form asks you to
-prove a person is present, OfferOS marks it as yours and says so. It does not
-attempt them, and it never will: answering one on your behalf would be telling
-the employer something untrue about who is filling in the form. Nothing in
-OfferOS calls a solving service, by choice rather than by limitation.
-
-**Jobs added from the browser panel get checked on arrival,** the same as jobs
-added by pasting a link: is the posting still up, and what will the form ask?
-It runs behind the scenes so filling still starts immediately, and if it cannot
-read the page nothing breaks — the job is saved either way, and the check is a
-button away.
-
-## 2026-08-15
-
-### Security and privacy
-
-**OfferOS no longer asks to read and change your data on every website.** The
-browser extension used to request access to all sites at install time. It needed
-that for exactly one thing — taking a screenshot of a form after filling it, as
-a record of what happened — and Chrome has no narrower way to grant it. So the
-install prompt said the broadest possible thing about a product whose whole
-claim is that it runs only where you tell it to. That request is gone. What the
-extension asks for now is the five application platforms it fills automatically,
-plus the local app on your own machine.
-
-**Any other site is a question, asked once, about that site.** Pressing "Enable
-OfferOS on this page" on an ordinary careers page now asks Chrome for permission
-to that one site, and Chrome asks you, naming it. Say no and nothing happens.
-That was always the intent of the button; it is now what actually authorises it,
-rather than a boundary drawn on top of access the extension already had.
-
-**What that costs, stated plainly:** the screenshot taken after a fill needs
-permission Chrome only grants for the tab you invoked the extension on. When it
-is not available the screenshot is skipped — no upload, no record, and no
-pretending one was taken. It was always the least important of the three things
-OfferOS keeps about a fill (the field-by-field report and the decision trace are
-the other two, and neither depends on this), and a missing screenshot has never
-been allowed to affect the fill, the report, or marking an application done.
-
-## 2026-08-14
-
-### Fixed
 
 **"Applied" meant three different things depending on where you clicked it.**
 Marking an application as sent is five things at once: the fill ticket closes,
@@ -419,116 +246,6 @@ up as "open the page to fill it" — for a fill that ended weeks ago. Tickets mo
 than a week old are now retired. And when the same form is open in two places at
 once, the second one is told, instead of the two of them silently overwriting
 each other.
-
-### Changed
-
-**The timeline says what happened in words.** Several kinds of entry were
-rendered as their internal names — `fill-handoff-created`, `instant-fill-started`
-— which is not a sentence anyone wrote for a person to read.
-
-**"Ticket created" is gone,** along with the promise attached to it. Opening a
-job from OfferOS now says what actually happened, and when the browser extension
-is not installed it says that too, instead of promising a panel that is not
-there will fill the form.
-
-## 2026-08-13
-
-### Added
-
-**Any careers page, once you ask.** OfferOS reached a form by being present on
-the page, and it was only ever present on five application platforms. Most
-postings are not on those five — a company's own careers site, a smaller ATS, a
-form in another language — and there the panel had nothing to offer and no way
-to explain itself. The answer to a list that is too short is not a longer list.
-The panel now offers one button on any ordinary web page: press it, and OfferOS
-starts reading that page's form. It fills, reports, and asks for what it cannot
-answer, exactly as it does on a platform it knows.
-
-**It only runs where you called it.** Outside those five platforms OfferOS does
-not appear on a page by itself. Pressing the button turns it on for that tab and
-that visit; leaving the page ends it, and coming back means pressing again. It
-does not quietly restart itself behind you, because quietly restarting is the
-standing presence this is meant to avoid. Pages the browser puts off limits —
-its own settings, local files, the extension store — say so plainly instead of
-offering a button that could not work.
-
-**A page has to look like an application before OfferOS reads it.** A blog's
-comment box and a newsletter signup are both forms. The test is deliberately
-strict — a file upload, or at least three labelled questions — and deliberately
-wrong in the safe direction: a missed application form leaves you filling it
-yourself, which is where you already were, while a false positive would put your
-phone number in a box that never asked for it. A page that does not qualify gets
-the same "nothing to fill here" an unsupported site has always got.
-
-**Custom dropdowns work without anyone writing a driver for them.** Filling a
-non-standard control meant recognising the exact library it was built with, so a
-widget nobody had written code for was not filled badly — it was skipped in
-silence, and turned up empty at submit. There is now a fallback that reads what
-the page publishes about itself for screen readers: which control opens a list,
-which rows are its options, which choice is currently checked. Anything a site
-described well enough to be accessible is now something OfferOS can operate.
-
-### Changed
-
-**A control that ignores us is reported, not assumed.** The accessibility
-description a page publishes is a description, not a promise — a widget can
-carry every correct label and still ignore the click. So every dropdown and
-every choice ends with OfferOS asking the page whether the answer actually took,
-and one that cannot be confirmed is listed among the fields still yours, with
-the reason, and a click that jumps you to it.
-
----
-
-## 2026-08-12
-
-### Added
-
-**A form OfferOS has never seen can now be read.** Field recognition was a fixed
-list of English label rules plus three platforms' own field metadata. A form in
-another language, or one phrased unusually, produced a page of unrecognised
-fields — and an unrecognised field was not merely unfilled, it was untried:
-nothing was attempted, and the existing AI answering could not help, because it
-only ran on fields already recognised as open-ended questions. There is now a
-button that asks a model what those fields are asking for. What comes back is a
-MAPPING, never a value: the answer still comes from your profile or your saved
-answers, the guards still run, and the write still verifies itself against the
-page. So a wrong guess is a visibly wrong field rather than invented text on a
-real application, and a guess that names nothing leaves the field honestly
-blank. The model is sent field names only — never your name, email, phone, or
-any stored answer.
-
-**The model can add a guard, never remove one.** The questions no automation may
-answer for you — self-identification, work authorisation — are matched by
-English patterns, and the whole point of the above is forms those patterns
-cannot read. So the classifier is also asked to flag those questions in any
-language, and a flag it raises is honoured. A flag it fails to raise changes
-nothing: the existing check runs first and its refusal is never revisited.
-
-**Tell a generated answer what to change about it.** The AI answers panel had
-one control: Regenerate — roll the dice again. A draft that was nearly right,
-too long or leading with the wrong project, had no way to be told so, and
-pressing Regenerate until it came out well was both expensive and likely to lose
-the good parts with the bad. Each answer now takes one line of instruction
-("shorter", "lead with the ML work"). Your instruction is treated as yours: the
-page's question is still fenced off from the model as untrusted text, but what
-you typed is not, because fencing it would tell the model to disregard the
-person who asked.
-
-**The fields that are still yours, named.** A fill that stopped short said so
-only by omission — the counts moved, a few rows stayed pale — and on a long form
-that silence reads as completion, which is how an application gets submitted
-with required fields empty. There is now a list of exactly what the run did not
-finish, in page order, each entry a click away from itself on the page. Fields
-the page already holds are never on it, whoever typed them.
-
-### Changed
-
-**Where a filled value came from is said in words** rather than in the engine's
-own slug — "from your profile", "from your saved answers", and, for a field a
-model placed, "AI-matched field", because that is a different level of
-confidence and worth seeing as one.
-
-### Fixed
 
 **A page's identity was a hash of the fields on it.** Every field report was
 tagged with the page it came from, so the app could accumulate results across a
@@ -572,6 +289,225 @@ failed — each one waiting out a two-and-a-half-second timeout and reporting an
 ordinary failure. There is now one list and all four derive from it, so the
 lists cannot disagree; a test names a real address per platform and makes each
 list prove it covers it.
+
+### Added
+
+**The fields OfferOS cannot fill can be handed to the agent.** Until now the
+fallback for an unrecognised field was a narrow one: a model was asked which
+standard field it looked like, and was shown nothing at all about you. That can
+recognise "Telefonnummer" and can do nothing with "which of your projects is
+most relevant to this role?" — a question you answer by having read your own
+résumé and the posting. The agent now gets both, along with your profile and the
+answers you have saved before, and works through what is left in one pass.
+
+**Every suggestion arrives with its source and its reason,** and none of them is
+written for you. You see the value, a line saying where it came from — your
+profile, your résumé, the job description, an answer you saved — and you apply
+them one at a time or all at once. A value you apply is recorded as the agent's,
+with that reason, so the record of the application says how each answer got
+there.
+
+**An answer that cannot be traced back to your own material is thrown away
+before you see it.** The agent has to quote the words its answer rests on, and
+OfferOS checks that quote is genuinely in the source named. This is what stops a
+plausible invention — a job you never held, a date that was never true — from
+reaching an employer's form. It is a check, not an instruction.
+
+**Long answers can be drafted one at a time,** with a word from you about what
+to emphasise: "lead with the Docker work". Your instruction is treated as yours,
+not as text scraped off the page.
+
+**Identity, work authorisation and consent questions are never answered for
+you** — the panel says plainly that they are yours, and offers no AI button at
+all.
+
+**A Documents page, holding every document.** Three kinds of the same thing were
+kept in three unrelated places: what OfferOS wrote for a job lived inside that
+job's workspace, the résumés you uploaded were a section of your Profile, and the
+cover-letter templates had a page of their own. They are now one page with three
+tabs — Generated, Base résumés, Templates — and the top nav is back to five
+items. The Generated tab is new work rather than a move: it lists every tailored
+résumé and cover letter across every application, with the job it belongs to, how
+many versions it has, whether it is still a draft or was accepted, and links to
+the workbench and the PDF. Deleting one is possible from there, and deleting a
+tailored résumé says what that does to the next form fill before you confirm it.
+
+**Generated documents have names.** They had none — a tailored résumé was an
+untitled thing inside an application, and its PDF arrived on your disk named
+after whatever the download code assembled at the time. Each is now named when it
+is written (resume_Acme_2026-08-12, cover_Acme_2026-08-12), can be renamed, and
+the download uses that name. Documents generated before this reads with the same
+default name they would have been given, so nothing needed converting.
+
+**The assistant can see all your documents at once.** Every question it could
+answer about documents was about the job in front of it, so "which résumés have I
+generated" or "where is that letter for Databricks" had nothing behind them. It
+can now read the whole list.
+
+**Education and work history sections open themselves.** Plenty of forms start
+these as an empty table with an "Add" button — the rows do not exist until
+something presses it, so there was nothing to fill and nothing to show. OfferOS
+can now open them, stopping at whatever limit the page states and saying so
+honestly when a press produces no row.
+
+**The description can be read from the page you are looking at.** When a posting
+only exists once a browser has drawn it, the panel can now send what it sees to
+OfferOS, replacing a description that came back as a fragment.
+
+**The AI reader is always one press away.** It used to appear only when a form
+had gone badly wrong, which meant that on a form OfferOS mostly understood, the
+two or three fields that most needed a second opinion could not reach it. It now
+sits on the fill card with the number of fields it would actually look at.
+
+**CAPTCHAs are named and handed straight back to you.** When a form asks you to
+prove a person is present, OfferOS marks it as yours and says so. It does not
+attempt them, and it never will: answering one on your behalf would be telling
+the employer something untrue about who is filling in the form. Nothing in
+OfferOS calls a solving service, by choice rather than by limitation.
+
+**Jobs added from the browser panel get checked on arrival,** the same as jobs
+added by pasting a link: is the posting still up, and what will the form ask?
+It runs behind the scenes so filling still starts immediately, and if it cannot
+read the page nothing breaks — the job is saved either way, and the check is a
+button away.
+
+**Any careers page, once you ask.** OfferOS reached a form by being present on
+the page, and it was only ever present on five application platforms. Most
+postings are not on those five — a company's own careers site, a smaller ATS, a
+form in another language — and there the panel had nothing to offer and no way
+to explain itself. The answer to a list that is too short is not a longer list.
+The panel now offers one button on any ordinary web page: press it, and OfferOS
+starts reading that page's form. It fills, reports, and asks for what it cannot
+answer, exactly as it does on a platform it knows.
+
+**It only runs where you called it.** Outside those five platforms OfferOS does
+not appear on a page by itself. Pressing the button turns it on for that tab and
+that visit; leaving the page ends it, and coming back means pressing again. It
+does not quietly restart itself behind you, because quietly restarting is the
+standing presence this is meant to avoid. Pages the browser puts off limits —
+its own settings, local files, the extension store — say so plainly instead of
+offering a button that could not work.
+
+**A page has to look like an application before OfferOS reads it.** A blog's
+comment box and a newsletter signup are both forms. The test is deliberately
+strict — a file upload, or at least three labelled questions — and deliberately
+wrong in the safe direction: a missed application form leaves you filling it
+yourself, which is where you already were, while a false positive would put your
+phone number in a box that never asked for it. A page that does not qualify gets
+the same "nothing to fill here" an unsupported site has always got.
+
+**Custom dropdowns work without anyone writing a driver for them.** Filling a
+non-standard control meant recognising the exact library it was built with, so a
+widget nobody had written code for was not filled badly — it was skipped in
+silence, and turned up empty at submit. There is now a fallback that reads what
+the page publishes about itself for screen readers: which control opens a list,
+which rows are its options, which choice is currently checked. Anything a site
+described well enough to be accessible is now something OfferOS can operate.
+
+**A form OfferOS has never seen can now be read.** Field recognition was a fixed
+list of English label rules plus three platforms' own field metadata. A form in
+another language, or one phrased unusually, produced a page of unrecognised
+fields — and an unrecognised field was not merely unfilled, it was untried:
+nothing was attempted, and the existing AI answering could not help, because it
+only ran on fields already recognised as open-ended questions. There is now a
+button that asks a model what those fields are asking for. What comes back is a
+MAPPING, never a value: the answer still comes from your profile or your saved
+answers, the guards still run, and the write still verifies itself against the
+page. So a wrong guess is a visibly wrong field rather than invented text on a
+real application, and a guess that names nothing leaves the field honestly
+blank. The model is sent field names only — never your name, email, phone, or
+any stored answer.
+
+**The model can add a guard, never remove one.** The questions no automation may
+answer for you — self-identification, work authorisation — are matched by
+English patterns, and the whole point of the above is forms those patterns
+cannot read. So the classifier is also asked to flag those questions in any
+language, and a flag it raises is honoured. A flag it fails to raise changes
+nothing: the existing check runs first and its refusal is never revisited.
+
+**Tell a generated answer what to change about it.** The AI answers panel had
+one control: Regenerate — roll the dice again. A draft that was nearly right,
+too long or leading with the wrong project, had no way to be told so, and
+pressing Regenerate until it came out well was both expensive and likely to lose
+the good parts with the bad. Each answer now takes one line of instruction
+("shorter", "lead with the ML work"). Your instruction is treated as yours: the
+page's question is still fenced off from the model as untrusted text, but what
+you typed is not, because fencing it would tell the model to disregard the
+person who asked.
+
+**The fields that are still yours, named.** A fill that stopped short said so
+only by omission — the counts moved, a few rows stayed pale — and on a long form
+that silence reads as completion, which is how an application gets submitted
+with required fields empty. There is now a list of exactly what the run did not
+finish, in page order, each entry a click away from itself on the page. Fields
+the page already holds are never on it, whoever typed them.
+
+### Changed
+
+**Where the résumé files live.** They moved from the Profile page to Documents.
+Profile is who you are; a file you uploaded is an asset. First-run setup is
+unchanged — it still takes your résumé and builds the profile from it. The old
+/templates address redirects to its new home.
+
+**A clear request gets done, not questioned.** "Change my résumé" when there is
+no draft yet means write the first one; that is the first step of the change,
+not a different request. The assistant now acts when the intent is clear, and
+saves its questions for real forks — several jobs it could be, or something only
+you know.
+
+**A finished chat turn reads as what came of it.** The fold under an answer used
+to say "6 steps · 1 did · 3 failed"; it now leads with the outcome ("Generated a
+tailored résumé") and keeps the tally inside, for when you want to see exactly
+what ran. A document the assistant produced links straight to that document's
+workbench instead of the application page. And "Stopped at the step limit"
+appears only when the turn produced nothing — printed above a résumé it had just
+written, it was apologising for the work.
+
+**The timeline says what happened in words.** Several kinds of entry were
+rendered as their internal names — `fill-handoff-created`, `instant-fill-started`
+— which is not a sentence anyone wrote for a person to read.
+
+**"Ticket created" is gone,** along with the promise attached to it. Opening a
+job from OfferOS now says what actually happened, and when the browser extension
+is not installed it says that too, instead of promising a panel that is not
+there will fill the form.
+
+**A control that ignores us is reported, not assumed.** The accessibility
+description a page publishes is a description, not a promise — a widget can
+carry every correct label and still ignore the click. So every dropdown and
+every choice ends with OfferOS asking the page whether the answer actually took,
+and one that cannot be confirmed is listed among the fields still yours, with
+the reason, and a click that jumps you to it.
+
+**Where a filled value came from is said in words** rather than in the engine's
+own slug — "from your profile", "from your saved answers", and, for a field a
+model placed, "AI-matched field", because that is a different level of
+confidence and worth seeing as one.
+
+### Security and privacy
+
+**OfferOS no longer asks to read and change your data on every website.** The
+browser extension used to request access to all sites at install time. It needed
+that for exactly one thing — taking a screenshot of a form after filling it, as
+a record of what happened — and Chrome has no narrower way to grant it. So the
+install prompt said the broadest possible thing about a product whose whole
+claim is that it runs only where you tell it to. That request is gone. What the
+extension asks for now is the five application platforms it fills automatically,
+plus the local app on your own machine.
+
+**Any other site is a question, asked once, about that site.** Pressing "Enable
+OfferOS on this page" on an ordinary careers page now asks Chrome for permission
+to that one site, and Chrome asks you, naming it. Say no and nothing happens.
+That was always the intent of the button; it is now what actually authorises it,
+rather than a boundary drawn on top of access the extension already had.
+
+**What that costs, stated plainly:** the screenshot taken after a fill needs
+permission Chrome only grants for the tab you invoked the extension on. When it
+is not available the screenshot is skipped — no upload, no record, and no
+pretending one was taken. It was always the least important of the three things
+OfferOS keeps about a fill (the field-by-field report and the decision trace are
+the other two, and neither depends on this), and a missing screenshot has never
+been allowed to affect the fill, the report, or marking an application done.
 
 ---
 
