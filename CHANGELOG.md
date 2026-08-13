@@ -19,6 +19,57 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-12
+
+### Fixed
+
+**The Fill button no longer goes dead with fields still to fill.** After a round
+that left some fields unwritten, the button greyed out while its own label went
+on counting them — "Fill 3 fields", unclickable, with three empty boxes on the
+page. It now stays live and reads "Fill 3 remaining", and pressing it retries
+only what did not land the first time; fields already written and checked are
+left alone.
+
+**A dropdown that is really a text box now gets typed into.** Some forms declare
+a control as a dropdown when there is no list behind it — a postal code field
+was one — and every attempt to open the list failed, so the city, state and
+postal code were handed back to the user with their values sitting ready. When
+no list appears, OfferOS now looks for a box underneath that a person could type
+into, types the value, and reads it back to confirm the page kept it. It says so
+on the field, so you know that one arrived by a route worth glancing at. A
+genuine dropdown that ignores the click still says so plainly rather than
+pretending.
+
+**A failed analysis request is retried once before you hear about it.** The
+first request after the server has been idle could come back an error and then
+work seconds later. OfferOS now asks again after a couple of seconds and only
+reports a failure if that fails too — in plain words. Only reads are retried;
+nothing that writes to your application is ever sent twice on its own.
+
+**Equal Employment answers have one place to manage them.** They were listed
+both in their own section and again in the general Answers list — same storage,
+shown twice — so deleting the apparent duplicates destroyed the real answers,
+while the section above went on displaying them as if they were still set. The
+Answers list no longer shows them and says where they live; both views now share
+one set of data, so a change in either shows in both immediately; and each
+Equal Employment row states whether an answer is actually stored ("Saved" or
+"Not set") rather than acknowledging your last click.
+
+**Saving an answer updates the existing one instead of adding a second.** Every
+place that saves an answer — the profile page, the Equal Employment section, the
+panel accepting one mid-application — now updates the entry for that question if
+there is one. Two entries for the same question meant the form got whichever was
+found first. Changes to your saved answers are also recorded now, so a deletion
+leaves a trace.
+
+**Backups fold the database log back in first.** A database left running for
+days can accumulate a large write-ahead log that nothing collects; on one
+machine a 1 MB database had grown a 4 MB log. Exporting a backup, and opening
+the database, now collect it. Backups were always complete — this is about the
+disk the log was holding.
+
+---
+
 ## 2026-08-20
 
 ### Added
