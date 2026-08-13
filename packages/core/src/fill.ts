@@ -13,6 +13,18 @@ export const fillHandoffSchema = z.object({
   updatedAt: z.number(),
 });
 
+/**
+ * What became of one field.
+ *
+ * `skipped` is the narrow one and the easy one to misuse: it means the engine
+ * met a control, did not recognise it, and correctly did nothing to it. Every
+ * consumer treats it as a non-event — it is not a problem in the diagnosis, it
+ * is dropped from the required count, and the hand-back list only surfaces one
+ * if it is required as well. So a field we HAD an answer for must never be
+ * filed here; it is `filled`, an explicit `failed`, or `needs-user`. Four
+ * fields once landed in `skipped` with their answers ready and went out of a
+ * real application empty and unmentioned by everything downstream.
+ */
 export const FIELD_REPORT_OUTCOMES = ["filled", "skipped", "needs-user", "failed"] as const;
 
 export const fieldReportSchema = z.object({

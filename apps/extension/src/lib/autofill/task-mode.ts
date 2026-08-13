@@ -29,6 +29,10 @@ export type FieldReportSource =
   | "cover-letter"
   | "resume-file"
   | "cover-letter-file"
+  /** Nobody here put it there: the page already held a value when we read it,
+   *  so the field is answered and was left alone. Distinct from "none", which
+   *  means no value was found anywhere. */
+  | "page"
   | "none";
 
 /** One OfferOS-managed file kind a file input can classify as — the only
@@ -213,6 +217,10 @@ export function outcomeOf(o: FillOutcome): "filled" | "failed" {
   return typeof o === "string" ? o : o.outcome;
 }
 
+/** Said of a field we had an answer for that never came back from the page. */
+export const UNREPORTED_REASON =
+  "OfferOS had an answer for this one but the page never confirmed it was written — fill it in yourself.";
+
 export type WriteOutcome =
   | "filled"
   | "failed"
@@ -243,7 +251,10 @@ function normalize(w: WriteOutcome | undefined):
  *   - written filled/failed/needs-user → that outcome (value/source/reason from
  *     the write if given — a file-attach attempt overrides the reason this way),
  *   - unwritten needs-answer (file inputs, resume, ungenerated) → needs-user,
- *   - unwritten unknown/fillable → skipped.
+ *   - unwritten fillable → needs-user: we had the answer and cannot show it
+ *     was written, which is the user's problem to finish, not a non-event,
+ *   - unwritten unknown → skipped, the only meaning "skipped" now carries:
+ *     a control we correctly did nothing to.
  */
 export function buildFieldReports(
   trace: FieldTrace[],
@@ -256,8 +267,18 @@ export function buildFieldReports(
     let outcome: FieldReportOutcome;
     if (w) outcome = w.outcome;
     else if (t.status === "needs-answer") outcome = "needs-user";
+    // A field we had an answer for and never heard back about is NOT skipped.
+    // "skipped" is this vocabulary's word for a control we correctly left
+    // alone, and every consumer treats it that way — the hand-back list only
+    // surfaces a skipped field if it is unknown AND required, the diagnosis
+    // does not count one as a problem, the required-completeness check drops
+    // it. So a fillable field landing there was invisible in every direction
+    // at once, which is how an application went out with three Equal
+    // Employment dropdowns and a phone number empty. It goes back to the user.
+    else if (t.status === "fillable") outcome = "needs-user";
     else outcome = "skipped";
 
+    const unreported = !w && t.status === "fillable";
     const value = w?.value ?? (t.chosenValue || undefined);
     return {
       fieldId: t.fieldId,
@@ -266,7 +287,10 @@ export function buildFieldReports(
       status: t.status,
       value: outcome === "filled" ? value : t.chosenValue || undefined,
       source: w?.source ?? traceSource(t),
-      reason: w?.reason ?? t.reason,
+      // The trace's reason ends "→ filled", written before anything was tried.
+      // Repeating it over a field that was never written would be the report
+      // telling the user it did something it did not do.
+      reason: w?.reason ?? (unreported ? UNREPORTED_REASON : t.reason),
       outcome,
       required: requiredIds.has(t.fieldId),
       page,
@@ -306,10 +330,12 @@ export function handoverList(
       if (item.captcha === true) return true;
       if (report?.outcome === "needs-user" || report?.outcome === "failed") return true;
       if (report?.outcome === "filled") return false;
-      // An unrecognised field reports as `skipped`, which the report vocabulary
-      // also uses for controls we correctly left alone — one word for two very
-      // different things. `required` separates them: a required field nobody
-      // could place has to be filled by someone, and it will not be us.
+      // `skipped` now means one thing only: a control nobody recognised and
+      // nobody touched. (It used to double as the resting place for fields we
+      // HAD answers for and failed to write — those are `needs-user` above, and
+      // caught by the branch before this one.) Of the unrecognised ones, the
+      // required are the user's problem: nobody could place them, and it will
+      // not be us.
       return item.status === "unknown" && item.required;
     })
     .map((item) => ({

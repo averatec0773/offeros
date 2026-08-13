@@ -220,6 +220,8 @@ export function detectIncidents(input: TriggerInput): Incident[] {
 export function requiredCoverage(fields: DiagnosableField[]): number | null {
   const diagnosis = diagnoseFill(fields);
   if (diagnosis.total === 0) return null;
+  // Dropping `skipped` is dropping controls nobody recognised and nobody
+  // touched — never a field we had an answer for, which reports as needs-user.
   const required = fields.filter((f) => f.required && f.outcome !== "skipped");
   const ours = required.filter((f) => f.outcome === "filled" || !isEngineWorking(f));
   if (ours.length === 0) return null;

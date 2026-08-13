@@ -132,6 +132,13 @@ const NAMES_PER_CAUSE = 8;
 
 export function diagnoseFill(fields: DiagnosableField[]): FillDiagnosis {
   const filled = fields.filter((f) => f.outcome === "filled").length;
+  // `skipped` is a control the engine met, did not recognise, and correctly
+  // did nothing to — and nothing else. It is not a problem, which is why the
+  // line below excludes it, and that exclusion is only safe because a field we
+  // had an answer for can no longer land here: the reporter files an unwritten
+  // fillable field as `needs-user`. It used to file it as `skipped`, and four
+  // fields with answers ready went out of a real application unmentioned by
+  // this function, by the hand-back list, and by the required count alike.
   const skipped = fields.filter((f) => f.outcome === "skipped").length;
   const problems = fields.filter((f) => f.outcome !== "filled" && f.outcome !== "skipped");
 

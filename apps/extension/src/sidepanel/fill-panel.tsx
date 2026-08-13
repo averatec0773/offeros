@@ -639,6 +639,15 @@ export function FillPanel({
       const planForFill = plan0.filter(
         (i) => (descriptorById.get(i.fieldId)?.currentValue ?? "").trim() === "",
       );
+      // Say so, rather than letting them fall out of the round unmentioned.
+      // An unwritten field with an answer is now reported as the user's to
+      // finish — correct for one we failed to write, a lie for one that is
+      // already answered. The difference is only knowable here.
+      for (const item of plan0) {
+        const held = (descriptorById.get(item.fieldId)?.currentValue ?? "").trim();
+        if (held !== "")
+          writes.set(item.fieldId, { outcome: "filled", value: held, source: "page" });
+      }
       const isTextTarget = (fieldId: string) => {
         const desc = descriptorById.get(fieldId);
         return desc ? isTextAnswerTarget(desc) : false;
@@ -838,7 +847,15 @@ export function FillPanel({
       // 5) build + accumulate + send the cumulative report for this page.
       const page = pageIdRef.current ?? stablePageId(sr.url, sr.wizard);
       const requiredIds = new Set(planForFill.filter((i) => i.required).map((i) => i.fieldId));
-      accumulateReports(buildFieldReports(traceForFill, writes, requiredIds, page));
+      // A round reports on the fields it took part in. Retries send only what
+      // is left, so the trace still describes fields an earlier round already
+      // wrote — and reports are merged by fieldId, last one winning. Left in,
+      // they would come through this round unwritten and overwrite their own
+      // "filled" row with a hand-back for work that was already done.
+      const touched = traceForFill.filter(
+        (t) => writes.has(t.fieldId) || !writtenFields.has(t.fieldId),
+      );
+      accumulateReports(buildFieldReports(touched, writes, requiredIds, page));
       await api.postReport(b.taskId, allReports(), false, b.handoffId);
 
       setFilledOnce(true);

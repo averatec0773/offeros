@@ -210,6 +210,89 @@ async function typeAsText(el: HTMLElement, value: string): Promise<boolean> {
 }
 
 /**
+ * A pointer press, as a browser actually delivers one.
+ *
+ * `el.click()` dispatches exactly one event: `click`. A real press is a
+ * sequence, and widgets choose their own rung of it — opening on `mousedown`
+ * is the common choice, because it makes the list appear before the button
+ * comes back up. The option-selecting code below has known this for a while
+ * ("widgets that listen on mousedown rather than click are common enough that
+ * a bare click misses them") while the code that OPENED the popup used the bare
+ * click, so a widget listening one rung lower was unreachable however many
+ * times it was asked. Three Equal Employment dropdowns on a real application
+ * were shut for exactly this reason.
+ */
+function pressPointer(el: HTMLElement): void {
+  const view = el.ownerDocument.defaultView ?? window;
+  const init = { bubbles: true, cancelable: true, button: 0, view } as MouseEventInit;
+  // PointerEvent first where the environment has it: a widget written against
+  // pointer events never sees a MouseEvent.
+  const Pointer = (view as unknown as { PointerEvent?: typeof PointerEvent }).PointerEvent;
+  if (Pointer) {
+    el.dispatchEvent(new Pointer("pointerdown", { ...init, pointerId: 1, isPrimary: true }));
+  }
+  el.dispatchEvent(new MouseEvent("mousedown", init));
+  if (Pointer) {
+    el.dispatchEvent(new Pointer("pointerup", { ...init, pointerId: 1, isPrimary: true }));
+  }
+  el.dispatchEvent(new MouseEvent("mouseup", init));
+  el.click();
+}
+
+/** A key press, both halves of it. */
+function pressKey(el: HTMLElement, key: string, altKey = false): void {
+  const view = el.ownerDocument.defaultView ?? window;
+  const init = { bubbles: true, cancelable: true, key, altKey, view } as KeyboardEventInit;
+  el.dispatchEvent(new KeyboardEvent("keydown", init));
+  el.dispatchEvent(new KeyboardEvent("keyup", init));
+}
+
+/**
+ * Get the list open, escalating only as far as it has to.
+ *
+ * A pointer press first, because that is what the user would do. Then the
+ * keyboard openers the ARIA combobox pattern specifies — Alt+Down, Down, Enter,
+ * Space — which is the interaction a page that supports keyboard users has
+ * implemented whether or not its mouse handling is conventional.
+ *
+ * Each gesture is followed by a wait, and the first one that produces a list
+ * wins: a widget that toggles would be closed again by the next gesture, so
+ * asking twice when once worked is not thoroughness, it is a bug.
+ */
+async function openPopup(
+  el: HTMLElement,
+  before: ReadonlySet<Element>,
+): Promise<HTMLElement | undefined> {
+  const gestures: (() => void)[] = [
+    () => {
+      // Focus first: a widget can only receive the keys below if it has focus,
+      // and several will not open unfocused either.
+      if (typeof el.focus === "function") el.focus();
+      pressPointer(el);
+    },
+    // The two openers the ARIA combobox pattern names, and deliberately ONLY
+    // those two. Enter and Space are the other conventional openers and are not
+    // sent: both are activation keys, a page is free to treat them as "submit
+    // the form", and this application is not ours to send. Arrow keys have no
+    // activation meaning anywhere, so the worst a page can do with one is
+    // ignore it.
+    () => pressKey(el, "ArrowDown"),
+    () => pressKey(el, "ArrowDown", true),
+  ];
+
+  const perGesture = Math.max(1, Math.floor(OPEN_TIMEOUT_MS / gestures.length / POLL_MS));
+  for (const gesture of gestures) {
+    gesture();
+    for (let i = 0; i < perGesture; i += 1) {
+      await sleepIn(el, POLL_MS);
+      const popup = findPopup(el, before);
+      if (popup) return popup;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Answer an ARIA popup control: open it, match an option, click it, and make
  * the page prove the choice took.
  */
@@ -223,13 +306,7 @@ export async function fillAriaPopup(el: HTMLElement, value: string): Promise<Ari
 
   const doc = el.ownerDocument;
   const before = new Set<Element>(doc.querySelectorAll('[role="listbox"], [role="menu"]'));
-  el.click();
-
-  let popup: HTMLElement | undefined;
-  for (let i = 0; i < OPEN_TIMEOUT_MS / POLL_MS && !popup; i += 1) {
-    await sleepIn(el, POLL_MS);
-    popup = findPopup(el, before);
-  }
+  const popup = await openPopup(el, before);
   if (!popup) {
     // No list came. If what is underneath is a text box after all, typing the
     // answer in is better than handing back a field whose value we are holding.

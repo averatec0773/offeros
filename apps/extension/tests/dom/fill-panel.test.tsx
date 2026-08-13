@@ -1994,18 +1994,20 @@ describe("FillPanel", () => {
           bytesBase64: expect.any(String),
         }),
       );
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({
-            fieldId: "r1",
-            outcome: "filled",
-            source: "resume-file",
-            value: "Jordan_Rivera_Resume.pdf",
-          }),
-        ]),
-        false,
-        "h1",
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "r1",
+              outcome: "filled",
+              source: "resume-file",
+              value: "Jordan_Rivera_Resume.pdf",
+            }),
+          ]),
+          false,
+          "h1",
+        ),
       );
     });
 
@@ -2051,13 +2053,19 @@ describe("FillPanel", () => {
       expect(api.fetchResumeFile).not.toHaveBeenCalled();
       expect(api.fetchArtifactPdf).not.toHaveBeenCalled();
       expect(attachFile).not.toHaveBeenCalled();
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: NO_FILE_REASON }),
-        ]),
-        false,
-        "h1",
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "r1",
+              outcome: "needs-user",
+              reason: NO_FILE_REASON,
+            }),
+          ]),
+          false,
+          "h1",
+        ),
       );
     });
 
@@ -2079,13 +2087,19 @@ describe("FillPanel", () => {
       });
 
       expect(attachFile).not.toHaveBeenCalled();
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({ fieldId: "r1", outcome: "needs-user", reason: NO_FILE_REASON }),
-        ]),
-        false,
-        "h1",
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "r1",
+              outcome: "needs-user",
+              reason: NO_FILE_REASON,
+            }),
+          ]),
+          false,
+          "h1",
+        ),
       );
     });
 
@@ -2147,17 +2161,19 @@ describe("FillPanel", () => {
       });
 
       expect(attachFile).not.toHaveBeenCalled();
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({
-            fieldId: "r1",
-            outcome: "needs-user",
-            reason: RENDER_FAILED_REASON,
-          }),
-        ]),
-        false,
-        "h1",
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "r1",
+              outcome: "needs-user",
+              reason: RENDER_FAILED_REASON,
+            }),
+          ]),
+          false,
+          "h1",
+        ),
       );
     });
 
@@ -2261,18 +2277,20 @@ describe("FillPanel", () => {
       });
 
       expect(api.fetchArtifactPdf).toHaveBeenCalledWith("t1", "cover-letter");
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({
-            fieldId: "cl1",
-            outcome: "filled",
-            source: "cover-letter-file",
-            value: "Cover_Letter.pdf",
-          }),
-        ]),
-        false,
-        "h1",
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "cl1",
+              outcome: "filled",
+              source: "cover-letter-file",
+              value: "Cover_Letter.pdf",
+            }),
+          ]),
+          false,
+          "h1",
+        ),
       );
     });
 
@@ -2317,18 +2335,20 @@ describe("FillPanel", () => {
         mimeType: "application/pdf",
         bytesBase64: expect.any(String),
       });
-      expect(api.postReport).toHaveBeenCalledWith(
-        "t1",
-        expect.arrayContaining([
-          expect.objectContaining({
-            fieldId: "cl1",
-            outcome: "filled",
-            source: "cover-letter-file",
-            value: "Cover_Letter.pdf",
-          }),
-        ]),
-        false,
-        "h1",
+      await waitFor(() =>
+        expect(api.postReport).toHaveBeenCalledWith(
+          "t1",
+          expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: "cl1",
+              outcome: "filled",
+              source: "cover-letter-file",
+              value: "Cover_Letter.pdf",
+            }),
+          ]),
+          false,
+          "h1",
+        ),
       );
     });
   });
@@ -2613,5 +2633,77 @@ describe("re-filling what a round left behind", () => {
       expect(screen.getByRole("button", { name: /^Fill \d+ remaining$/ })).toBeDisabled(),
     );
     expect(screen.getByRole("button", { name: "Fill 0 remaining" })).toBeInTheDocument();
+  });
+});
+
+describe("what a round says about fields it did not touch", () => {
+  const claimedApi = (): FillApi => ({
+    ...emptyApi(),
+    getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+    claim: vi.fn(async () => ({ ok: true as const, value: bundleWithAddress })),
+  });
+
+  const reportFor = (api: FillApi, label: string) => {
+    const calls = vi.mocked(api.postReport).mock.calls;
+    const last = calls[calls.length - 1]![1] as FieldReport[];
+    return last.find((r) => r.label === label);
+  };
+
+  it("a field the page already held is reported as answered, not handed back", async () => {
+    const scan: ScanResponse = {
+      ...scanThreeProfileFields,
+      descriptors: scanThreeProfileFields.descriptors.map((d) =>
+        d.fieldId === "f1" ? { ...d, currentValue: "someone@example.com" } : d,
+      ),
+    };
+    const api = claimedApi();
+    renderPanel({ scan: async () => scan, api });
+
+    const btn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(btn);
+    });
+
+    await waitFor(() => expect(api.postReport).toHaveBeenCalled());
+    // It is answered — by whoever typed it. Calling it the user's to fill in
+    // would be as wrong as calling it skipped.
+    await waitFor(() => expect(reportFor(api, "Email")?.outcome).toBe("filled"));
+    expect(reportFor(api, "Email")?.source).toBe("page");
+    expect(reportFor(api, "Email")?.value).toBe("someone@example.com");
+  });
+
+  it("a retry does not downgrade what the first round already filled", async () => {
+    // Round one lands the email and loses the phone; round two runs on the
+    // phone alone. The email is not in round two's plan, and its report row
+    // must survive rather than being rewritten by a round that never saw it.
+    const fill = vi.fn(async (values: FillValue[]): Promise<FillResponse> => ({
+      ok: true,
+      filled: values.filter((v) => v.fieldId === "f1").length,
+      outcomes: values.map((v) =>
+        v.fieldId === "f1"
+          ? ([v.fieldId, "filled"] as [string, FillOutcome])
+          : ([v.fieldId, { outcome: "failed", reason: "the page refused it" }] as [
+              string,
+              FillOutcome,
+            ]),
+      ),
+    }));
+    const api = claimedApi();
+    renderPanel({ scan: async () => scanThreeProfileFields, api, fill });
+
+    const first = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(first);
+    });
+    await waitFor(() => expect(reportFor(api, "Email")?.outcome).toBe("filled"));
+
+    const retry = await screen.findByRole("button", { name: /^Fill \d+ remaining$/ });
+    await act(async () => {
+      await userEvent.click(retry);
+    });
+
+    await waitFor(() => expect(fill).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(reportFor(api, "Phone")?.outcome).toBe("failed"));
+    expect(reportFor(api, "Email")?.outcome).toBe("filled");
   });
 });

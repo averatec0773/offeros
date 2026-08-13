@@ -1003,6 +1003,17 @@ function fillSkillsViaDriver(
 export type FillValue = { fieldId: string; value: string } | { fieldId: string; values: string[] };
 
 /**
+ * The field was there when the page was read and is not there now — a
+ * re-render between the scan and the write, which is ordinary on a form that
+ * rebuilds sections as you fill them.
+ */
+export const FIELD_GONE_REASON =
+  "This field is no longer on the page — it may have been rebuilt while filling. Re-scan and try again.";
+
+/** A control none of the drivers above can operate. */
+export const UNSUPPORTED_CONTROL_REASON = "OfferOS can't operate this control — set it yourself.";
+
+/**
  * What one write did. The object form carries a reason the page explains — a
  * field that took the value and then dropped it says something a bare
  * `"failed"` cannot, and form memory reads these. A `"filled"` can carry one
@@ -1047,7 +1058,9 @@ export async function applyFillDetailed(
   for (const item of values) {
     // Skills: a multi-value tag field. Route the whole list to the driver loop.
     if ("values" in item) {
-      if (resolveFieldEl(doc, item.fieldId) && item.values.length > 0) {
+      if (!resolveFieldEl(doc, item.fieldId)) {
+        outcomes.set(item.fieldId, { outcome: "failed", reason: FIELD_GONE_REASON });
+      } else if (item.values.length > 0) {
         const tagged = await fillSkillsViaDriver(doc, item.fieldId, item.values, skillsTimeoutMs);
         if (tagged > 0) {
           filled++;
@@ -1112,14 +1125,27 @@ export async function applyFillDetailed(
       }
       continue;
     }
-    if (
-      !(
-        el instanceof HTMLInputElement ||
-        el instanceof HTMLTextAreaElement ||
-        el instanceof HTMLSelectElement
-      ) ||
-      (el instanceof HTMLInputElement && el.type === "file")
-    ) {
+    // A file input is filled by the attach path, which reports it from the
+    // plan. Absence from `outcomes` is correct here — and ONLY here.
+    if (el instanceof HTMLInputElement && el.type === "file") continue;
+
+    if (!(
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement
+    )) {
+      // Everything that reaches this line was asked for and cannot be
+      // delivered, and it used to leave without saying so. The caller writes
+      // "skipped" for any field with no outcome, which is its word for a
+      // control we deliberately left alone — so a field we had the answer for
+      // came out indistinguishable from one we were right to ignore, and every
+      // consumer downstream (the hand-back list, the diagnosis, the required
+      // count) passed over it. A real application went out with three Equal
+      // Employment dropdowns and a phone number empty this way.
+      outcomes.set(fieldId, {
+        outcome: "failed",
+        reason: el === null ? FIELD_GONE_REASON : UNSUPPORTED_CONTROL_REASON,
+      });
       continue;
     }
     if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) {
