@@ -207,6 +207,10 @@ function openDb(path: string): { db: Db; sqlite: Database.Database } {
   const sqlite = new Database(path);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  // Start from a folded-in log. SQLite checkpoints automatically only when a
+  // connection notices the log has got long, which a process that stays open
+  // for days may never do — this at least bounds the log across restarts.
+  sqlite.pragma("wal_checkpoint(TRUNCATE)");
   applySchema(sqlite);
   tightenPerms(dir, 0o700);
   tightenPerms(path, 0o600);

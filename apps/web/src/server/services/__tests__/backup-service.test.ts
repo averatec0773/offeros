@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import Database from "better-sqlite3";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb, type Db } from "../../db/client";
@@ -76,6 +76,47 @@ describe("exportBackup", () => {
         const doc = JSON.parse(settingsRow.doc) as { llm: { apiKeys: Record<string, string> } };
         expect(doc.llm.apiKeys).toEqual({}); // key stripped
         expect(settingsRow.doc).not.toContain("sk-secret-do-not-export");
+      } finally {
+        restored.close();
+      }
+    } finally {
+      handle.close();
+    }
+  });
+
+  /**
+   * A write-ahead log grows until something folds it back in, and SQLite only
+   * does that when a connection notices it has got long. A server process that
+   * stays open for days may never notice: on the machine this was found on, a
+   * 978 KB database had accumulated a 4.1 MB log with no checkpoint in two
+   * days. Export is the moment this app reliably gets to collect it.
+   */
+  it("folds the write-ahead log back in, and the export still carries what was in it", async () => {
+    const handle = new Database(dbPath);
+    try {
+      // Writes that live only in the log until something checkpoints.
+      for (let i = 0; i < 200; i += 1) {
+        createApplication(db, {
+          jobInfo: { jobId: `j${i}`, jobTitle: "AI Engineer", companyName: "Acme" },
+        });
+      }
+      const walBefore = statSync(`${dbPath}-wal`).size;
+      expect(walBefore).toBeGreaterThan(0);
+
+      const { exportBackup } = await loadServiceWith(handle);
+      const bundle = exportBackup("2026-08-11");
+
+      expect(statSync(`${dbPath}-wal`).size).toBeLessThan(walBefore);
+
+      // The copy still holds every row that was sitting in the log.
+      const restoredPath = join(dir, "restored-wal.db");
+      writeFileSync(restoredPath, bundle.bytes);
+      const restored = new Database(restoredPath);
+      try {
+        const apps = restored.prepare("SELECT count(*) AS n FROM applications").get() as {
+          n: number;
+        };
+        expect(apps.n).toBe(200);
       } finally {
         restored.close();
       }

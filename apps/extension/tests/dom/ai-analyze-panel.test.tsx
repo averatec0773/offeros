@@ -239,6 +239,14 @@ describe("what comes back", () => {
     expect(fill).not.toHaveBeenCalled();
   });
 
+  it("says so, rather than leaving a correct refusal to act looking like a failure", async () => {
+    await analysed();
+    // "It analysed but didn't fill anything in" was a report about the UI, not
+    // about the behaviour — which was right and simply never stated.
+    expect(await screen.findByText(/nothing goes into the form until you apply it/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply all" })).toBeTruthy();
+  });
+
   it("applies one suggestion through the ordinary verified write", async () => {
     const { fill, used } = await analysed();
     const row = (await screen.findByText("Northwind Systems")).closest("li")!;

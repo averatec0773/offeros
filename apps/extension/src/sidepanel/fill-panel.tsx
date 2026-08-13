@@ -1941,6 +1941,14 @@ export function FillPanel({
                 </button>
               )}
             </div>
+            {/* "The analysis worked but it didn't fill anything in" — which is
+                the design: an answer drawn from someone's own history is still
+                theirs to approve, and nothing writes to a real application
+                behind their back. It was simply never said anywhere, so a
+                correct refusal to act read as a failure to work. */}
+            <p className="mb-1.5 text-micro text-text-tertiary">
+              Suggestions only — nothing goes into the form until you apply it.
+            </p>
             <ul className="space-y-2">
               {[...suggestions.entries()].map(([fieldId, s]) => (
                 <li key={fieldId} className="space-y-1">

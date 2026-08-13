@@ -13,7 +13,8 @@ import { getSqlite } from "../db/client";
  * The backup is a normal SQLite file, so restoring it is "put this file at
  * ~/.offeros/offeros.db" — no bespoke import format to drift. It is produced
  * with `VACUUM INTO`, which writes a clean, fully-checkpointed copy of the live
- * database without touching it. The copy is then opened once to strip the
+ * database without touching it. Export also folds the write-ahead log back in
+ * (see below) — the one moment this app reliably gets to do that. The copy is then opened once to strip the
  * saved LLM API keys, because a backup the user might email themselves or drop
  * in cloud storage must not carry a provider credential.
  *
@@ -35,6 +36,23 @@ export function exportBackup(dateStamp: string): BackupBundle {
   const dir = mkdtempSync(join(tmpdir(), "offeros-backup-"));
   const copyPath = join(dir, `${randomUUID()}.db`);
   try {
+    // Fold the write-ahead log back into the database file and start it over.
+    //
+    // Not for the backup's sake — VACUUM INTO already copies committed WAL
+    // content, so the export was always complete. It is because automatic
+    // checkpointing only runs when a connection happens to notice the log is
+    // long, and a server process that stays open for days may simply never
+    // notice: on this machine a 978 KB database had grown a 4.1 MB log with no
+    // checkpoint in two days. Export is a natural moment to collect it — the
+    // user asked for something slow already, and the log is provably redundant
+    // the instant it is folded in.
+    //
+    // TRUNCATE, not PASSIVE: PASSIVE leaves the file at its high-water mark, so
+    // the disk never comes back. A checkpoint that cannot complete (another
+    // connection mid-read) is not an error worth failing an export over — the
+    // pragma reports it in its result and the backup is unaffected either way.
+    sqlite.pragma("wal_checkpoint(TRUNCATE)");
+
     // A clean, checkpointed copy of the current database. Single-quotes in the
     // path are escaped for the SQL literal; the path itself is server-generated.
     sqlite.exec(`VACUUM INTO '${copyPath.replace(/'/g, "''")}'`);
