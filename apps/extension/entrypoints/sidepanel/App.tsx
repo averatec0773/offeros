@@ -41,7 +41,6 @@ import {
 import { requestTabCapture } from "../../src/lib/tab-capture";
 import { settings } from "../../src/lib/settings";
 import { requestStartWebApp } from "../../src/lib/web-launcher";
-import { withTimeout } from "../../src/lib/with-timeout";
 import {
   beginEnable,
   hasSiteAccess,
@@ -49,7 +48,7 @@ import {
   requestSiteAccess,
   type SiteAccess,
 } from "../../src/lib/site-enable";
-import { getFillBinding } from "../../src/lib/fill-binding";
+import { getFillBindingResult } from "../../src/lib/fill-binding";
 import { subscribeAgentEvents } from "../../src/lib/agent-events";
 import { ExternalLink, PlugZap } from "lucide-react";
 
@@ -82,9 +81,6 @@ const api = {
 // The reads the off-ATS dashboard needs, kept separate so HomePanel's surface
 // stays the one call it actually makes.
 const homeApi = { getInbox: () => getInbox() };
-
-/** How long to wait on the background worker before handing the button back. */
-const START_TIMEOUT_MS = 15_000;
 
 export default function App() {
   const activeTab = useActiveTab();
@@ -209,17 +205,12 @@ export default function App() {
     setStarting(true);
     setStartError(null);
     try {
-      // Same shape as the enable button's fault, same button text: a message to
-      // the background worker with nothing behind it if the worker never
-      // answers, and a busy flag cleared only when it does. Bounded here so
-      // "Starting…" can always end. (Deliberately NOT applied to the fill
-      // messages or the web API: a fill legitimately runs for minutes on a long
-      // form, and the generation routes wait on a model. A timeout short enough
-      // to help would abandon real work — see the audit note in progress.md.)
-      const res = await withTimeout(requestStartWebApp(), START_TIMEOUT_MS, () => ({
-        ok: false as const,
-        error: "the background worker didn't answer — reopen the panel and try again",
-      }));
+      // Bounded inside requestStartWebApp itself, next to the message it
+      // sends — every runtime.sendMessage in this extension now answers or
+      // times out, so "Starting…" can always end. (Deliberately NOT applied to
+      // the web API: the generation routes wait on a model, and a timeout short
+      // enough to help would abandon real work — see progress.md.)
+      const res = await requestStartWebApp();
       if (!res.ok) {
         setStartError(res.error ?? "couldn't start");
         return;
@@ -292,10 +283,16 @@ export default function App() {
     [tabId],
   );
   const captureTab = useCallback(() => requestTabCapture(tabId), [tabId]);
-  const getBoundHandoff = useCallback(
-    () => (tabId >= 0 ? getFillBinding(tabId) : Promise.resolve(null)),
-    [tabId],
-  );
+  const getBoundHandoff = useCallback(async () => {
+    if (tabId < 0) return null;
+    const res = await getFillBindingResult(tabId);
+    // Both answers send the panel down the URL-matching fallback, but they are
+    // not the same fact: one is "this tab was opened by hand", the other is
+    // "the background did not answer". The fallback used to absorb the second
+    // silently, which is how a broken bus looked exactly like normal use.
+    if (!res.answered) console.warn("[offeros] fill-binding lookup unanswered:", res.error);
+    return res.handoffId;
+  }, [tabId]);
   const navigateTab = useCallback(
     async (url: string) => {
       if (tabId >= 0) await browser.tabs.update(tabId, { url });

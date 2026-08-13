@@ -1,4 +1,5 @@
 import { browser } from "wxt/browser";
+import { withTimeout } from "./with-timeout";
 
 /**
  * Panel → background: photograph the visible tab.
@@ -22,16 +23,35 @@ export function isCaptureTabRequest(m: unknown): m is CaptureTabRequest {
   return typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === CAPTURE_TAB;
 }
 
-/** Panel side. Resolves {ok:false} (never rejects) when no background answers. */
+/** How long to wait for the background to photograph a tab. */
+export const CAPTURE_TIMEOUT_MS = 8_000;
+
+/**
+ * Panel side. Resolves `{ok:false}` (never rejects, never hangs).
+ *
+ * Best-effort has always meant "a missing screenshot must not break the fill".
+ * It never meant "say nothing": every reason lands in the returned error, and
+ * the caller records it. A capture that silently did nothing left us believing
+ * evidence was being collected when none ever was.
+ */
 export async function requestTabCapture(tabId?: number): Promise<CaptureTabResponse> {
-  try {
-    return (await browser.runtime.sendMessage({
-      kind: CAPTURE_TAB,
-      ...(tabId !== undefined && tabId >= 0 ? { tabId } : {}),
-    } satisfies CaptureTabRequest)) as CaptureTabResponse;
-  } catch {
-    return { ok: false, error: "extension background unavailable" };
-  }
+  const ask = (async (): Promise<CaptureTabResponse> => {
+    try {
+      return (await browser.runtime.sendMessage({
+        kind: CAPTURE_TAB,
+        ...(tabId !== undefined && tabId >= 0 ? { tabId } : {}),
+      } satisfies CaptureTabRequest)) as CaptureTabResponse;
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "extension background unavailable",
+      };
+    }
+  })();
+  return withTimeout(ask, CAPTURE_TIMEOUT_MS, () => ({
+    ok: false as const,
+    error: "the background worker didn't answer the screenshot request",
+  }));
 }
 
 /**

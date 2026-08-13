@@ -37,6 +37,18 @@ import {
   type ExpandRepeatersResponse,
 } from "../autofill/autofill-messaging";
 import { expandRepeater, findRepeaters, historyKindOf } from "../autofill/repeater";
+import { respondWith, type SendResponse } from "../respond";
+
+/**
+ * How long the engine may take before the panel is told it did not answer.
+ *
+ * Far longer than the background's, and deliberately: a fill on a long form
+ * drives comboboxes one at a time (seconds each), expands repeater sections,
+ * and waits on the page between every write. Minutes is normal. What is not
+ * normal is never — this is the ceiling that keeps a wedged page from wedging
+ * the panel too.
+ */
+const ENGINE_TIMEOUT_MS = 300_000;
 
 export interface Engine {
   scan(): Promise<ScanResponse>;
@@ -334,19 +346,68 @@ export interface EngineContext {
 export function registerEngine(doc: Document, ctx: EngineContext): Engine {
   const engine = createEngine(doc);
 
-  const listener = (msg: unknown): Promise<unknown> | undefined => {
-    if (isEnginePingRequest(msg)) return Promise.resolve(true);
-    if (isEngineScanRequest(msg)) return engine.scan();
-    if (isEngineFillRequest(msg)) return engine.fill(msg.values);
-    if (isEngineCaptureJdRequest(msg)) return Promise.resolve(engine.capture());
+  /**
+   * The panel's questions, answered by Chrome's documented contract.
+   *
+   * These branches used to return promises, which is the polyfill idiom; this
+   * extension ships no polyfill, so `browser` is the native `chrome` object and
+   * the native rule applies — `sendResponse`, or `return true` and call it
+   * later. Measured against this build in Chromium 151, a returned promise DID
+   * reach the sender here (probe: `tabs.sendMessage` → ENGINE_SCAN resolved
+   * `ok:true`), and the full E2E passes on it. That is a tolerance of one
+   * browser build, not a contract: it is undocumented, and a scan that stops
+   * being delivered after a Chrome update would present as the panel simply
+   * never leaving its skeleton.
+   *
+   * A fill legitimately runs for minutes on a long form, so the engine's own
+   * patience is far longer than the background's. It is still finite: a page
+   * that hangs the engine must not hang the panel with it.
+   */
+  const listener = (msg: unknown, _sender: unknown, sendResponse: SendResponse) => {
+    if (isEnginePingRequest(msg)) {
+      sendResponse(true);
+      return undefined;
+    }
+    if (isEngineScanRequest(msg)) {
+      return respondWith(
+        engine.scan(),
+        sendResponse,
+        (): ScanResponse => ({ ok: false, reason: "no_form" }),
+        ENGINE_TIMEOUT_MS,
+      );
+    }
+    if (isEngineFillRequest(msg)) {
+      return respondWith(
+        engine.fill(msg.values),
+        sendResponse,
+        (): FillResponse => ({ ok: true, filled: 0, outcomes: [] }),
+        ENGINE_TIMEOUT_MS,
+      );
+    }
+    if (isEngineCaptureJdRequest(msg)) {
+      sendResponse(engine.capture());
+      return undefined;
+    }
     if (isEngineAttachFileRequest(msg)) {
-      return engine.attachFile(msg.fieldId, msg.fileName, msg.mimeType, msg.bytesBase64);
+      return respondWith(
+        engine.attachFile(msg.fieldId, msg.fileName, msg.mimeType, msg.bytesBase64),
+        sendResponse,
+        (): AttachFileResponse => ({ ok: false }),
+        ENGINE_TIMEOUT_MS,
+      );
     }
     if (isEngineExpandRepeatersRequest(msg)) {
-      return engine.expandRepeaters(msg.want);
+      return respondWith(
+        engine.expandRepeaters(msg.want),
+        sendResponse,
+        (): ExpandRepeatersResponse => ({ sections: [], added: 0 }),
+        ENGINE_TIMEOUT_MS,
+      );
     }
-    if (isEngineScrollToFieldRequest(msg))
-      return Promise.resolve(engine.scrollToField(msg.fieldId));
+    if (isEngineScrollToFieldRequest(msg)) {
+      sendResponse(engine.scrollToField(msg.fieldId));
+      return undefined;
+    }
     return undefined;
   };
   browser.runtime.onMessage.addListener(listener);

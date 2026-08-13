@@ -14,6 +14,8 @@
  *     background worker, which owns the tabId → handoffId store.
  */
 
+import { withTimeout } from "./with-timeout";
+
 /** Page → extension (via the bridge): open `url` in a new tab bound to `handoffId`. */
 export interface OpenFillTabRequest {
   kind: "OFFEROS_OPEN_FILL_TAB";
@@ -61,15 +63,45 @@ export function isOpenableFillUrl(url: string): boolean {
   }
 }
 
-/** Ask the background which handoff is bound to `tabId` (own tab when omitted). */
+/** How long to wait on the background for a binding lookup. It reads one
+ *  session-storage key; anything approaching this means it is not answering. */
+export const BINDING_TIMEOUT_MS = 5_000;
+
+/**
+ * Ask the background which handoff is bound to `tabId` (own tab when omitted).
+ *
+ * `{ handoffId: null }` and "the background never answered" are different
+ * facts, and callers that fall back to guessing the handoff from the URL should
+ * know which one they got: guessing after a definite "no binding" is the
+ * designed path, guessing because the bus is broken is papering over a fault.
+ * Both still return null for the handoff, so no caller has to change.
+ */
+export async function getFillBindingResult(
+  tabId?: number,
+): Promise<{ handoffId: string | null; answered: boolean; error?: string }> {
+  const ask = (async () => {
+    try {
+      const res = (await browser.runtime.sendMessage({
+        kind: "OFFEROS_GET_FILL_BINDING",
+        ...(tabId !== undefined ? { tabId } : {}),
+      } satisfies GetFillBindingRequest)) as GetFillBindingResponse | undefined;
+      return { handoffId: res?.handoffId ?? null, answered: true };
+    } catch (error) {
+      return {
+        handoffId: null,
+        answered: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  })();
+  return withTimeout(ask, BINDING_TIMEOUT_MS, () => ({
+    handoffId: null,
+    answered: false,
+    error: "the background worker didn't answer the binding lookup",
+  }));
+}
+
+/** The handoff bound to this tab, or null. */
 export async function getFillBinding(tabId?: number): Promise<string | null> {
-  try {
-    const res = (await browser.runtime.sendMessage({
-      kind: "OFFEROS_GET_FILL_BINDING",
-      ...(tabId !== undefined ? { tabId } : {}),
-    } satisfies GetFillBindingRequest)) as GetFillBindingResponse | undefined;
-    return res?.handoffId ?? null;
-  } catch {
-    return null;
-  }
+  return (await getFillBindingResult(tabId)).handoffId;
 }

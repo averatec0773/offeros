@@ -13,6 +13,7 @@ import {
   ENABLE_ON_TAB,
   ENABLE_REFUSED,
   ENABLE_TIMED_OUT,
+  INJECT_TIMED_OUT,
 } from "../src/lib/site-enable";
 
 /**
@@ -355,14 +356,20 @@ describe("the enable button's flow", () => {
     expect(res.error).toMatch(/chrome:\/\/extensions/);
   });
 
-  it("gives up on an injection that never answers either", async () => {
+  it("blames the injection, not a permission prompt it never opened", async () => {
+    // One message used to cover both branches, so an injection that timed out
+    // told the user Chrome had not answered a permission request — when none
+    // had been made. That wording sent a real diagnosis the wrong way.
     const pending = beginEnable(URL_, {
       siteAccess: "granted",
       askForSite: async () => true,
       inject: () => new Promise(() => {}),
     });
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(await pending).toMatchObject({ ok: false, error: ENABLE_TIMED_OUT });
+    const res = await pending;
+    expect(res).toMatchObject({ ok: false, error: INJECT_TIMED_OUT });
+    expect(res.error).not.toBe(ENABLE_TIMED_OUT);
+    expect(res.error).not.toMatch(/permission request/i);
   });
 
   it("learns from a refusal it could not have predicted, and says to press again", async () => {
@@ -405,6 +412,6 @@ describe("the enable button's flow", () => {
       inject: () => Promise.reject(new Error("worker gone")),
     });
     await vi.runAllTimersAsync();
-    expect(await pending).toMatchObject({ ok: false, error: ENABLE_TIMED_OUT });
+    expect(await pending).toMatchObject({ ok: false, error: INJECT_TIMED_OUT });
   });
 });

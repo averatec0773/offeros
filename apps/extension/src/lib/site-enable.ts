@@ -106,16 +106,22 @@ function readsAsMissingPermission(message: string): boolean {
   return /must request permission|Cannot access contents of|not allowed to access/i.test(message);
 }
 
-/** Panel → background. Resolves `{ok:false}` (never rejects) when nobody answers. */
+/** Injection is a couple of executeScript calls; this is a ceiling, not a budget. */
+export const INJECT_TIMEOUT_MS = 10_000;
+
+/** Panel → background. Resolves `{ok:false}` (never rejects, never hangs). */
 export async function requestEnableOnTab(tabId: number): Promise<EnableOnTabResponse> {
-  try {
-    return (await browser.runtime.sendMessage({
-      kind: ENABLE_ON_TAB,
-      tabId,
-    } satisfies EnableOnTabRequest)) as EnableOnTabResponse;
-  } catch {
-    return { ok: false, error: "The extension's background worker isn't running — try again." };
-  }
+  const ask = (async (): Promise<EnableOnTabResponse> => {
+    try {
+      return (await browser.runtime.sendMessage({
+        kind: ENABLE_ON_TAB,
+        tabId,
+      } satisfies EnableOnTabRequest)) as EnableOnTabResponse;
+    } catch {
+      return { ok: false, error: "The extension's background worker isn't running — try again." };
+    }
+  })();
+  return withTimeout(ask, INJECT_TIMEOUT_MS, () => ({ ok: false, error: INJECT_TIMED_OUT }));
 }
 
 /**
@@ -244,8 +250,19 @@ export async function hasSiteAccess(
  *  Generous on purpose: most of it is a person reading a permission prompt. */
 export const ENABLE_TIMEOUT_MS = 15_000;
 
+/**
+ * Two different silences, two different sentences.
+ *
+ * One message covered both branches, so an injection that timed out told the
+ * user Chrome had not answered a permission request — when no permission
+ * request had been made at all. Wrong text on a diagnostic is worse than none:
+ * it sent a real investigation in the wrong direction.
+ */
 export const ENABLE_TIMED_OUT =
   "Chrome didn't answer the permission request. You can allow this site from chrome://extensions → OfferOS → Site access, then try again.";
+
+export const INJECT_TIMED_OUT =
+  "OfferOS couldn't start on this page — the extension's background worker didn't answer. Reload the page and try again.";
 
 export const ENABLE_REFUSED =
   "OfferOS needs your permission for this site to read its form. Nothing changed.";
@@ -317,6 +334,8 @@ export function beginEnable(url: string, deps: EnableDeps): Promise<EnableResult
       return { ok: false, error: ENABLE_ASK_AGAIN, learned: "missing" };
     }),
     timeoutMs,
-    timedOut,
+    // Nothing was asked for on this branch, so nothing can have gone unanswered
+    // but the injection itself.
+    () => ({ ok: false, error: INJECT_TIMED_OUT }),
   );
 }

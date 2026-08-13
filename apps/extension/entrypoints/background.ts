@@ -1,4 +1,5 @@
 import { startDevReload } from "../src/lib/dev-reload";
+import { reasonOf, respondWith, type SendResponse } from "../src/lib/respond";
 import { matchAts } from "../src/lib/autofill/recipes";
 import { isStartWebAppRequest, startWebAppViaHost } from "../src/lib/web-launcher";
 import { captureTab, isCaptureTabRequest } from "../src/lib/tab-capture";
@@ -106,13 +107,45 @@ export default defineBackground(() => {
 
   // Panel → native host bridge + fill-binding queries: only the background
   // may talk to the native messaging host or the binding store.
+  //
+  // Every branch answers through `respondWith`, which returns `true` and
+  // guarantees exactly one `sendResponse` — on success, on rejection, and on
+  // work that never finishes. These listeners used to return promises instead,
+  // which is the polyfill idiom and not what Chrome documents; this extension
+  // ships no polyfill, so the native rules are the rules. A message that goes
+  // unanswered produces no error anywhere and leaves the caller waiting, so the
+  // shape of the answer is not a style question.
+  //
+  // A message we do not recognise falls through returning `undefined`: no
+  // response and no claim on the channel, so another listener may answer it.
   browser.runtime.onMessage.addListener(
-    (msg: unknown, sender: { tab?: { id?: number } }): Promise<unknown> | undefined => {
-      if (isStartWebAppRequest(msg)) return startWebAppViaHost();
-      if (isCaptureTabRequest(msg)) return captureTab(msg.tabId ?? sender.tab?.id);
-      if (isOpenFillTabRequest(msg)) return openFillTab(msg.handoffId, msg.url);
+    (msg: unknown, sender: { tab?: { id?: number } }, sendResponse: SendResponse) => {
+      if (isStartWebAppRequest(msg)) {
+        return respondWith(startWebAppViaHost(), sendResponse, (error) => ({
+          ok: false as const,
+          error: reasonOf(error),
+        }));
+      }
+      if (isCaptureTabRequest(msg)) {
+        return respondWith(captureTab(msg.tabId ?? sender.tab?.id), sendResponse, (error) => ({
+          ok: false as const,
+          error: reasonOf(error),
+        }));
+      }
+      if (isOpenFillTabRequest(msg)) {
+        return respondWith(openFillTab(msg.handoffId, msg.url), sendResponse, () => ({
+          ok: false as const,
+        }));
+      }
       if (isGetFillBindingRequest(msg)) {
-        return getFillBindingFor(msg.tabId ?? sender.tab?.id);
+        return respondWith(
+          getFillBindingFor(msg.tabId ?? sender.tab?.id),
+          sendResponse,
+          // A failure is not the same as "no binding", and the caller is told
+          // which: it falls back to guessing from the URL on one and not the
+          // other.
+          (error) => ({ handoffId: null, error: reasonOf(error) }),
+        );
       }
       // "Enable OfferOS on this page": the user asked for this tab, so the
       // engine goes into this tab. The URL is read from the tab itself rather
@@ -121,10 +154,13 @@ export default defineBackground(() => {
       // injected has to run against the page actually being injected.
       if (isEnableOnTabRequest(msg)) {
         const { tabId } = msg;
-        return browser.tabs
-          .get(tabId)
-          .then((tab) => enableOnTab(tabId, tab.url ?? "", chrome.scripting))
-          .catch(() => ({ ok: false, error: "That tab is gone — open the page again." }));
+        return respondWith(
+          browser.tabs
+            .get(tabId)
+            .then((tab) => enableOnTab(tabId, tab.url ?? "", chrome.scripting)),
+          sendResponse,
+          () => ({ ok: false as const, error: "That tab is gone — open the page again." }),
+        );
       }
       return undefined;
     },

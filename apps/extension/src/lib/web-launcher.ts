@@ -6,6 +6,8 @@
  * server as a detached child and returns immediately; the panel's own ping
  * loop observes readiness.
  */
+import { withTimeout } from "./with-timeout";
+
 export const START_WEB_APP = "OFFEROS_START_WEB_APP" as const;
 
 export interface StartWebAppRequest {
@@ -22,14 +24,23 @@ export function isStartWebAppRequest(m: unknown): m is StartWebAppRequest {
 }
 
 /** Panel → background. Resolves {ok:false} (never rejects) when no background answers. */
+/** Spawning a native host is slower than a lookup, and still not unbounded. */
+export const START_WEB_APP_TIMEOUT_MS = 15_000;
+
 export async function requestStartWebApp(): Promise<StartWebAppResponse> {
-  try {
-    return (await browser.runtime.sendMessage({
-      kind: START_WEB_APP,
-    } satisfies StartWebAppRequest)) as StartWebAppResponse;
-  } catch {
-    return { ok: false, error: "extension background unavailable" };
-  }
+  const ask = (async (): Promise<StartWebAppResponse> => {
+    try {
+      return (await browser.runtime.sendMessage({
+        kind: START_WEB_APP,
+      } satisfies StartWebAppRequest)) as StartWebAppResponse;
+    } catch {
+      return { ok: false, error: "extension background unavailable" };
+    }
+  })();
+  return withTimeout(ask, START_WEB_APP_TIMEOUT_MS, () => ({
+    ok: false,
+    error: "the background worker didn't answer",
+  }));
 }
 
 const NOT_INSTALLED_HINT =

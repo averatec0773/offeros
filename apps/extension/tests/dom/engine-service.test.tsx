@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // @vitest-environment-options { "url": "https://boards.greenhouse.io/acme/jobs/1" }
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { installChromeMessaging, type ChromeMessaging } from "../chrome-messaging";
 import {
   createEngine,
   registerEngine,
@@ -19,8 +20,21 @@ const greenhouseUrl = "https://boards.greenhouse.io/acme/jobs/1";
 // Collect the content-script teardown so listeners don't leak across tests.
 const disposers: (() => void)[] = [];
 const ctx = (): EngineContext => ({ onInvalidated: (cb) => disposers.push(cb) });
+
+/**
+ * These handlers are exercised over a bus with CHROME's rules, not the default
+ * double's. See tests/chrome-messaging.ts: a listener that returns a promise is
+ * never answered there, exactly as in a browser with no polyfill — which is
+ * what this extension ships. The previous double awaited the returned promise
+ * and so could not tell the two apart.
+ */
+let bus: ChromeMessaging;
+beforeEach(() => {
+  bus = installChromeMessaging();
+});
 afterEach(() => {
   for (const d of disposers.splice(0)) d();
+  bus.restore();
   document.body.innerHTML = "";
 });
 
@@ -36,7 +50,7 @@ describe("engine SCAN handler", () => {
   it("returns descriptors + meta from a seeded ATS form", async () => {
     seedForm();
     registerEngine(document, ctx());
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_SCAN",
     })) as ScanResponse;
     expect(res.ok).toBe(true);
@@ -118,14 +132,14 @@ describe("engine FILL handler", () => {
   it("writes values and returns JSON-safe outcome entries", async () => {
     seedForm();
     registerEngine(document, ctx());
-    const scan = (await browser.runtime.sendMessage({
+    const scan = (await bus.send({
       kind: "OFFEROS_ENGINE_SCAN",
     })) as ScanResponse;
     expect(scan.ok).toBe(true);
     if (!scan.ok) return;
     const emailId = scan.descriptors.find((d) => d.name === "email")!.fieldId;
 
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_FILL",
       values: [{ fieldId: emailId, value: "a@b.com" }],
     })) as FillResponse;
@@ -149,7 +163,7 @@ describe("engine ATTACH_FILE handler", () => {
   it("decodes the base64 payload, attaches it to the file input, and verifies", async () => {
     seedFileForm();
     registerEngine(document, ctx());
-    const scan = (await browser.runtime.sendMessage({
+    const scan = (await bus.send({
       kind: "OFFEROS_ENGINE_SCAN",
     })) as ScanResponse;
     expect(scan.ok).toBe(true);
@@ -157,7 +171,7 @@ describe("engine ATTACH_FILE handler", () => {
     const resumeId = scan.descriptors.find((d) => d.name === "resume")!.fieldId;
 
     const bytes = new Uint8Array([37, 80, 68, 70]); // "%PDF"
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_ATTACH_FILE",
       fieldId: resumeId,
       fileName: "Jordan_Rivera_Resume.pdf",
@@ -174,14 +188,14 @@ describe("engine ATTACH_FILE handler", () => {
   it("returns ok:false for a fieldId that doesn't resolve to a file input", async () => {
     seedFileForm();
     registerEngine(document, ctx());
-    const scan = (await browser.runtime.sendMessage({
+    const scan = (await bus.send({
       kind: "OFFEROS_ENGINE_SCAN",
     })) as ScanResponse;
     expect(scan.ok).toBe(true);
     if (!scan.ok) return;
     const nameId = scan.descriptors.find((d) => d.name === "name")!.fieldId;
 
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_ATTACH_FILE",
       fieldId: nameId,
       fileName: "resume.pdf",
@@ -195,7 +209,7 @@ describe("engine ATTACH_FILE handler", () => {
   it("returns ok:false for a fieldId with no matching element", async () => {
     seedFileForm();
     registerEngine(document, ctx());
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_ATTACH_FILE",
       fieldId: "no-such-field",
       fileName: "resume.pdf",
@@ -211,14 +225,14 @@ describe("engine SCROLL_TO_FIELD handler", () => {
   it("resolves the field, applies the highlight, and returns ok", async () => {
     seedForm();
     registerEngine(document, ctx());
-    const scan = (await browser.runtime.sendMessage({
+    const scan = (await bus.send({
       kind: "OFFEROS_ENGINE_SCAN",
     })) as ScanResponse;
     expect(scan.ok).toBe(true);
     if (!scan.ok) return;
     const emailId = scan.descriptors.find((d) => d.name === "email")!.fieldId;
 
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD",
       fieldId: emailId,
     })) as { ok: boolean };
@@ -230,7 +244,7 @@ describe("engine SCROLL_TO_FIELD handler", () => {
   it("returns ok:false for an unknown fieldId", async () => {
     seedForm();
     registerEngine(document, ctx());
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_SCROLL_TO_FIELD",
       fieldId: "offeros-nope",
     })) as { ok: boolean };
@@ -244,10 +258,10 @@ describe("engine teardown", () => {
     registerEngine(document, ctx());
     // Tear down (mirrors ctx.onInvalidated on content-script unload).
     for (const d of disposers.splice(0)) d();
-    // The engine listener is gone: fakeBrowser reports no listeners for the scan.
-    await expect(browser.runtime.sendMessage({ kind: "OFFEROS_ENGINE_SCAN" })).rejects.toThrow(
-      /No listeners/,
-    );
+    // The listener is gone, so nothing holds the channel open and Chrome
+    // closes it — the sender is told, rather than left waiting.
+    expect(bus.count()).toBe(0);
+    await expect(bus.send({ kind: "OFFEROS_ENGINE_SCAN" })).rejects.toThrow(/message port closed/i);
   });
 });
 
@@ -256,7 +270,7 @@ describe("engine CAPTURE_JD handler", () => {
     history.replaceState(null, "", greenhouseUrl);
     document.body.innerHTML = `<main><h1>Staff Engineer</h1><p>${"We are hiring a staff engineer to build the platform. ".repeat(6)}</p></main>`;
     registerEngine(document, ctx());
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_CAPTURE_JD",
     })) as CaptureJdResponse;
     expect(res.jd).toContain("staff engineer");
@@ -279,7 +293,7 @@ describe("engine CAPTURE_JD handler", () => {
     document.title = "Job Application for AI Engineer at Forward";
     document.body.innerHTML = `<main><h1>AI Engineer</h1><p>${"Build AI systems for network verification at scale. ".repeat(6)}</p></main>`;
     registerEngine(document, ctx());
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_CAPTURE_JD",
     })) as CaptureJdResponse;
     expect(res.source).toBe("dom");
@@ -292,7 +306,7 @@ describe("engine CAPTURE_JD handler", () => {
     history.replaceState(null, "", greenhouseUrl);
     document.body.innerHTML = `<main><h1>Staff\tEngineer\nRole</h1><p>${"We are hiring a staff engineer to build the platform. ".repeat(6)}</p></main>`;
     registerEngine(document, ctx());
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_CAPTURE_JD",
     })) as CaptureJdResponse;
     expect(res.metaTitle).not.toMatch(/[\t\n]/);
@@ -310,7 +324,7 @@ describe("engine CAPTURE_JD handler", () => {
     document.head.innerHTML = `<script type="application/ld+json">${JSON.stringify(ld)}</script>`;
     document.body.innerHTML = `<main><h1>Staff Engineer</h1></main>`;
     registerEngine(document, ctx());
-    const res = (await browser.runtime.sendMessage({
+    const res = (await bus.send({
       kind: "OFFEROS_ENGINE_CAPTURE_JD",
     })) as CaptureJdResponse;
     expect(res.source).toBe("jsonld");
