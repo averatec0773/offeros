@@ -162,9 +162,17 @@ export interface PageValueInput {
 export function pageValueState(field: PageValueInput, ourValue: string): PageValueState {
   const current = (field.currentValue ?? "").trim();
   if (current === "") return "empty";
-  // The DOM said so outright — no text pattern can outvote that.
+  // The DOM said so outright — no text pattern can outvote that, in EITHER
+  // direction. `false` is evidence too: a <select> resting on a real option
+  // has been answered even when that option reads "Unknown", and "N/A" in a
+  // text box is what somebody typed. Reading only the `true` half is how a
+  // wordlist ends up erasing real answers — the very thing it exists to stop.
   if (field.currentValueIsPlaceholder === true) return "placeholder";
-  if (isPlaceholderValue(current, field.classifiedType)) return "placeholder";
+  if (
+    field.currentValueIsPlaceholder !== false &&
+    isPlaceholderValue(current, field.classifiedType)
+  )
+    return "placeholder";
   if (valuesAgree(current, ourValue)) return "agrees";
   return "differs";
 }

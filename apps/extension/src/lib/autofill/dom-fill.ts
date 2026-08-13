@@ -396,8 +396,8 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
             (m) => m.getAttribute("aria-checked") === "true",
           ),
         }
-      : restingOnDefault(el)
-        ? { currentValueIsPlaceholder: true }
+      : restingOnDefault(el) !== undefined
+        ? { currentValueIsPlaceholder: restingOnDefault(el) }
         : {}),
   };
 }
@@ -412,7 +412,19 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
  * the DOM offers nothing (a div pretending to be a dropdown, which is most ATS
  * dropdowns), this returns false and the text patterns take over.
  */
-function restingOnDefault(el: HTMLElement): boolean {
+/**
+ * Whether this control is sitting on its own default — `undefined` when the
+ * DOM cannot say either way.
+ *
+ * The three answers matter. `true` and `false` are both evidence, and both
+ * outrank any guess made from the displayed text: a `<select>` whose selected
+ * option is a real one has been answered even if that option reads "Unknown",
+ * and a person who typed "N/A" into a box meant it. `undefined` is for the
+ * controls the DOM genuinely cannot judge — a div pretending to be a dropdown,
+ * or a composite phone widget showing its dial code — and only those fall
+ * through to reading the words.
+ */
+function restingOnDefault(el: HTMLElement): boolean | undefined {
   if (el instanceof HTMLSelectElement) {
     if (el.selectedIndex < 0) return true;
     const option = el.options[el.selectedIndex];
@@ -425,8 +437,18 @@ function restingOnDefault(el: HTMLElement): boolean {
   if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
     return !el.checked;
   }
-  return false;
+  // A typed value is content, not furniture: the placeholder ATTRIBUTE never
+  // reaches `value`. `tel` is excluded because composite phone widgets report
+  // their country picker as the value, which is furniture.
+  if (el instanceof HTMLTextAreaElement) return el.value.trim() === "" ? undefined : false;
+  if (el instanceof HTMLInputElement && TYPED_TEXT_TYPES.has(el.type)) {
+    return el.value.trim() === "" ? undefined : false;
+  }
+  return undefined;
 }
+
+/** Input types whose `value` is something a person typed, not a widget's label. */
+const TYPED_TEXT_TYPES = new Set(["text", "email", "url", "search", "number"]);
 
 /** The control's live value at scan time. File inputs report the chosen file
  *  name (value is a fakepath); everything else the raw value property. */

@@ -120,6 +120,23 @@ describe("what the page is doing with a field", () => {
     ).toBe("placeholder");
   });
 
+  it("the DOM's own word beats the text pattern the OTHER way too", () => {
+    // The half that was missing. A real answer that happens to be spelled like
+    // a placeholder — "Unknown" is a genuine option on veteran-status
+    // questions, "N/A" is what people type into optional boxes — must survive.
+    // Reading only the `true` half let the wordlist erase exactly the answers
+    // it exists to protect.
+    expect(
+      pageValueState({ currentValue: "Unknown", currentValueIsPlaceholder: false }, ours),
+    ).toBe("differs");
+    expect(pageValueState({ currentValue: "N/A", currentValueIsPlaceholder: false }, ours)).toBe(
+      "differs",
+    );
+    expect(pageValueState({ currentValue: "None", currentValueIsPlaceholder: false }, ours)).toBe(
+      "differs",
+    );
+  });
+
   it("holding what we would have written is agreement, not a conflict", () => {
     expect(pageValueState({ currentValue: ours }, ours)).toBe("agrees");
   });

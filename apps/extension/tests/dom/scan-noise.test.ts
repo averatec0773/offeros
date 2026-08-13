@@ -142,3 +142,44 @@ describe("a CAPTCHA", () => {
     expect(row!.reason).toBe(CAPTCHA_REASON);
   });
 });
+
+/**
+ * Whether a control is resting on its default is evidence in BOTH directions.
+ *
+ * The scan is the only place that can see the difference between a prompt row
+ * and a real option that happens to read like one. Emitting the flag only when
+ * it is true left everything else looking undecided, and a text pattern then
+ * got the last word on answers it had no business judging.
+ */
+describe("what the scan says about a control's default", () => {
+  const flagFor = (html: string) => {
+    document.body.innerHTML = `<main><form>${html}</form></main>`;
+    return scan()[0]?.currentValueIsPlaceholder;
+  };
+
+  it("a select on its prompt row is a placeholder", () => {
+    expect(
+      flagFor(
+        `<label for="a">Veteran Status</label>
+         <select id="a"><option value="" selected>-None-</option><option value="no">No</option></select>`,
+      ),
+    ).toBe(true);
+  });
+
+  it("a select on a real option is NOT a placeholder, whatever it reads", () => {
+    expect(
+      flagFor(
+        `<label for="b">Veteran Status</label>
+         <select id="b"><option value="">-None-</option><option value="u" selected>Unknown</option></select>`,
+      ),
+    ).toBe(false);
+  });
+
+  it("text somebody typed is an answer, even when it reads like a placeholder", () => {
+    expect(flagFor(`<label for="c">Source name</label><input id="c" value="N/A" />`)).toBe(false);
+  });
+
+  it("an empty box is left undecided rather than called an answer", () => {
+    expect(flagFor(`<label for="d">Source name</label><input id="d" value="" />`)).toBeUndefined();
+  });
+});

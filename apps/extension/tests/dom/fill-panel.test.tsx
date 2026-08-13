@@ -269,7 +269,13 @@ const renderPanel = (
       scanRetryTries={over.scanRetryTries}
       scanRetryDelayMs={over.scanRetryDelayMs}
       recheckDelayMs={over.recheckDelayMs}
-      recheckTries={over.recheckTries}
+      // Off unless a test is about the re-check. The component's own default
+      // is two looks 1.5s apart, and inheriting it made every fill in this
+      // file leave three seconds of real timers and a scan running behind it —
+      // which then landed inside the NEXT test's one-second waitFor. Tests do
+      // not wait on the clock; the ones that mean to exercise this pass their
+      // own milliseconds.
+      recheckTries={over.recheckTries ?? 0}
       api={api}
       rescanNonce={0}
       openWebApp={openWebApp}
