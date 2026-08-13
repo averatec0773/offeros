@@ -140,7 +140,7 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
   experience, skills, answer bank, EEO presets); multiple résumés, one per
   application.
 - **Application record** — one page per job: what has happened to it (fills,
-  revisions, checks, evidence), what its form asks and which questions you
+  revisions, checks), what its form asks and which questions you
   cannot yet answer, and the résumé and cover letter to send — generate,
   revise with real diffs, accept.
 - **Job reconnaissance** — one click asks whether the posting is still up and,

@@ -155,9 +155,6 @@ export function FillPanel({
     sections: { name: string; added: number; reason?: string }[];
     added: number;
   }>;
-  /** Photograph the visible tab (panel → background → captureVisibleTab).
-   *  Present = incident fields get screenshots on Done; absent = no evidence,
-   *  everything else identical. */
   /** The handoff explicitly bound to this tab (workspace-opened tabs) — wins
    *  over URL-heuristic ticket matching when present. */
   getBoundHandoff?: () => Promise<string | null>;
@@ -1107,8 +1104,8 @@ export function FillPanel({
     // Re-entry guard: `reported` state lands only after the await, so a
     // double-click would post the complete report twice. The server accepts a
     // replayed complete report (it replaces rather than merges, so the same
-    // snapshot twice lands the same state), but the second request — and a
-    // duplicate evidence pass — is still pure waste.
+    // snapshot twice lands the same state), but the second request is still
+    // pure waste.
     if (doneRef.current) return;
     doneRef.current = true;
     setDoneError(null);

@@ -164,12 +164,6 @@ export function defaultTemplatesDir(): string {
   return join(dirname(defaultDbPath()), "templates");
 }
 
-/** Directory that holds fill evidence (incident-field screenshots), one
- *  subdirectory per application. */
-export function defaultEvidenceDir(): string {
-  return join(dirname(defaultDbPath()), "evidence");
-}
-
 /** Best-effort tighten to owner-only. This is a single-user, local-first app;
  *  the DB and its directory hold the user's résumé, answers, and job data, so
  *  they should not be group/world-readable. Exotic filesystems (some network
