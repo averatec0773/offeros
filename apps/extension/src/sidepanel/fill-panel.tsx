@@ -11,6 +11,9 @@ import {
   normalizeQuestion,
   type FieldTrace,
   type FillItem,
+  isPlaceholderValue,
+  pageValueState,
+  valuesAgree,
 } from "@offeros/autofill";
 import type { FillValue } from "../lib/autofill/dom-fill";
 import { jobIdFromUrl } from "../lib/autofill/recipes";
@@ -91,6 +94,28 @@ const guardSubject = (label: string, desc?: { label?: string; options?: string[]
  * web-app `api`. No Dexie, no standalone LLM — a bundle only ever appears via
  * auto-claim, and every fill/report is gated on holding one.
  */
+/**
+ * A field the page already answers differently from the applicant's profile.
+ *
+ * Not overwritten and not hidden: the applicant sees both values and picks. The
+ * site's own résumé parse and the applicant's own typing are indistinguishable
+ * in the DOM, so the choice is theirs rather than ours to guess.
+ */
+export interface PageConflict {
+  fieldId: string;
+  label: string;
+  pageValue: string;
+  ourValue: string;
+}
+
+/** A field we wrote that the page changed afterwards. */
+export interface Overwritten {
+  fieldId: string;
+  label: string;
+  wrote: string;
+  nowShows: string;
+}
+
 export function FillPanel({
   scan,
   fill,
@@ -110,6 +135,10 @@ export function FillPanel({
   navigateTab,
   scanRetryTries = 16,
   scanRetryDelayMs = 500,
+  /** How long to leave the page to change its mind after a fill, and how many
+   *  times to look. Injectable so tests do this in milliseconds. */
+  recheckDelayMs = 1500,
+  recheckTries = 2,
 }: {
   scan: () => Promise<ScanResponse>;
   fill: (values: FillValue[]) => Promise<FillResponse>;
@@ -144,6 +173,8 @@ export function FillPanel({
   /** Scan-probe retry budget while the content script is still injecting. */
   scanRetryTries?: number;
   scanRetryDelayMs?: number;
+  recheckDelayMs?: number;
+  recheckTries?: number;
   api: FillApi;
   rescanNonce: number;
   openWebApp: () => void;
@@ -241,6 +272,10 @@ export function FillPanel({
    * it an informed act rather than a leap of faith.
    */
   const [suggestions, setSuggestions] = useState<Map<string, AnalyzedField>>(new Map());
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  /** Fields the page rewrote after we filled them (its own résumé parse, most
+   *  often, landing a moment after we did). */
+  const [overwritten, setOverwritten] = useState<Overwritten[]>([]);
   /** Per-field "emphasise this" text, typed by the applicant. */
   const [draftHints, setDraftHints] = useState<Map<string, string>>(new Map());
   const aiAppliedRef = useRef<Set<string>>(new Set());
@@ -417,6 +452,16 @@ export function FillPanel({
   // the page holds a value it doesn't, exactly the state that reads as
   // "OfferOS can't fill this".
   const pageValuesRef = useRef<Map<string, string>>(new Map());
+  /** Of those, the ones showing a default rather than an answer. */
+  const placeholderFieldsRef = useRef<Set<string>>(new Set());
+  /** False once the panel has gone; the post-fill recheck stops there. */
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // What this field holds, from the most specific source to the least:
   //   1. a value we verifiably wrote this session,
@@ -428,7 +473,9 @@ export function FillPanel({
   const writtenValueFor = (fieldId: string): string | undefined => {
     const live = writtenFields.get(fieldId);
     if (live !== undefined) return live;
-    const onPage = pageValuesRef.current.get(fieldId) ?? "";
+    const onPage = placeholderFieldsRef.current.has(fieldId)
+      ? ""
+      : (pageValuesRef.current.get(fieldId) ?? "");
     const hydrated = reportsRef.current.get(`${pageIdRef.current ?? ""} ${fieldId}`);
     if (hydrated?.outcome === "filled" && onPage !== "") return hydrated.value ?? "";
     return onPage.trim() === "" ? undefined : onPage;
@@ -631,23 +678,67 @@ export function FillPanel({
     try {
       const writes = new Map<string, WriteOutcome>();
       const descriptorById = new Map(sr.descriptors.map((d) => [d.fieldId, d]));
-      // The one choke point every fill flows through: never touch a field the
-      // page already holds a value for. Someone answered it — the user, the
-      // browser's restore, an earlier run — and overwriting it (with a profile
-      // value or a generated answer) destroys their work. Read from THIS
-      // scan's descriptors so the check is as fresh as the fill itself.
-      const planForFill = plan0.filter(
-        (i) => (descriptorById.get(i.fieldId)?.currentValue ?? "").trim() === "",
-      );
-      // Say so, rather than letting them fall out of the round unmentioned.
-      // An unwritten field with an answer is now reported as the user's to
-      // finish — correct for one we failed to write, a lie for one that is
-      // already answered. The difference is only knowable here.
+      const typeById = new Map(traceForFill.map((t) => [t.fieldId, t.classifiedType]));
+      const ourValueOf = (i: FillItem) => i.value || (i.values ?? []).join(", ");
+      const stateOf = (i: FillItem) =>
+        pageValueState(
+          {
+            currentValue: descriptorById.get(i.fieldId)?.currentValue,
+            currentValueIsPlaceholder: descriptorById.get(i.fieldId)?.currentValueIsPlaceholder,
+            classifiedType: typeById.get(i.fieldId),
+          },
+          ourValueOf(i),
+        );
+
+      /**
+       * "The page already has something here" is three different situations,
+       * and this used to treat them as one.
+       *
+       * A control resting on "-None-" or "Select…" has not been answered by
+       * anybody; skipping it and reporting it filled — with the placeholder as
+       * the value — is how an application went out with every Equal Employment
+       * question showing "-None-" and a green tick beside it, while the real
+       * answers sat in the profile.
+       *
+       * A field holding something else IS answered, and by whom is not
+       * knowable: plenty of ATSs run their own résumé parse on upload and fill
+       * the form from it ("review the extracted details before clicking
+       * Submit"), which lands in the DOM identically to typing. So neither is
+       * overwritten and neither is guessed at — both are put in front of the
+       * applicant with what the page holds and what their profile says, and
+       * they choose.
+       */
+      const planForFill = plan0.filter((i) => {
+        const state = stateOf(i);
+        return state === "empty" || state === "placeholder";
+      });
+
+      const differing: PageConflict[] = [];
       for (const item of plan0) {
         const held = (descriptorById.get(item.fieldId)?.currentValue ?? "").trim();
-        if (held !== "")
+        const state = stateOf(item);
+        if (state === "agrees") {
+          // Answered, and with what we would have written. Nothing to do and
+          // nothing to ask about.
           writes.set(item.fieldId, { outcome: "filled", value: held, source: "page" });
+        } else if (state === "differs") {
+          const ours = ourValueOf(item);
+          differing.push({
+            fieldId: item.fieldId,
+            label: item.label,
+            pageValue: held,
+            ourValue: ours,
+          });
+          writes.set(item.fieldId, {
+            outcome: "needs-user",
+            source: "page",
+            reason: `The page already has "${held}" here and your profile says "${ours}" — left as it is, for you to decide.`,
+          });
+        }
       }
+      // The list itself is derived at render (see `conflicts`); this loop only
+      // has to get the REPORT right, which needs the fill round's own fresh
+      // descriptors rather than the last scan's.
       const isTextTarget = (fieldId: string) => {
         const desc = descriptorById.get(fieldId);
         return desc ? isTextAnswerTarget(desc) : false;
@@ -860,6 +951,16 @@ export function FillPanel({
 
       setFilledOnce(true);
       setDone(true);
+
+      // The page may not be finished with these fields.
+      const justWrote = new Map<string, string>();
+      for (const [fieldId, outcome] of writes) {
+        const w = typeof outcome === "string" ? { outcome, value: undefined } : outcome;
+        if (w.outcome !== "filled" || w.source === "page") continue;
+        const value = w.value ?? valueById.get(fieldId) ?? writtenFields.get(fieldId) ?? "";
+        if (value !== "") justWrote.set(fieldId, value);
+      }
+      void verifyWrites(justWrote);
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -1126,6 +1227,21 @@ export function FillPanel({
       pageValuesRef.current = new Map(
         res.descriptors.map((d) => [d.fieldId, d.currentValue ?? ""]),
       );
+      // A control showing "-None-" or "Select…" has not been answered by
+      // anybody. Kept beside the raw value because the counters, the coverage
+      // bar and the hand-back list all used to read "not empty" as "done" —
+      // which is how a form full of placeholders reported itself complete.
+      placeholderFieldsRef.current = new Set(
+        res.descriptors
+          .filter((d) => {
+            const value = (d.currentValue ?? "").trim();
+            if (value === "") return false;
+            if (d.currentValueIsPlaceholder === true) return true;
+            const t = newTrace.find((x) => x.fieldId === d.fieldId)?.classifiedType;
+            return isPlaceholderValue(value, t);
+          })
+          .map((d) => d.fieldId),
+      );
 
       // Two different questions, and they used to share one answer.
       //
@@ -1359,12 +1475,18 @@ export function FillPanel({
     );
   }
 
-  // Fields the PAGE already holds a value for — whoever put it there. They are
-  // done: counting them as outstanding tells the user a filled form is
+  // Fields the PAGE already holds an ANSWER for — whoever put it there. They
+  // are done: counting them as outstanding tells the user a filled form is
   // unfinished. They are also excluded from the fill batch, so a run never
   // clobbers an answer someone typed by hand.
+  //
+  // A control resting on its own placeholder is not one of them, however much
+  // text it is showing. Counting "-None-" as an answer is what let a form
+  // report itself complete with nothing in it.
   const satisfiedByPage = new Set(
-    [...pageValuesRef.current].filter(([, v]) => v.trim() !== "").map(([id]) => id),
+    [...pageValuesRef.current]
+      .filter(([id, v]) => v.trim() !== "" && !placeholderFieldsRef.current.has(id))
+      .map(([id]) => id),
   );
   /**
    * Fields this run has already written and verified.
@@ -1379,6 +1501,30 @@ export function FillPanel({
     !satisfiedByPage.has(fieldId) && !alreadyWritten(fieldId);
 
   const fillable = plan.filter((i) => i.status === "fillable" && outstandingOnPage(i.fieldId));
+
+  /**
+   * Fields the page answers differently from the profile.
+   *
+   * Derived rather than produced by a fill run: a field the page has already
+   * answered is excluded from the run, so a form where every such field was
+   * pre-filled would never have shown the applicant a thing. Written fields
+   * drop out on their own once `Use mine` lands.
+   */
+  const conflicts: PageConflict[] = plan
+    .filter((i) => i.status === "fillable" && !alreadyWritten(i.fieldId))
+    .map((i) => ({
+      fieldId: i.fieldId,
+      label: i.label,
+      pageValue: (pageValuesRef.current.get(i.fieldId) ?? "").trim(),
+      ourValue: i.value || (i.values ?? []).join(", "),
+    }))
+    .filter(
+      (c) =>
+        c.pageValue !== "" &&
+        c.ourValue !== "" &&
+        !placeholderFieldsRef.current.has(c.fieldId) &&
+        !valuesAgree(c.pageValue, c.ourValue),
+    );
   // What a run would actually DO, not just what the profile can type in. A
   // page whose remaining work is all AI-answerable (open-ended questions, or
   // choice groups the answer bank missed) used to read "Fill 0 fields" with
@@ -1503,6 +1649,94 @@ export function FillPanel({
   };
 
   /** Write one suggestion into the page, through the ordinary verified path. */
+  /**
+   * Check, a moment later, that what we wrote is still there.
+   *
+   * Plenty of ATSs run their own résumé parse when a CV is attached and fill
+   * the form from it — the page says so out loud ("review the extracted details
+   * before clicking Submit"). That parse is asynchronous, so it can land after
+   * our writes and quietly replace them, and every check we make during the
+   * fill happens too early to see it.
+   *
+   * A bounded re-scan rather than a wait: at most `recheckTries` looks, spaced
+   * by `recheckDelayMs`, and it stops the moment it finds something. Both are
+   * injectable so tests drive it in milliseconds instead of pretending to be
+   * patient. No polling beyond the budget — a page that keeps rewriting its own
+   * fields is not something to fight, only something to report.
+   */
+  const verifyWrites = async (justWrote: Map<string, string>) => {
+    if (justWrote.size === 0 || recheckTries <= 0) return;
+    for (let attempt = 0; attempt < recheckTries; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, recheckDelayMs));
+      // The panel is a side panel: it can be closed, or moved to another tab,
+      // while this is waiting. Scanning a page nobody is looking at any more —
+      // or worse, reporting on it — is not something a background check gets to
+      // do.
+      if (!mountedRef.current) return;
+      const fresh = await scan().catch(() => null);
+      if (!fresh || !fresh.ok) return;
+      const byId = new Map(fresh.descriptors.map((d) => [d.fieldId, d]));
+      const changed: Overwritten[] = [];
+      for (const [fieldId, wrote] of justWrote) {
+        const desc = byId.get(fieldId);
+        // A field that has gone from the page is a navigation, not a rewrite.
+        if (!desc) continue;
+        const now = (desc.currentValue ?? "").trim();
+        if (!valuesAgree(now, wrote)) {
+          changed.push({
+            fieldId,
+            label: plan.find((i) => i.fieldId === fieldId)?.label ?? fieldId,
+            wrote,
+            nowShows: now,
+          });
+        }
+      }
+      if (changed.length === 0) continue;
+      if (!mountedRef.current) return;
+
+      setOverwritten(changed);
+      for (const [k, r] of reportsRef.current) {
+        const hit = changed.find((c) => c.fieldId === r.fieldId);
+        if (!hit) continue;
+        reportsRef.current.set(k, {
+          ...r,
+          outcome: "failed",
+          reason:
+            hit.nowShows === ""
+              ? `The page cleared this after it was filled — it may have run its own résumé parse.`
+              : `The page changed this to "${hit.nowShows}" after it was filled — it may have run its own résumé parse.`,
+        });
+      }
+      const b = bundleRef.current;
+      if (b) await api.postReport(b.taskId, allReports(), false, b.handoffId);
+      return;
+    }
+  };
+
+  /** Write our values into the fields the page took back. */
+  const refillOverwritten = async () => {
+    const rows = [...overwritten];
+    setOverwritten([]);
+    for (const row of rows) {
+      if (await writeOne(row.fieldId, row.wrote)) markWritten(row.fieldId, row.wrote);
+    }
+    const b = bundleRef.current;
+    if (b) {
+      for (const [k, r] of reportsRef.current) {
+        const hit = rows.find((c) => c.fieldId === r.fieldId);
+        if (hit) {
+          reportsRef.current.set(k, {
+            ...r,
+            outcome: "filled",
+            value: hit.wrote,
+            reason: "Filled again after the page changed it.",
+          });
+        }
+      }
+      await api.postReport(b.taskId, allReports(), false, b.handoffId);
+    }
+  };
+
   const applySuggestion = async (fieldId: string) => {
     const b = bundleRef.current;
     const suggestion = suggestions.get(fieldId);
@@ -1553,6 +1787,41 @@ export function FillPanel({
       next.delete(fieldId);
       return next;
     });
+  };
+
+  /**
+   * Replace what the page holds with the applicant's own answer, on request.
+   *
+   * The ordinary verified write, so a page that refuses the value still says
+   * so, and the field report moves from "yours to decide" to filled with the
+   * source the value actually came from.
+   */
+  const useOurValue = async (fieldId: string) => {
+    const b = bundleRef.current;
+    const conflict = conflicts.find((c) => c.fieldId === fieldId);
+    if (!b || !conflict) return;
+    if (!(await writeOne(fieldId, conflict.ourValue))) {
+      setConflictError("The page didn't take that value — change it there yourself.");
+      return;
+    }
+    markWritten(fieldId, conflict.ourValue);
+    const t = traceRef.current.find((x) => x.fieldId === fieldId);
+    for (const [k, r] of reportsRef.current) {
+      if (r.fieldId === fieldId) {
+        reportsRef.current.set(k, {
+          ...r,
+          value: conflict.ourValue,
+          outcome: "filled",
+          source: t?.source === "answerBank" ? "answer-bank" : "personal",
+          reason: `Replaced the page's "${conflict.pageValue}" with your saved answer, at your request.`,
+        });
+      }
+    }
+    await api.postReport(b.taskId, allReports(), false, b.handoffId);
+  };
+
+  const useOurValuesForAll = async () => {
+    for (const c of [...conflicts]) await useOurValue(c.fieldId);
   };
 
   const applyAllSuggestions = async () => {
@@ -1933,6 +2202,84 @@ export function FillPanel({
                       Draft it
                     </button>
                   </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* The page and the profile disagree.
+            Never resolved behind the applicant's back: the site's own résumé
+            parse and the applicant's own typing arrive in the DOM identically,
+            so guessing which one is on screen would mean overwriting real
+            answers some of the time. Both values, one button. */}
+        {conflicts.length > 0 && (
+          <div className="mb-2 rounded-2xl border border-border-subtle bg-bg-elevated px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+                Already answered on the page
+              </p>
+              <button
+                type="button"
+                onClick={() => void useOurValuesForAll()}
+                className="rounded-full border border-border-subtle px-2.5 py-0.5 text-micro font-semibold text-text-primary transition-colors hover:bg-bg-base"
+              >
+                Use mine for all
+              </button>
+            </div>
+            <p className="mb-1.5 text-micro text-text-tertiary">
+              Left as they are. Some sites fill these in from your résumé and ask you to check them.
+            </p>
+            <ul className="space-y-2">
+              {conflicts.map((c) => (
+                <li key={c.fieldId} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => jumpToField(c.fieldId)}
+                    className="block w-full truncate text-left text-caption font-medium text-text-primary hover:underline"
+                  >
+                    {c.label}
+                  </button>
+                  <p className="text-caption text-text-secondary">
+                    Page: <span className="text-text-primary">{c.pageValue}</span>
+                  </p>
+                  <p className="text-caption text-text-secondary">
+                    Yours: <span className="text-text-primary">{c.ourValue}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void useOurValue(c.fieldId)}
+                    className="rounded-full border border-border-subtle px-2.5 py-0.5 text-micro font-semibold text-text-primary transition-colors hover:bg-bg-base"
+                  >
+                    Use mine
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {conflictError && <p className="mt-2 text-caption text-warning">{conflictError}</p>}
+          </div>
+        )}
+
+        {/* The page took a field back after we filled it. */}
+        {overwritten.length > 0 && (
+          <div className="mb-2 rounded-2xl border border-warning/40 bg-bg-elevated px-3 py-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-micro font-semibold uppercase tracking-wide text-text-tertiary">
+                The page changed these after filling
+              </p>
+              <button
+                type="button"
+                onClick={() => void refillOverwritten()}
+                className="rounded-full border border-border-subtle px-2.5 py-0.5 text-micro font-semibold text-text-primary transition-colors hover:bg-bg-base"
+              >
+                Fill again
+              </button>
+            </div>
+            <ul className="space-y-1">
+              {overwritten.map((o) => (
+                <li key={o.fieldId} className="text-caption text-text-secondary">
+                  <span className="font-medium text-text-primary">{o.label}</span> — now shows{" "}
+                  {o.nowShows === "" ? "nothing" : `"${o.nowShows}"`}
                 </li>
               ))}
             </ul>

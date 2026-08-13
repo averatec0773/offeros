@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FillPanel, type FillApi } from "../../src/sidepanel/fill-panel";
 import type {
@@ -241,6 +241,8 @@ const renderPanel = (
     captureTab?: () => Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }>;
     scanRetryTries?: number;
     scanRetryDelayMs?: number;
+    recheckDelayMs?: number;
+    recheckTries?: number;
     api?: FillApi;
     openWebApp?: () => void;
     openApplication?: (id: string) => void;
@@ -266,6 +268,8 @@ const renderPanel = (
       captureTab={over.captureTab}
       scanRetryTries={over.scanRetryTries}
       scanRetryDelayMs={over.scanRetryDelayMs}
+      recheckDelayMs={over.recheckDelayMs}
+      recheckTries={over.recheckTries}
       api={api}
       rescanNonce={0}
       openWebApp={openWebApp}
@@ -2649,11 +2653,11 @@ describe("what a round says about fields it did not touch", () => {
     return last.find((r) => r.label === label);
   };
 
-  it("a field the page already held is reported as answered, not handed back", async () => {
+  it("a field the page already holds with OUR value is answered, not handed back", async () => {
     const scan: ScanResponse = {
       ...scanThreeProfileFields,
       descriptors: scanThreeProfileFields.descriptors.map((d) =>
-        d.fieldId === "f1" ? { ...d, currentValue: "someone@example.com" } : d,
+        d.fieldId === "f1" ? { ...d, currentValue: "jordan@example.com" } : d,
       ),
     };
     const api = claimedApi();
@@ -2665,11 +2669,9 @@ describe("what a round says about fields it did not touch", () => {
     });
 
     await waitFor(() => expect(api.postReport).toHaveBeenCalled());
-    // It is answered — by whoever typed it. Calling it the user's to fill in
-    // would be as wrong as calling it skipped.
+    // Answered, and with what we would have written. Nothing to ask about.
     await waitFor(() => expect(reportFor(api, "Email")?.outcome).toBe("filled"));
     expect(reportFor(api, "Email")?.source).toBe("page");
-    expect(reportFor(api, "Email")?.value).toBe("someone@example.com");
   });
 
   it("a retry does not downgrade what the first round already filled", async () => {
@@ -2705,5 +2707,201 @@ describe("what a round says about fields it did not touch", () => {
     await waitFor(() => expect(fill).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(reportFor(api, "Phone")?.outcome).toBe("failed"));
     expect(reportFor(api, "Email")?.outcome).toBe("filled");
+  });
+});
+
+/**
+ * "The page already has something here" is three different situations.
+ *
+ * A real application went out with every Equal Employment question showing
+ * "-None-", the salutation showing "-None-", and the phone field showing the
+ * dial code of the country it had defaulted to — all reported filled, with the
+ * placeholder as the value, while the applicant's real answers sat in their
+ * profile. Nothing had been answered; the panel had only checked whether the
+ * string was empty.
+ *
+ * And the other direction matters just as much: plenty of ATSs run their own
+ * résumé parse on upload and fill the form from it, asking the applicant to
+ * review what it extracted. That lands in the DOM exactly like typing, so a
+ * value we did not write is never overwritten and never silently skipped — it
+ * is shown, with both readings, and the applicant decides.
+ */
+describe("what the page is already showing", () => {
+  const claimedApi = (): FillApi => ({
+    ...emptyApi(),
+    getPending: vi.fn(async () => ({ ok: true as const, value: [ticket] })),
+    claim: vi.fn(async () => ({ ok: true as const, value: bundleWithAddress })),
+  });
+
+  const reportFor = (api: FillApi, label: string) => {
+    const calls = vi.mocked(api.postReport).mock.calls;
+    const last = calls[calls.length - 1]![1] as FieldReport[];
+    return last.find((r) => r.label === label);
+  };
+
+  /**
+   * One profile-backed field with whatever the page is showing in it, plus an
+   * empty one beside it.
+   *
+   * The empty field is the point of the fixture, not padding: a form where
+   * every field is already answered has nothing to fill, so no round runs and
+   * there is no report to be wrong about. The real form had plenty of empty
+   * fields alongside the pre-filled ones — that is why a round ran and reported
+   * the placeholders as filled.
+   */
+  const scanShowing = (
+    over: Partial<{ currentValue: string; currentValueIsPlaceholder: boolean; type: string }>,
+  ): ScanResponse => ({
+    ...scanOk,
+    descriptors: [
+      {
+        fieldId: "f1",
+        label: "Email",
+        name: "email",
+        autocomplete: "email",
+        type: over.type ?? "email",
+        placeholder: "",
+        ariaLabel: "",
+        ...(over.currentValue !== undefined ? { currentValue: over.currentValue } : {}),
+        ...(over.currentValueIsPlaceholder !== undefined
+          ? { currentValueIsPlaceholder: over.currentValueIsPlaceholder }
+          : {}),
+      },
+      {
+        fieldId: "f2",
+        label: "Phone",
+        name: "phone",
+        autocomplete: "tel",
+        type: "tel",
+        placeholder: "",
+        ariaLabel: "",
+      },
+    ],
+  });
+
+  const runFill = async (scan: ScanResponse) => {
+    const api = claimedApi();
+    const fill = vi.fn(async (v: FillValue[]) => okFill(v));
+    renderPanel({ scan: async () => scan, api, fill });
+    const btn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(btn);
+    });
+    const sent = () => fill.mock.calls.flatMap((c) => c[0].map((v) => v.fieldId));
+    return { fill, api, sent };
+  };
+
+  it("a native select resting on its placeholder gets our answer", async () => {
+    // The DOM said so outright: value="" on the selected option. No text
+    // pattern is consulted and none is needed.
+    const { fill } = await runFill(
+      scanShowing({
+        currentValue: "Veteran status",
+        currentValueIsPlaceholder: true,
+        type: "select",
+      }),
+    );
+    await waitFor(() => expect(fill).toHaveBeenCalled());
+    expect(fill.mock.calls[0]![0].map((v) => v.fieldId)).toContain("f1");
+  });
+
+  it("a custom dropdown showing -None- gets our answer", async () => {
+    // No structural evidence to be had — it is a div — so the wording is the
+    // only evidence there is.
+    const { fill, sent } = await runFill(scanShowing({ currentValue: "-None-", type: "listbox" }));
+    await waitFor(() => expect(fill).toHaveBeenCalled());
+    expect(sent()).toContain("f1");
+  });
+
+  it("a composite phone showing only its dial code still gets the number", async () => {
+    const scan: ScanResponse = {
+      ...scanOk,
+      descriptors: [
+        {
+          fieldId: "p1",
+          label: "Mobile",
+          name: "phone",
+          autocomplete: "tel",
+          type: "tel",
+          placeholder: "",
+          ariaLabel: "",
+          currentValue: "United States+1",
+        },
+      ],
+    };
+    const { fill, sent } = await runFill(scan);
+    await waitFor(() => expect(fill).toHaveBeenCalled());
+    expect(sent()).toContain("p1");
+  });
+
+  it("a real value that differs is not overwritten, and is put to the applicant", async () => {
+    const { api, sent } = await runFill(scanShowing({ currentValue: "someone.else@example.com" }));
+
+    // Not written over. Somebody's answer — theirs, or the site's own parse of
+    // their résumé — and the DOM cannot say which.
+    await waitFor(() => expect(api.postReport).toHaveBeenCalled());
+    expect(sent()).not.toContain("f1");
+
+    // And it is stated, not skipped in silence: both readings, side by side.
+    const card = (await screen.findByText("Already answered on the page")).closest(
+      "div",
+    )!.parentElement!;
+    expect(within(card).getAllByText(/someone\.else@example\.com/).length).toBeGreaterThan(0);
+    expect(within(card).getAllByText(/jordan@example\.com/).length).toBeGreaterThan(0);
+
+    const report = reportFor(api, "Email");
+    expect(report?.outcome).toBe("needs-user");
+    expect(report?.reason).toContain("someone.else@example.com");
+    expect(report?.reason).toContain("jordan@example.com");
+  });
+
+  it("'Use mine' writes it, once asked", async () => {
+    const { api, sent } = await runFill(scanShowing({ currentValue: "someone.else@example.com" }));
+    await screen.findByText("Already answered on the page");
+
+    const useMine = screen.getByRole("button", { name: "Use mine" });
+    await act(async () => {
+      await userEvent.click(useMine);
+    });
+
+    await waitFor(() => expect(sent()).toContain("f1"));
+    await waitFor(() => expect(reportFor(api, "Email")?.outcome).toBe("filled"));
+    expect(reportFor(api, "Email")?.value).toBe("jordan@example.com");
+  });
+
+  it("notices the page rewriting a field after the fill, and offers to fill it again", async () => {
+    // The site's own résumé parse landing a moment after we did. Every check
+    // during the fill happens too early to see it.
+    let pageParsed = false;
+    const fill = vi.fn(async (v: FillValue[]) => {
+      // The site's parse lands right after our write.
+      pageParsed = true;
+      return okFill(v);
+    });
+    const scan = async (): Promise<ScanResponse> =>
+      pageParsed
+        ? scanShowing({ currentValue: "parsed.from.resume@example.com" })
+        : scanShowing({ currentValue: "" });
+    const api = claimedApi();
+    renderPanel({ scan, api, fill, recheckDelayMs: 5, recheckTries: 2 });
+
+    const btn = await screen.findByRole("button", { name: /^Fill \d+ fields?$/ });
+    await act(async () => {
+      await userEvent.click(btn);
+    });
+
+    expect(await screen.findByText("The page changed these after filling")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(reportFor(api, "Email")?.reason).toMatch(/changed this to "parsed\.from\.resume/),
+    );
+    expect(reportFor(api, "Email")?.outcome).toBe("failed");
+
+    // One button, and it writes the value again.
+    const before = fill.mock.calls.length;
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Fill again" }));
+    });
+    await waitFor(() => expect(fill.mock.calls.length).toBeGreaterThan(before));
+    await waitFor(() => expect(reportFor(api, "Email")?.outcome).toBe("filled"));
   });
 });

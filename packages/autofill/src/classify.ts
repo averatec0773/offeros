@@ -16,6 +16,15 @@ export interface FieldDescriptor {
    *  earlier and it's still there" from "the page reloaded and it's gone". */
   currentValue?: string;
   /**
+   * Structural evidence, gathered at scan time, that `currentValue` is the
+   * control's own default rather than an answer: a native `<select>` resting on
+   * an option with an empty or disabled value, a choice group with nothing
+   * checked. Only the DOM knows this, so it is read where the DOM is and
+   * carried here; the panel cannot recover it from the text alone, and for
+   * custom dropdowns the text is all there is (see `isPlaceholderText`).
+   */
+  currentValueIsPlaceholder?: boolean;
+  /**
    * The visible text around this field, collected ONLY when the label chain
    * found nothing.
    *

@@ -390,7 +390,42 @@ function describe(el: HTMLElement, used: Map<string, number>): FieldDescriptor {
             .replace(/\s+/g, " ")
             .trim()
         : currentValueOf(el, type),
+    ...(ariaGroup.length > 0
+      ? {
+          currentValueIsPlaceholder: !ariaGroup.some(
+            (m) => m.getAttribute("aria-checked") === "true",
+          ),
+        }
+      : restingOnDefault(el)
+        ? { currentValueIsPlaceholder: true }
+        : {}),
   };
+}
+
+/**
+ * Is this control resting on its own default, as the DOM itself says?
+ *
+ * The one place where "showing text" and "has been answered" can be told apart
+ * on evidence rather than on wording. A `<select>` whose selected option
+ * carries `value=""` is the universal convention for a prompt row, and a
+ * disabled selected option can only be a prompt — nobody can choose it. Where
+ * the DOM offers nothing (a div pretending to be a dropdown, which is most ATS
+ * dropdowns), this returns false and the text patterns take over.
+ */
+function restingOnDefault(el: HTMLElement): boolean {
+  if (el instanceof HTMLSelectElement) {
+    if (el.selectedIndex < 0) return true;
+    const option = el.options[el.selectedIndex];
+    if (!option) return true;
+    // `value=""` is the prompt-row convention; `disabled` cannot be a choice.
+    if ((option.getAttribute("value") ?? "") === "") return true;
+    if (option.disabled) return true;
+    return false;
+  }
+  if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
+    return !el.checked;
+  }
+  return false;
 }
 
 /** The control's live value at scan time. File inputs report the chosen file

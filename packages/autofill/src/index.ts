@@ -89,3 +89,12 @@ export { auditCapturedForm, verifyCaptureRoundTrip } from "./capture-audit";
 
 export type { CanaryPersona, ProvenanceLeak, ProvenanceReport } from "./canary";
 export { canaryPersonas, profileAtoms, distinctiveAtoms, checkProvenance } from "./canary";
+
+export type { PageValueState, PageValueInput } from "./placeholder";
+export {
+  isPlaceholderText,
+  isPlaceholderPhone,
+  isPlaceholderValue,
+  valuesAgree,
+  pageValueState,
+} from "./placeholder";
