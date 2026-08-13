@@ -113,6 +113,11 @@ describe("CAPTCHAs are recognised so they can be handed back", () => {
     { label: "Enter the characters you see" },
     { label: "Security check" },
     { label: "Are you a human?" },
+    // Instructions, not questions — the word order flips and the check is the
+    // same one. The form this was met on read "IF you are a human…".
+    { label: "If you are a human, type ALAN below" },
+    { label: "To prove you are a human, type ALAN below" },
+    { label: "Please prove you are human" },
     { name: "g-recaptcha-response" },
     { id: "h-captcha-response" },
     { containerText: "I'm not a robot" },
@@ -125,6 +130,11 @@ describe("CAPTCHAs are recognised so they can be handed back", () => {
     { label: "First Name" },
     { label: "Why this company?" },
     { label: "Have you been checked for security clearance?" },
+    // A real question on real applications. A guard broad enough to swallow it
+    // hands the applicant back their own job title to type in by hand.
+    { label: "Are you a Human Resources professional?" },
+    { label: "Are you a Human Resources Business Partner?" },
+    { label: "Do you have experience in human capital management?" },
     {},
   ])("%o is an ordinary field", (subject) => {
     expect(looksLikeCaptcha(subject)).toBe(false);

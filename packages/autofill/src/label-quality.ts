@@ -204,7 +204,13 @@ const CAPTCHA_PATTERNS =
   // "IF you are a human, type ALAN below" — the same check as "are you human",
   // phrased as a condition rather than a question. Met on a real application,
   // where the AI answering lane obligingly typed the word.
-  /captcha|recaptcha|hcaptcha|turnstile|(are you|if you are) (a )?human|type (the )?(below )?image text|enter the (characters|text|code) (you see|shown|above|below)|security check|i'?m not a robot|verification code shown/i;
+  //
+  // Both word orders, because forms use both: "ARE YOU a human" as a question,
+  // "prove YOU ARE a human" as an instruction. And "human resources" is
+  // excluded outright — "Are you a Human Resources professional?" is a real
+  // question on real applications, and a guard that swallows it hands the
+  // applicant back their own job title to type in by hand.
+  /captcha|recaptcha|hcaptcha|turnstile|(?:are you|you are)\s+(?:a\s+)?human(?!\s*(?:resources?|capital|factors))\b|type (the )?(below )?image text|enter the (characters|text|code) (you see|shown|above|below)|security check|i'?m not a robot|verification code shown/i;
 
 export function looksLikeCaptcha(subject: {
   label?: string;
