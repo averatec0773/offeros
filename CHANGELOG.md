@@ -23,6 +23,32 @@ Notable changes only; not every commit is an entry.
 
 ### Fixed
 
+**Requests to the extension's background always come back now.** The panel asks
+its background worker to do several things it cannot do itself — start the local
+app, photograph a page as a record of a fill, open an apply tab and remember
+which application it belongs to, turn OfferOS on for a page. Those requests were
+being made in a way the browser does not promise to answer: on some browser
+builds it works, on others the reply is simply never delivered, and nothing
+reports an error either way — the panel just waits. Every one of them now uses
+the form the browser documents, and answers exactly once whatever happens,
+including when the work behind it fails or never finishes. Every request also
+has a deadline now, so no button can wait forever; a fill keeps a much longer
+one, because filling a long form legitimately takes minutes.
+
+**Two things that had been failing quietly.** The screenshot taken after a fill,
+kept as an independent record of what happened, was best-effort — and when it
+failed it said nothing at all, so there was no way to tell a page that could not
+be photographed from one where nothing had been attempted. And when the app
+opens an apply tab, the extension remembers which application that tab is for;
+if that lookup went unanswered, OfferOS fell back to guessing from the address,
+which looks identical to normal behaviour. Both now record what actually
+happened. If you have wondered why fills had no screenshots attached, this is
+the first release where that failure is visible rather than silent.
+
+**A misleading message during "Enable OfferOS on this page".** If starting on a
+page timed out, the panel said Chrome had not answered a permission request —
+when no permission request had been made. Each case says its own thing now.
+
 **Turning OfferOS on for a new site asks straight away, instead of hanging.**
 On a site OfferOS had not been given access to, pressing "Enable OfferOS on this
 page" left the button reading "Starting…" and stayed there — no permission
