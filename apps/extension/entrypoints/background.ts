@@ -2,7 +2,6 @@ import { startDevReload } from "../src/lib/dev-reload";
 import { reasonOf, respondWith, type SendResponse } from "../src/lib/respond";
 import { matchAts } from "../src/lib/autofill/recipes";
 import { isStartWebAppRequest, startWebAppViaHost } from "../src/lib/web-launcher";
-import { captureTab, isCaptureTabRequest } from "../src/lib/tab-capture";
 import { enableOnTab, injectEngine, isEnableOnTabRequest } from "../src/lib/site-enable";
 import {
   isOpenFillTabRequest,
@@ -122,12 +121,6 @@ export default defineBackground(() => {
     (msg: unknown, sender: { tab?: { id?: number } }, sendResponse: SendResponse) => {
       if (isStartWebAppRequest(msg)) {
         return respondWith(startWebAppViaHost(), sendResponse, (error) => ({
-          ok: false as const,
-          error: reasonOf(error),
-        }));
-      }
-      if (isCaptureTabRequest(msg)) {
-        return respondWith(captureTab(msg.tabId ?? sender.tab?.id), sendResponse, (error) => ({
           ok: false as const,
           error: reasonOf(error),
         }));

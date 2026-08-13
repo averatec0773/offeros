@@ -26,7 +26,6 @@ import {
   clearRescueLog,
 } from "../lib/autofill/rescue";
 import { bytesToBase64 } from "../lib/autofill/base64";
-import { pickEvidenceFields } from "../lib/autofill/evidence";
 import type {
   ScanResponse,
   FillResponse,
@@ -123,7 +122,6 @@ export function FillPanel({
   attachFile,
   scrollToField,
   expandRepeaters,
-  captureTab,
   api,
   rescanNonce,
   openWebApp,
@@ -160,7 +158,6 @@ export function FillPanel({
   /** Photograph the visible tab (panel → background → captureVisibleTab).
    *  Present = incident fields get screenshots on Done; absent = no evidence,
    *  everything else identical. */
-  captureTab?: () => Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }>;
   /** The handoff explicitly bound to this tab (workspace-opened tabs) — wins
    *  over URL-heuristic ticket matching when present. */
   getBoundHandoff?: () => Promise<string | null>;
@@ -1125,44 +1122,6 @@ export function FillPanel({
     }
     if (posted.value.staleClaim === true) setSuperseded(true);
     setReported(true);
-    // Evidence pass, strictly after the report and strictly best-effort: the
-    // user pressed Done and IS done — a slow or failing screenshot changes
-    // nothing they can see. Scroll each incident field into view, let the
-    // page settle, photograph, upload. Sequential on purpose: captureVisibleTab
-    // photographs whatever is visible NOW, so parallel scrolls would caption
-    // every shot with the wrong field.
-    if (captureTab && scrollToField) {
-      void (async () => {
-        try {
-          for (const report of pickEvidenceFields(allReports())) {
-            await scrollToField(report.fieldId).catch(() => {});
-            // Scroll animation + the highlight flash need a moment; a shot
-            // taken mid-scroll photographs the wrong part of the page. Also
-            // paces under Chrome's captureVisibleTab quota (2/sec) — faster
-            // loops hit MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND and shots
-            // start warn-and-skipping.
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            const shot = await captureTab();
-            if (!shot.ok) {
-              // Wave 1 shipped a `return` here and the whole run produced ZERO
-              // evidence with nothing in any log — one early failure silently
-              // aborted every later shot. Log it and keep going: the next
-              // field's capture may succeed, and a warn is the only way the
-              // failure is diagnosable at all.
-              console.warn("[offeros] evidence capture failed:", shot.error);
-              continue;
-            }
-            const posted = await api.postEvidence(b.applicationId, {
-              label: report.label,
-              dataUrl: shot.dataUrl,
-            });
-            if (!posted.ok) console.warn("[offeros] evidence upload failed:", posted.error);
-          }
-        } catch {
-          // Evidence must never surface an error a fill did not have.
-        }
-      })();
-    }
   };
 
   useEffect(() => {

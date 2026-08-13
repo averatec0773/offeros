@@ -23,10 +23,6 @@ export interface FillApi {
      *  the current claimer. */
     handoffId?: string,
   ) => Promise<ApiResult<ReportResult>>;
-  postEvidence: (
-    applicationId: string,
-    body: { label?: string; dataUrl: string },
-  ) => Promise<ApiResult<{ file: string; bytes: number }>>;
   generateAnswer: (
     taskId: string,
     body: {

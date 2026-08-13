@@ -48,6 +48,10 @@ function describeEvent(event: ApplicationEvent): string {
       return "Marked as submitted";
     case "style-distilled":
       return "Style preferences updated";
+    // The screenshot feature is gone (it depended on a permission the
+    // extension no longer holds, and never worked in practice). Rows already in
+    // the database are still the user's history, so they still read as
+    // themselves rather than as "unknown event".
     case "evidence-captured": {
       const label = typeof payload.label === "string" ? payload.label : "a field";
       return `Screenshot kept: ${label}`;

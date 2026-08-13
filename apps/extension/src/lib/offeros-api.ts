@@ -296,20 +296,6 @@ export function postReport(
   );
 }
 
-/** Store one incident-field screenshot with the application. Best-effort from
- *  the caller's point of view — the ApiResult is inspected, never thrown. */
-export function postEvidence(
-  applicationId: string,
-  body: { label?: string; dataUrl: string },
-  fetchImpl: typeof fetch = fetch,
-): Promise<ApiResult<{ file: string; bytes: number }>> {
-  return call<{ file: string; bytes: number }>(
-    `/applications/${applicationId}/evidence`,
-    json("POST", body),
-    fetchImpl,
-  );
-}
-
 export function generateAnswer(
   taskId: string,
   body: {

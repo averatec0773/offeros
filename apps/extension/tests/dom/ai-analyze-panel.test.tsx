@@ -130,7 +130,6 @@ const api = (over: Partial<FillApi> = {}): FillApi => ({
   getPending: vi.fn(async (): Promise<ApiResult<FillTicket[]>> => ({ ok: true, value: [ticket] })),
   claim: vi.fn(async (): Promise<ApiResult<FillTaskBundle>> => ({ ok: true, value: bundle })),
   postReport: vi.fn(async () => ({ ok: true as const, value: {} })),
-  postEvidence: vi.fn(async () => ({ ok: true as const, value: { file: "", bytes: 0 } })),
   generateAnswer: vi.fn(async () => ({ ok: true as const, value: { answer: "" } })),
   analyzeFields: vi.fn(async () => ({
     ok: true as const,

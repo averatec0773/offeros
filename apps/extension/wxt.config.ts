@@ -8,7 +8,9 @@ export default defineConfig({
   manifest: {
     action: {},
     side_panel: { default_path: "sidepanel.html" },
-    permissions: ["storage", "tabs", "sidePanel", "nativeMessaging", "scripting", "activeTab"],
+    // `activeTab` is gone with the evidence screenshots — it existed for
+    // `tabs.captureVisibleTab` and nothing else asks for it.
+    permissions: ["storage", "tabs", "sidePanel", "nativeMessaging", "scripting"],
     /**
      * Every site, because the job is on every site.
      *

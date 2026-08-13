@@ -48,14 +48,17 @@ describe("the install prompt", () => {
     expect(manifest().optional_host_permissions).toBeUndefined();
   });
 
-  it("keeps the API permissions that are load-bearing", () => {
-    const permissions = manifest().permissions;
-    expect(Array.isArray(permissions)).toBe(true);
+  it("asks for nothing it does not use", () => {
     // storage for settings, tabs to follow the active page, sidePanel for the
     // panel itself, scripting for the on-demand injection, nativeMessaging for
-    // the one-click local app start.
-    for (const needed of ["storage", "tabs", "sidePanel", "scripting", "nativeMessaging"]) {
-      expect(permissions, needed).toContain(needed);
-    }
+    // the one-click local app start. `activeTab` is absent because the one
+    // thing that needed it — the post-fill screenshot — has been removed.
+    expect(manifest().permissions).toEqual([
+      "storage",
+      "tabs",
+      "sidePanel",
+      "nativeMessaging",
+      "scripting",
+    ]);
   });
 });
