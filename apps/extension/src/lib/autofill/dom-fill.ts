@@ -1003,11 +1003,13 @@ function fillSkillsViaDriver(
 export type FillValue = { fieldId: string; value: string } | { fieldId: string; values: string[] };
 
 /**
- * What one write did. The object form carries a reason for the failures the
- * page explains — a field that took the value and then dropped it says
- * something a bare `"failed"` cannot, and form memory reads these.
+ * What one write did. The object form carries a reason the page explains — a
+ * field that took the value and then dropped it says something a bare
+ * `"failed"` cannot, and form memory reads these. A `"filled"` can carry one
+ * too, for a write that landed by a route the user should know about (a
+ * dropdown that never opened and was typed into instead).
  */
-export type FillOutcome = "filled" | "failed" | { outcome: "failed"; reason: string };
+export type FillOutcome = "filled" | "failed" | { outcome: "filled" | "failed"; reason: string };
 
 /**
  * Did the page keep what we typed?
@@ -1091,7 +1093,9 @@ export async function applyFillDetailed(
       if (res.ok) {
         highlight(el);
         filled++;
-        outcomes.set(fieldId, "filled");
+        // A caveat on a success still reaches the report, so "filled" never
+        // quietly means "filled by a route you would want to check".
+        outcomes.set(fieldId, res.reason ? { outcome: "filled", reason: res.reason } : "filled");
       } else {
         outcomes.set(fieldId, { outcome: "failed", reason: res.reason ?? "" });
       }

@@ -1,4 +1,5 @@
 import { matchOptionValue } from "@offeros/autofill";
+import { deepQueryAll } from "./deep-query";
 
 /**
  * Driving a control by what it says it is, rather than by what it is built out
@@ -131,10 +132,81 @@ function findPopup(el: Element, before: ReadonlySet<Element>): HTMLElement | und
   return lists.find((lb) => !before.has(lb) && optionsIn(lb).length > 0);
 }
 
-/** Why a write did not happen, in words the user can act on. */
+/**
+ * Why a write did not happen, in words the user can act on — or, on a write
+ * that landed by a route the user should know about, what that route was.
+ */
 export interface AriaFillResult {
   ok: boolean;
   reason?: string;
+}
+
+/** Input types a person types free text into. */
+const TYPEABLE_TYPES = new Set(["", "text", "search", "tel", "email", "url", "number"]);
+
+/**
+ * A box inside this control that a person could type into.
+ *
+ * Not every control that says `role="combobox"` has a list behind it. A real
+ * application failed City, State/Province AND Zip/Postal Code with "this
+ * dropdown didn't open" — and a postal code is not a dropdown. The page had
+ * declared a popup on a wrapper around an ordinary text box, so the popup path
+ * was the only path tried, and three fields whose values were sitting right
+ * there were handed back to the user.
+ *
+ * The control itself is never an `<input>`, `<select>` or `<textarea>` —
+ * `isAriaPopupControl` excludes those, and a `<select>` in particular must stay
+ * excluded here, since typing into one is meaningless and its honest failure is
+ * the right answer. So what is searched is the wrapper's own subtree, shadow
+ * roots included, for a box that is actually typeable.
+ */
+export function typeableWithin(el: HTMLElement): HTMLInputElement | HTMLElement | null {
+  if (el.isContentEditable) return el;
+  for (const node of deepQueryAll(el, "input")) {
+    if (!(node instanceof HTMLInputElement)) continue;
+    if (node.readOnly || node.disabled) continue;
+    if (!TYPEABLE_TYPES.has(node.type.toLowerCase())) continue;
+    return node;
+  }
+  return null;
+}
+
+/** Said of a value that got typed in because the list never appeared. */
+export const TYPED_TEXT_REASON =
+  "This dropdown never opened, so the value was typed in as text — worth a glance.";
+
+/** Set a value the way a framework-controlled box will notice. */
+function setTyped(target: HTMLInputElement | HTMLElement, value: string): void {
+  if (target instanceof HTMLInputElement) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (setter) setter.call(target, value);
+    else target.value = value;
+  } else {
+    target.textContent = value;
+  }
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+  target.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+const readTyped = (target: HTMLInputElement | HTMLElement): string =>
+  target instanceof HTMLInputElement ? target.value : (target.textContent ?? "");
+
+/**
+ * Type the value in, and let the page have the last word.
+ *
+ * The check after the wait is the whole point: a controlled widget that means
+ * to own its own value will wipe what was typed a tick later, and reporting
+ * that as filled would be the one thing this file exists to avoid.
+ */
+async function typeAsText(el: HTMLElement, value: string): Promise<boolean> {
+  const target = typeableWithin(el);
+  if (!target) return false;
+  if (target instanceof HTMLInputElement) target.focus();
+  setTyped(target, value);
+  await sleepIn(el, POLL_MS);
+  const got = readTyped(target).trim();
+  const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return got !== "" && squash(got) === squash(value.trim());
 }
 
 /**
@@ -159,6 +231,9 @@ export async function fillAriaPopup(el: HTMLElement, value: string): Promise<Ari
     popup = findPopup(el, before);
   }
   if (!popup) {
+    // No list came. If what is underneath is a text box after all, typing the
+    // answer in is better than handing back a field whose value we are holding.
+    if (await typeAsText(el, value)) return { ok: true, reason: TYPED_TEXT_REASON };
     return { ok: false, reason: "This dropdown didn't open when clicked — choose it yourself." };
   }
 

@@ -238,3 +238,88 @@ describe("the specialist drivers keep their place at the front", () => {
     expect(workday.fieldSelector).toContain('button[aria-haspopup="listbox"]');
   });
 });
+
+/**
+ * The case that sent this here: a real application failed City, State/Province
+ * and Zip/Postal Code with "this dropdown didn't open", holding the right value
+ * for each. A postal code is not a dropdown — the page had declared a popup on
+ * a wrapper around an ordinary text box.
+ */
+describe("a dropdown that is really a text box", () => {
+  const mountWrapped = (opts: { readOnly?: boolean; wipes?: boolean } = {}) => {
+    document.body.innerHTML = `<main><form>
+      <label for="zipbox">Zip/Postal Code</label>
+      <div id="cb" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+        <input id="zipbox" type="text" ${opts.readOnly ? "readonly" : ""} />
+      </div>
+    </form></main>`;
+    if (opts.wipes) {
+      const box = document.getElementById("zipbox") as HTMLInputElement;
+      // A controlled widget that means to own its own value.
+      box.addEventListener("input", () => setTimeout(() => (box.value = ""), 0));
+    }
+    return scanFields(document.body, GENERIC_RECIPE)[0]!.descriptor;
+  };
+
+  it("types the value in when the list never comes, and says so", async () => {
+    const d = mountWrapped();
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId: d.fieldId, value: "77041" },
+    ]);
+    expect(filled).toBe(1);
+    expect((document.getElementById("zipbox") as HTMLInputElement).value).toBe("77041");
+    const outcome = outcomes.get(d.fieldId) as { outcome: string; reason: string };
+    expect(outcome.outcome).toBe("filled");
+    // Filled, but by a route the user should glance at — never silently.
+    expect(outcome.reason).toMatch(/typed in as text/i);
+  });
+
+  it("still fails honestly when the box refuses to keep what was typed", async () => {
+    const d = mountWrapped({ wipes: true });
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId: d.fieldId, value: "77041" },
+    ]);
+    expect(filled).toBe(0);
+    expect((outcomes.get(d.fieldId) as { outcome: string }).outcome).toBe("failed");
+  });
+
+  it("does not type into a read-only box", async () => {
+    const d = mountWrapped({ readOnly: true });
+    const { outcomes } = await applyFillDetailed(document, [
+      { fieldId: d.fieldId, value: "77041" },
+    ]);
+    const outcome = outcomes.get(d.fieldId) as { outcome: string; reason: string };
+    expect(outcome.outcome).toBe("failed");
+    expect(outcome.reason).toMatch(/didn't open/i);
+  });
+
+  it("leaves a native <select> alone — typing into one is meaningless", async () => {
+    document.body.innerHTML = `<main><form>
+      <label for="st">State/Province</label>
+      <select id="st" role="combobox">
+        <option value="">Choose</option>
+        <option value="CA">California</option>
+      </select>
+    </form></main>`;
+    const d = scanFields(document.body, GENERIC_RECIPE)[0]!.descriptor;
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId: d.fieldId, value: "TX" },
+    ]);
+    const select = document.getElementById("st") as HTMLSelectElement;
+    // No option matches, so it stays empty and is reported as such. What must
+    // NOT happen is "TX" appearing anywhere as typed text.
+    expect(select.value).toBe("");
+    expect(filled).toBe(0);
+    expect(outcomes.get(d.fieldId)).toBeDefined();
+  });
+
+  it("a dropdown that opens normally is untouched by any of this", async () => {
+    const d = mountCombobox({ portal: true });
+    const { filled, outcomes } = await applyFillDetailed(document, [
+      { fieldId: d.fieldId, value: "Canada" },
+    ]);
+    expect(filled).toBe(1);
+    // A plain success carries no caveat — the reason is for the typed route only.
+    expect(outcomes.get(d.fieldId)).toBe("filled");
+  });
+});

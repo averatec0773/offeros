@@ -6,6 +6,7 @@ import {
   type FillItem,
 } from "@offeros/autofill";
 import type { FieldReport, FieldReportOutcome, FillTicket } from "../offeros-api";
+import type { FillOutcome } from "./dom-fill";
 
 /**
  * Task mode: pure helpers for the fill-handoff flow. No DOM, no IO —
@@ -202,6 +203,16 @@ function traceSource(t: FieldTrace): FieldReportSource {
  * override the trace's default classify-time reason with the exact
  * NO_FILE_REASON / CUSTOM_UPLOADER_REASON text.
  */
+/**
+ * The bare outcome, whichever form it arrived in.
+ *
+ * Lives here rather than beside the type: the panel needs it, and dom-fill is
+ * a content-script module the panel has no business pulling into its bundle.
+ */
+export function outcomeOf(o: FillOutcome): "filled" | "failed" {
+  return typeof o === "string" ? o : o.outcome;
+}
+
 export type WriteOutcome =
   | "filled"
   | "failed"

@@ -47,6 +47,7 @@ import {
   RENDER_FAILED_REASON,
   FILE_KIND_SOURCE,
   handoverList,
+  outcomeOf,
   type WriteOutcome,
 } from "../lib/autofill/task-mode";
 
@@ -521,7 +522,7 @@ export function FillPanel({
     const r = await fill([{ fieldId, value }]);
     // A failure may arrive as an object carrying the page's reason for it;
     // only the literal "filled" counts as a write.
-    return r.outcomes?.some(([id, o]) => id === fieldId && o === "filled") ?? false;
+    return r.outcomes?.some(([id, o]) => id === fieldId && outcomeOf(o) === "filled") ?? false;
   };
 
   // Fetch bytes for one OfferOS-managed file kind, then drive the content-script
@@ -669,7 +670,7 @@ export function FillPanel({
         } else {
           writes.set(id, o);
         }
-        if (o === "filled") markWritten(id, valueById.get(id) ?? "");
+        if (outcomeOf(o) === "filled") markWritten(id, valueById.get(id) ?? "");
       }
 
       // 2) cover-letter textareas ← bundle.coverLetterText verbatim (never
