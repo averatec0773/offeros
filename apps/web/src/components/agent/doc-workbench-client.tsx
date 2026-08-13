@@ -10,6 +10,7 @@ import { DOC_STATE_LABEL, docStatus, relativeTime } from "@/lib/artifact-status"
 import { cn } from "@/lib/utils";
 import { ConnectProviderNote } from "./connect-provider-note";
 import { ResumeView } from "./resume-view";
+import { ResumeCheckup } from "./resume-checkup";
 import { SpendChip } from "./spend-chip";
 import { TweakInput } from "./tweak-input";
 import { VersionDiff } from "./version-diff";
@@ -222,6 +223,11 @@ export function DocWorkbenchClient({
 
           {/* …and everything you can do to it sits beside it. */}
           <aside className="space-y-4">
+            {/* Deterministic, local, free. First in the column because it is
+                the only thing here that costs nothing to ask. */}
+            {kind === "resume" && (
+              <ResumeCheckup resumeData={version.resumeData} text={version.content} />
+            )}
             <section className="rounded-2xl border border-border bg-card p-4">
               <h2 className="text-body font-semibold text-foreground">Change something</h2>
               {tweaking && currentTaskId ? (

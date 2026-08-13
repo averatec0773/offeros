@@ -23,3 +23,6 @@ export type {
   AnswerGap,
   AnswerGaps,
 } from "./question-coverage";
+
+export type { ResumeCheckInput, ResumeFinding, ResumeRule } from "./resume-check";
+export { RESUME_RULES, checkResume } from "./resume-check";

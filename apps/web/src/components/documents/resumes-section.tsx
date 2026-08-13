@@ -3,7 +3,7 @@ import { fileToBase64 } from "@/lib/utils";
 
 import { useEffect, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
-import type { ResumeSummary } from "@offeros/core";
+import { checkResume, type ResumeSummary } from "@offeros/core";
 import { extractPdfText } from "@offeros/pdf";
 import { api } from "@/lib/api-client";
 import { ensurePdfWorker } from "@/lib/pdf-worker";
@@ -18,6 +18,24 @@ import { inputClass } from "@/components/profile/fields";
  * These are the files the user WROTE. The tailored ones OfferOS generates live
  * on the Generated tab; onboarding still uploads the first one here.
  */
+/** The one-line form of the checkup, for a résumé we hold only as text. */
+function ResumeCheckupLine({ text }: { text: string }) {
+  const findings = checkResume({
+    resume: { summary: "", experience: [], education: [], skills: [] },
+    text,
+  });
+  if (findings.length === 0) return null;
+  const problems = findings.filter((f) => !f.ok);
+  return (
+    <span className="text-caption text-muted-foreground">
+      {problems.length === 0
+        ? `Checkup: nothing to fix — ${findings[0]!.detail.toLowerCase()}`
+        : `Checkup: ${problems[0]!.detail}`}{" "}
+      <span className="text-micro">(free — no AI credit)</span>
+    </span>
+  );
+}
+
 export function ResumesSection() {
   const [resumes, setResumes] = useState<ResumeSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +198,11 @@ export function ResumesSection() {
               <span className="text-caption text-muted-foreground">
                 Added {new Date(resume.createdAt).toLocaleDateString()}
               </span>
+              {/* What can be checked from the text alone. An uploaded PDF is
+                  held as text, so the structural rules stay silent here and
+                  speak in the workbench, where a tailored résumé has been
+                  parsed into sections. */}
+              <ResumeCheckupLine text={resume.text ?? ""} />
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {confirmId === resume.id ? (
