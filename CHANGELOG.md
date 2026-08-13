@@ -19,7 +19,36 @@ Notable changes only; not every commit is an entry.
 
 ---
 
+## 2026-08-13
+
+### Removed
+
+**The screenshot OfferOS used to take after filling a form.** It was meant as an
+independent record of what a fill actually did — the browser's own pixels beside
+OfferOS's account of them. It was never shown to you, it depended on a browser
+permission the extension no longer needs, and there is no sign it ever succeeded
+in producing one. Screenshots already on your disk and already in your
+application history are left exactly where they are; OfferOS simply stops trying
+to take new ones, and asks for one less browser permission as a result.
+
+---
+
 ## 2026-08-12
+
+### Changed
+
+**OfferOS now works on any careers page, with nothing to switch on.** It used to
+run automatically on five application platforms and ask your permission,
+site by site, for anywhere else. Most application forms are on a company's own
+careers page, so the common case was the one that needed permission — and that
+request repeatedly failed in ways that left the panel waiting with nothing to
+click. The extension now asks for access to all sites when you install it, which
+Chrome will tell you about plainly, and the panel reads whatever page you open it
+on without a button, a prompt, or a wait. On the pages Chrome forbids every
+extension from — its own settings, the Web Store, local files — the panel says so
+instead of appearing broken. What OfferOS does with that access is unchanged and
+written out in SECURITY.md: it reads the form you are applying on, everything
+stays on your machine, and it never submits anything.
 
 ### Fixed
 

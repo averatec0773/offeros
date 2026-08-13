@@ -56,10 +56,30 @@ localhost-only, single-user trust model, including:
   bytes are fetched only from the configured local web-app API base. (This
   describes the current implementation — if the set of managed files grows,
   this section moves with it.)
-- The extension's host permissions are a fixed allowlist: `http://localhost/*`
-  (the web app) plus the supported ATS hosts — never `<all_urls>`. The
-  `localhost` grant is what lets the panel call the local API; the request
-  guard on the web app side is the enforcement boundary.
+- **The extension asks for access to all sites (`<all_urls>`), and Chrome says
+  so at install.** This was a five-platform allowlist plus a per-site grant the
+  user gave from the panel; it was reverted on 2026-08-12 because application
+  forms live on companies' own careers pages, so the narrow list made the
+  ordinary case the broken case, and the grant machinery produced repeated
+  failures without ever delivering the permission prompt it existed for. The
+  broad ask is stated rather than worked around, here and in
+  `apps/extension/wxt.config.ts`.
+
+  What that access is and is not used for:
+
+  - the engine is injected automatically on the five supported ATS platforms,
+    and on any other page only while the side panel is open on that page;
+  - it reads the form and the posting on that page, and writes values you have
+    saved. It does not read pages you are not applying on, and it never
+    submits a form;
+  - everything it reads goes only to the local web app over `http://localhost`.
+    There is no OfferOS server. The loopback `Host` check and the `Origin`
+    allowlist on the web-app side remain the enforcement boundary, unchanged by
+    this;
+  - the extension takes no screenshots. It used to attempt one per fill
+    incident as a record; that feature was removed on 2026-08-13, along with
+    the `activeTab` permission that was its only user.
+
 - Panel-initiated writes (`POST /api/v1/agent/fill/instant`, targeted
   tailor/cover-letter runs) go through the same request guard and envelope as
   every other mutating route; they create/modify only local rows.

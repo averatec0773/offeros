@@ -112,8 +112,12 @@ no restart, no dotfiles. (`apps/web/.env.local` works as an optional fallback;
 see `apps/web/.env.example`.) Data lives in SQLite at `~/.offeros/offeros.db`;
 no account, no cloud, and your key is only ever sent to the provider you chose.
 
-**Extension** (supported ATS: **Greenhouse** validated on real forms; **Lever ·
-Ashby · iCIMS · Workday** generic engine, hardening ongoing):
+**Extension** — works on any careers page. **Greenhouse** is validated on real
+forms; **Lever · Ashby · iCIMS · Workday** have recipes and are injected
+automatically; everywhere else a generic engine reads the form when you open the
+panel on it. Chrome will tell you at install that the extension can read and
+change data on all sites — it can, because a job posting can be on any site;
+what it does with that is in [SECURITY.md](.github/SECURITY.md).
 
 ```bash
 npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
@@ -123,8 +127,8 @@ npm run build -w @offeros/extension   # → apps/extension/.output/chrome-mv3/
    `apps/extension/.output/chrome-mv3/`.
 2. Have the web app running — or run `npm run host:install` once and the
    panel's "Start OfferOS" button boots the local server for you.
-3. Open a supported apply page, click the OfferOS toolbar icon, and the panel
-   scans the form and offers **"Fill this page with my profile"**. Rows flip to
+3. Open an apply page — any apply page — click the OfferOS toolbar icon, and the
+   panel scans the form and offers **"Fill this page with my profile"**. Rows flip to
    a check as each value verifiably lands; click a row to jump to that field,
    hover to see why it chose that value. Sessions survive reloads.
 
