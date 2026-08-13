@@ -157,6 +157,61 @@ describe("a fill outranks a prescan, per application", () => {
     ]);
     expect(kept.map((o) => o.questionKey).sort()).toEqual(["a", "b"]);
   });
+
+  it("across everything, one filled field does not erase a half-done form", () => {
+    // A fill is written incrementally: a wizard page never reached, a gate, an
+    // "I applied" from screen two. Per-application authority threw away every
+    // prescanned question for that application — including the ones the fill
+    // never got to, which then left the gaps list altogether: not unanswered,
+    // not ours, gone.
+    const kept = preferFills(
+      [
+        seen({ origin: "fill", applicationId: "app-1", question: "Email" }),
+        seen({ origin: "prescan", applicationId: "app-1", question: "Email" }),
+        seen({ origin: "prescan", applicationId: "app-1", question: "Why this company?" }),
+      ],
+      true,
+    );
+    expect(kept.map((o) => `${o.origin} ${o.question}`).sort()).toEqual([
+      "fill Email",
+      "prescan Why this company?",
+    ]);
+  });
+
+  it("matches the two on their words, because old reports cannot reproduce a key", () => {
+    // A report written before reports carried a questionKey gets one
+    // recomputed from a canonical field name and no option list — it can never
+    // equal the key the live engine builds from the control's own type and its
+    // real choices. Same question, two keys.
+    const kept = preferFills(
+      [
+        seen({ origin: "fill", applicationId: "app-1", questionKey: "legacy", question: "Gender" }),
+        seen({
+          origin: "prescan",
+          applicationId: "app-1",
+          questionKey: "live",
+          question: "Gender",
+        }),
+      ],
+      true,
+    );
+    expect(kept.map((o) => o.origin)).toEqual(["fill"]);
+  });
+});
+
+describe("the same question asked twice is one row", () => {
+  it("collapses rows that differ only by key", () => {
+    // The count this feature exists to get right is "how often were you asked
+    // this". Split across two keys for the same words, it is wrong twice.
+    const merged = mergeObservations([
+      seen({ questionKey: "legacy", question: "Gender", applicationId: "app-1" }),
+      seen({ questionKey: "live", question: "Gender", applicationId: "app-2" }),
+    ]);
+    expect(merged.size).toBe(1);
+    const only = [...merged.values()][0]!;
+    expect(only.timesSeen).toBe(2);
+    expect([...only.applications].sort()).toEqual(["app-1", "app-2"]);
+  });
 });
 
 describe("what the user can answer", () => {

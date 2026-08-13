@@ -5,6 +5,7 @@ import {
   looksLikeCaptcha,
   matchAnswer,
   matchHistoryField,
+  normalizeQuestion,
 } from "@offeros/autofill";
 import type {
   AnswerGap,
@@ -82,27 +83,85 @@ export function mergeObservations(observations: ObservedQuestion[]): Map<string,
       existing.preferredOrigin = "fill";
     }
   }
-  return byKey;
+  return collapseByText(byKey);
+}
+
+/**
+ * Two rows that ask the same thing in the same words are one question.
+ *
+ * They can differ by key and still be the same question: a report written
+ * before reports carried a questionKey gets one recomputed from what it kept,
+ * and what it kept — a canonical field name, no option list — cannot reproduce
+ * a key the live engine builds from the control's own type and its real
+ * choices. Left alone, "Gender" met last month and "Gender" met today sit in
+ * the list twice with the count split between them, which is the one number
+ * this feature exists to get right.
+ *
+ * The key of the row with the most sightings wins, so the surviving row is the
+ * one the rest of the system is most likely to recognise.
+ */
+function collapseByText(byKey: Map<string, Merged>): Map<string, Merged> {
+  const byText = new Map<string, Merged>();
+  for (const row of byKey.values()) {
+    const text = normalizeQuestion(row.question);
+    const seen = byText.get(text);
+    if (!seen) {
+      byText.set(text, row);
+      continue;
+    }
+    const [keep, drop] = seen.timesSeen >= row.timesSeen ? [seen, row] : [row, seen];
+    keep.timesSeen += drop.timesSeen;
+    keep.unattributed += drop.unattributed;
+    keep.required = keep.required || drop.required;
+    for (const o of drop.origins) keep.origins.add(o);
+    for (const v of drop.vendors) keep.vendors.add(v);
+    for (const a of drop.applications) keep.applications.add(a);
+    // A fill saw the form as it is; keep its wording over a prescan's.
+    if (drop.preferredOrigin === "fill" && keep.preferredOrigin !== "fill") {
+      keep.question = drop.question;
+      keep.preferredOrigin = "fill";
+    }
+    byText.set(text, keep);
+  }
+  return new Map([...byText.values()].map((m) => [m.questionKey, m]));
 }
 
 /**
  * Where we have both, believe the form we met.
  *
  * A prescan describes the form as the platform advertises it; a fill describes
- * the form as it actually was. Applied PER APPLICATION, which is the only scope
- * where the two describe the same thing: dropping every prescan sighting
- * globally would erase the questions from applications that were never filled,
- * which is most of what the gaps list is for.
+ * the form as it actually was. Applied per application AND per question, which
+ * is the only scope where the two describe the same thing.
+ *
+ * Per application alone was too coarse. A fill is recorded incrementally and a
+ * form can be left half done — a gate, a wizard page never reached, an "I
+ * applied" from the second screen. One filled field then threw away every
+ * prescanned question for that application, including the ones on pages the
+ * fill never got to, and those questions left the gaps list altogether:
+ * not unanswered, not ours, simply gone. Dropping globally is wrong for the
+ * opposite reason — it would erase the questions from applications never
+ * filled, which is most of what the list is for.
  *
  * This is authority, not deduplication, so it lives here rather than in a
  * source — a source is not allowed to know what the other sources found.
  */
-export function preferFills(observations: ObservedQuestion[]): ObservedQuestion[] {
+export function preferFills(
+  observations: ObservedQuestion[],
+  /** Narrow the authority to the question, not the whole application. */
+  perQuestion = false,
+): ObservedQuestion[] {
+  // Identity by question TEXT, not by key. A report written before reports
+  // carried a questionKey gets one recomputed from what it kept, and what it
+  // kept cannot reproduce the original: the live key hashes the control's own
+  // type and its real option list, and an old report has neither. Those keys
+  // never meet. The words do.
+  const at = (o: ObservedQuestion) =>
+    perQuestion ? `${o.applicationId} ${normalizeQuestion(o.question)}` : `${o.applicationId}`;
   const filled = new Set(
-    observations.filter((o) => o.origin === "fill" && o.applicationId).map((o) => o.applicationId),
+    observations.filter((o) => o.origin === "fill" && o.applicationId).map(at),
   );
   return observations.filter(
-    (o) => !(o.origin === "prescan" && o.applicationId && filled.has(o.applicationId)),
+    (o) => !(o.origin === "prescan" && o.applicationId && filled.has(at(o))),
   );
 }
 
@@ -202,7 +261,17 @@ export function buildCoverage(
 ): CoveredQuestion[] {
   const sources = deps.sources ?? QUESTION_SOURCES;
   const merged = mergeObservations(
-    preferFills(sources.flatMap((source) => source.observe(db, scope))),
+    // One application: the fill met the real form, so the advertised list is
+    // superseded wholesale — a question the platform advertised and the form
+    // never showed is not a question this posting asks.
+    // Everything at once: a fill is written incrementally and forms get left
+    // half done, so a single filled field must not throw away the prescanned
+    // questions from pages the fill never reached. Losing a question from the
+    // gaps list is the one failure this feature cannot afford.
+    preferFills(
+      sources.flatMap((source) => source.observe(db, scope)),
+      scope.applicationId === undefined,
+    ),
   );
 
   const answers = listAnswers(db);
