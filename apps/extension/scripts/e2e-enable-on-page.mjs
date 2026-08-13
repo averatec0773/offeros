@@ -1,22 +1,18 @@
-// E2E: "Enable OfferOS on this page", in two halves.
+// E2E: OfferOS on a site nobody wrote an adapter for.
 //
-// Since `<all_urls>` was removed the enable path has a permission boundary in
-// front of it, so this measures both sides of that boundary:
+// This is the case the product is actually used for — an application form on a
+// company's own careers page — and until 2026-08-12 it was the case that needed
+// a per-site permission the user had to grant from the panel. That mechanism is
+// gone: the manifest asks for `<all_urls>`, and the panel injects the engine as
+// soon as it is open on a page.
 //
-//   A. A host the extension holds nothing for. Injection must be REFUSED, with
-//      the message the panel turns into a one-site permission prompt. This is
-//      the new boundary, and it has to be real.
-//   B. A host the extension does hold — localhost, which is in host_permissions
-//      but NOT in the ATS content-script matches, so nothing auto-injects
-//      there. That is precisely the shape of an enabled site: permission
-//      granted, engine absent until asked. Inject on request, then drive the
-//      whole chain.
-//
-// What is NOT covered here, deliberately rather than by omission: the
-// permission PROMPT itself. `chrome.permissions.request` needs a user gesture
-// and Chrome renders the prompt as browser UI, neither of which automation can
-// supply. Part A proves the refusal that triggers it; a human has to see the
-// prompt itself.
+// So what this harness proves has inverted. It used to prove a refusal (the
+// boundary that triggered the prompt); it now proves that an arbitrary host is
+// injectable and that the whole chain runs there — scan, classify, fill,
+// verify, ARIA combobox, repeater expansion — with nothing for the user to
+// press. Two hosts are exercised: an invented careers domain, and localhost
+// (which is not in the ATS content-script matches either, so nothing
+// auto-injects there).
 //
 // Everything is routed to local fixtures on synthetic hosts. Nothing is ever
 // submitted.
@@ -133,29 +129,35 @@ try {
         .catch(() => "no-listener"),
     tabId,
   );
-  check("engine_absent_on_unpermitted_host", before, "no-listener");
+  check("engine_absent_until_asked", before, "no-listener");
 
-  // 2) THE BOUNDARY. With no permission for this host, Chrome must refuse —
-  //    and refuse in the words site-enable.ts reads to decide whether asking
-  //    the user would help.
-  const refused = await sw.evaluate(async (id) => {
+  // 2) THE POINT. Any host is injectable now — that is what the broad
+  //    permission bought, and it is the behaviour the panel's automatic
+  //    injection depends on. This used to assert the opposite (a refusal
+  //    naming the missing permission), which is why it is spelled out rather
+  //    than deleted: the same call, the other answer.
+  const injectedOnCareersHost = await sw.evaluate(async (id) => {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: id },
         files: ["content-scripts/ats.js"],
       });
-      return "UNEXPECTEDLY ALLOWED";
+      return "ok";
     } catch (e) {
       return String(e?.message ?? e);
     }
   }, tabId);
-  log("unpermitted_host_refusal", refused);
-  check(
-    "refusal_is_the_askable_kind",
-    /must request permission|Cannot access contents of/i.test(refused),
-    true,
+  check("injects_into_an_arbitrary_host", injectedOnCareersHost, "ok");
+
+  const answersAfter = await sw.evaluate(
+    async (id) =>
+      await chrome.tabs
+        .sendMessage(id, { kind: "OFFEROS_ENGINE_SCAN" })
+        .then((r) => (r?.ok ? "scanned" : "no-form"))
+        .catch(() => "no-listener"),
+    tabId,
   );
-  log("permission_prompt_coverage", "not automatable — needs a user gesture and browser UI");
+  check("engine_answers_on_that_host", answersAfter, "scanned");
 
   // 3) The permitted-host half. localhost is in host_permissions and NOT in the
   //    ATS matches, so nothing auto-injects: an enabled site's exact shape.
