@@ -81,31 +81,90 @@ type Envelope<T> = {
 
 const OK_CODE = 10000;
 
-async function call<T>(
-  path: string,
+/**
+ * A failure the request itself caused, as opposed to an answer.
+ *
+ * An envelope that parsed and says no is an answer — "no provider key", "task
+ * not found" — and asking again produces the same no. A connection that never
+ * completed, a 5xx, or a body that is not the envelope at all is the server
+ * failing to speak, which the very next second it may not.
+ */
+type Attempt<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "answered"; error: string }
+  | { kind: "transient"; error: string };
+
+async function attempt<T>(
+  url: string,
   init: RequestInit | undefined,
   fetchImpl: typeof fetch,
-): Promise<ApiResult<T>> {
-  const base = await settings.webApiBase.getValue();
+): Promise<Attempt<T>> {
   let response: Response;
   try {
-    response = await fetchImpl(`${base}/api/v1${path}`, {
+    response = await fetchImpl(url, {
       ...init,
       headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
     });
   } catch {
-    return { ok: false, error: "network error" };
+    return { kind: "transient", error: "network error" };
   }
   let body: Envelope<T>;
   try {
     body = (await response.json()) as Envelope<T>;
   } catch {
-    return { ok: false, error: "malformed response" };
+    // A 5xx from the dev server arrives as an HTML error page, not an envelope.
+    return {
+      kind: response.status >= 500 ? "transient" : "answered",
+      error: "malformed response",
+    };
   }
   if (!body.success || body.errorCode !== OK_CODE) {
-    return { ok: false, error: body.errorMsg ?? "request failed" };
+    const error = body.errorMsg ?? "request failed";
+    return { kind: response.status >= 500 ? "transient" : "answered", error };
   }
-  return { ok: true, value: body.result as T };
+  return { kind: "ok", value: body.result as T };
+}
+
+/** What the user is told when the second attempt failed the same way. */
+export const SERVER_STUMBLED =
+  "The server didn't catch that one. Give it a few seconds and try again.";
+
+/**
+ * How long to leave between the two attempts.
+ *
+ * Long enough for whatever was not ready to become ready — a dev server
+ * compiling a route on its first request is the case this was written for —
+ * and short enough that a person who clicked a button is still watching.
+ */
+const RETRY_DELAY_MS = 2000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * `retryDelayMs` opts one call into a single retry. It is opt-in, and only
+ * reads take it: an analysis asked for twice costs a second read, while a
+ * report or a resolve asked for twice is a duplicate write on a real
+ * application. No write path may ever pass this.
+ */
+async function call<T>(
+  path: string,
+  init: RequestInit | undefined,
+  fetchImpl: typeof fetch,
+  opts?: { retryDelayMs?: number },
+): Promise<ApiResult<T>> {
+  const base = await settings.webApiBase.getValue();
+  const url = `${base}/api/v1${path}`;
+  const first = await attempt<T>(url, init, fetchImpl);
+  if (first.kind === "ok") return { ok: true, value: first.value };
+  if (first.kind === "answered" || opts?.retryDelayMs === undefined) {
+    return { ok: false, error: first.error };
+  }
+  await sleep(opts.retryDelayMs);
+  const second = await attempt<T>(url, init, fetchImpl);
+  if (second.kind === "ok") return { ok: true, value: second.value };
+  // Twice is a fact about the server, not a hiccup — and the first failure is
+  // never mentioned, because a retry the user did not ask for is not news.
+  return { ok: false, error: second.kind === "transient" ? SERVER_STUMBLED : second.error };
 }
 
 const json = (method: string, payload: unknown): RequestInit => ({
@@ -305,11 +364,15 @@ export function analyzeFields(
     instruction?: string;
   },
   fetchImpl: typeof fetch = fetch,
+  retryDelayMs: number = RETRY_DELAY_MS,
 ): Promise<ApiResult<{ fields: AnalyzedField[]; summary: string }>> {
   return call<{ fields: AnalyzedField[]; summary: string }>(
     `/agent/tasks/${taskId}/fill/analyze`,
     json("POST", body),
     fetchImpl,
+    // A read, and the only call here that retries. It is a POST because the
+    // field list is too big for a query string, not because it writes anything.
+    { retryDelayMs },
   );
 }
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  analyzeFields,
+  SERVER_STUMBLED,
   claim,
   createTaskFromJd,
   fetchArtifactPdf,
@@ -370,5 +372,78 @@ describe("instantFill", () => {
       ok: false,
       error: "already tracked in OfferOS — open the application workspace",
     });
+  });
+});
+
+/**
+ * The first "AI analyse" click on a real application came back a server error;
+ * the same click seconds later worked. Whatever the server was doing — a dev
+ * build compiling the route on its first request is the likeliest — the user
+ * should not have to be the retry mechanism for it.
+ *
+ * The line this must not cross: a read may be asked twice, a write may not.
+ * A report or a resolve sent twice is a duplicate write on a real application.
+ */
+describe("one automatic retry, reads only", () => {
+  /** Fails the first n calls with `status`, then answers. */
+  const flaky = (n: number, status: number, body: unknown = "<html>oops</html>") => {
+    const calls: string[] = [];
+    const fn = (async (url: RequestInfo | URL) => {
+      calls.push(String(url));
+      if (calls.length <= n) {
+        return typeof body === "string"
+          ? new Response(body, { status })
+          : new Response(JSON.stringify(body), { status });
+      }
+      return new Response(JSON.stringify(ok({ fields: [], summary: "done" })), { status: 200 });
+    }) as typeof fetch;
+    return { fn, calls };
+  };
+
+  const fields = [{ fieldId: "f1", label: "City", type: "text" }];
+
+  it("retries a 5xx once, and the user never hears about the first one", async () => {
+    const { fn, calls } = flaky(1, 500);
+    const res = await analyzeFields("t1", { fields }, fn, 1);
+    expect(calls).toHaveLength(2);
+    expect(res).toEqual({ ok: true, value: { fields: [], summary: "done" } });
+  });
+
+  it("retries a connection that never completed", async () => {
+    let n = 0;
+    const fn = (async () => {
+      n += 1;
+      if (n === 1) throw new TypeError("Failed to fetch");
+      return new Response(JSON.stringify(ok({ fields: [], summary: "done" })), { status: 200 });
+    }) as typeof fetch;
+    const res = await analyzeFields("t1", { fields }, fn, 1);
+    expect(n).toBe(2);
+    expect(res.ok).toBe(true);
+  });
+
+  it("reports plainly after the second failure, and stops there", async () => {
+    const { fn, calls } = flaky(9, 500);
+    const res = await analyzeFields("t1", { fields }, fn, 1);
+    expect(calls).toHaveLength(2);
+    expect(res).toEqual({ ok: false, error: SERVER_STUMBLED });
+  });
+
+  it("does not retry an envelope that answered — the answer will not change", async () => {
+    const { fn, calls } = fakeFetch(200, err(42000, "No provider key configured."));
+    const res = await analyzeFields("t1", { fields }, fn, 1);
+    expect(calls).toHaveLength(1);
+    expect(res).toEqual({ ok: false, error: "No provider key configured." });
+  });
+
+  it("never retries a write, however the server fails", async () => {
+    for (const send of [
+      (fn: typeof fetch) => postReport("t1", [], false, "h1", fn),
+      (fn: typeof fetch) => resolveFillAction("t1", "fixed", fn),
+    ]) {
+      const { fn, calls } = flaky(9, 500);
+      const res = await send(fn);
+      expect(calls).toHaveLength(1);
+      expect(res.ok).toBe(false);
+    }
   });
 });
