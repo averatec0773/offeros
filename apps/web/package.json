@@ -48,6 +48,6 @@
     "happy-dom": "^20.11.1",
     "playwright": "^1.62.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^7"
   }
 }
